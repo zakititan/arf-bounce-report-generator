@@ -1,10 +1,10 @@
-import { hmacSign } from './_utils.js';
+import { signToken } from './_utils.js';
 
 const PASSWORD = process.env.APP_PASSWORD || 'changeme';
 const COOKIE_NAME = 'auth_session';
 const MAX_AGE = 60 * 60 * 8; // 8 hours
 
-export default async function handler(req, res) {
+export default function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
@@ -17,10 +17,13 @@ export default async function handler(req, res) {
     return;
   }
 
-  // Build a signed token: "authenticated.<hmac>"
-  const payload = `authenticated`;
-  const sig = await hmacSign(payload);
-  const token = `${payload}.${sig}`;
+  let token;
+  try {
+    token = signToken('authenticated');
+  } catch {
+    res.status(500).json({ error: 'Server misconfiguration: AUTH_SECRET not set' });
+    return;
+  }
 
   res.setHeader(
     'Set-Cookie',
