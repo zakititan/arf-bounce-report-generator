@@ -146,7 +146,57 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .website-badge.fake { background: var(--color-warning-highlight); color: var(--color-warning); }
 .website-badge.nosite { background: color-mix(in oklch, var(--color-text-faint) 20%, var(--color-surface)); color: var(--color-text-muted); }
 .website-badge.checking { color: var(--color-text-faint); background: none; }
-.website-hint { font-size: var(--text-xs); color: var(--color-text-faint); font-style: italic; margin-left: 2px; }
+
+/* CSV Upload */
+.csv-upload-field { display: flex; flex-direction: column; gap: var(--space-2); }
+.csv-upload-field > label { font-size: var(--text-sm); font-weight: 500; color: var(--color-text-muted); }
+.csv-drop-zone {
+  position: relative; display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-2); border: 2px dashed var(--color-border);
+  border-radius: var(--radius-md); cursor: pointer; min-height: 52px;
+  transition: border-color var(--transition-interactive), background var(--transition-interactive);
+}
+.csv-drop-zone:hover, .csv-drop-zone.dragover {
+  border-color: var(--color-warning);
+  background: color-mix(in oklch, var(--color-warning) 5%, var(--color-surface-2));
+}
+.csv-drop-zone input[type="file"] {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; cursor: pointer; border: none; padding: 0;
+}
+.csv-drop-icon { color: var(--color-text-faint); flex-shrink: 0; pointer-events: none; }
+.csv-drop-text { display: flex; flex-direction: column; gap: 2px; pointer-events: none; }
+.csv-drop-main { font-size: var(--text-xs); color: var(--color-text-muted); }
+.csv-drop-sub { font-size: var(--text-xs); color: var(--color-text-faint); }
+.csv-result-card {
+  display: none; align-items: center; justify-content: space-between;
+  gap: var(--space-3);
+  background: var(--color-success-highlight);
+  border: 1px solid color-mix(in oklch, var(--color-success) 25%, var(--color-border));
+  border-radius: var(--radius-md); padding: var(--space-3) var(--space-4);
+  animation: fadeSlideDown 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.csv-result-card.visible { display: flex; }
+.csv-result-info { display: flex; flex-direction: column; gap: 2px; }
+.csv-result-count {
+  font-family: var(--font-mono); font-size: var(--text-sm); font-weight: 700;
+  color: var(--color-success);
+}
+.csv-result-name { font-size: var(--text-xs); color: var(--color-text-muted); }
+.csv-lt40-badge {
+  display: inline-flex; align-items: center; padding: 2px 10px;
+  border-radius: var(--radius-full); font-size: var(--text-xs); font-weight: 600;
+  flex-shrink: 0;
+}
+.csv-lt40-badge.ok { background: var(--color-success-highlight); color: var(--color-success); }
+.csv-lt40-badge.warn { background: var(--color-warning-highlight); color: var(--color-warning); }
+.csv-clear-btn {
+  background: none; border: none; color: var(--color-text-faint); cursor: pointer;
+  display: flex; align-items: center; padding: 2px; border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+.csv-clear-btn:hover { color: var(--color-error); }
 
 .screenshot-field { display: flex; flex-direction: column; gap: var(--space-2); }
 .screenshot-field > label { font-size: var(--text-sm); font-weight: 500; color: var(--color-text-muted); }
@@ -469,19 +519,39 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
       </div>
       <div class="panel-body">
 
-        <div class="field-row">
-          <div class="field">
-            <label for="bounce-prev-unblock">Previous Unblock Request?<span class="req">*</span></label>
-            <select id="bounce-prev-unblock">
-              <option value="">Select...</option>
-              <option value="Yes">Yes</option>
-              <option value="No">No</option>
-            </select>
+        <div class="field">
+          <label for="bounce-prev-unblock">Previous Unblock Request?<span class="req">*</span></label>
+          <select id="bounce-prev-unblock">
+            <option value="">Select...</option>
+            <option value="Yes">Yes</option>
+            <option value="No">No</option>
+          </select>
+        </div>
+
+        <!-- CSV Bounce List Upload (replaces manual count) -->
+        <div class="csv-upload-field">
+          <label>Bounce List CSV<span class="req">*</span></label>
+          <div class="csv-drop-zone" id="bounce-csv-zone"
+               ondragover="handleCsvDragOver(event)"
+               ondragleave="handleCsvDragLeave(event)"
+               ondrop="handleCsvDrop(event)">
+            <input type="file" id="bounce-csv-input" accept=".csv,text/csv"
+                   onchange="handleCsvSelect(event)" aria-label="Upload bounce list CSV">
+            <svg class="csv-drop-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="18"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+            <div class="csv-drop-text">
+              <span class="csv-drop-main">Click or drag &amp; drop bounce list</span>
+              <span class="csv-drop-sub">CSV file — first row treated as header</span>
+            </div>
           </div>
-          <div class="field">
-            <label for="bounce-count">Total Bounce Count at Last Block<span class="req">*</span></label>
-            <input type="number" id="bounce-count" placeholder="e.g. 35" min="0">
-            <span class="hint">Note: should be &lt; 40</span>
+          <div class="csv-result-card" id="bounce-csv-result">
+            <div class="csv-result-info">
+              <span class="csv-result-count" id="bounce-csv-count">—</span>
+              <span class="csv-result-name" id="bounce-csv-name"></span>
+            </div>
+            <span class="csv-lt40-badge" id="bounce-lt40-badge"></span>
+            <button class="csv-clear-btn" onclick="clearCsv()" title="Remove CSV" aria-label="Remove CSV">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
           </div>
         </div>
 
@@ -620,6 +690,68 @@ function copyOutput(id) {
 
 function v(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
 
+// ── CSV Bounce List ────────────────────────────────────────────────────────────
+let bounceCsvCount = null;
+
+function handleCsvDragOver(e) {
+  e.preventDefault();
+  document.getElementById('bounce-csv-zone').classList.add('dragover');
+}
+function handleCsvDragLeave(e) {
+  document.getElementById('bounce-csv-zone').classList.remove('dragover');
+}
+function handleCsvDrop(e) {
+  e.preventDefault();
+  document.getElementById('bounce-csv-zone').classList.remove('dragover');
+  const file = Array.from(e.dataTransfer.files).find(f => f.name.endsWith('.csv') || f.type === 'text/csv');
+  if (file) processCsv(file);
+  else showToast('Please drop a .csv file');
+}
+function handleCsvSelect(e) {
+  const file = e.target.files[0];
+  if (file) processCsv(file);
+  e.target.value = '';
+}
+
+function processCsv(file) {
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const text = e.target.result;
+    const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+    const dataRows = Math.max(0, lines.length - 1); // minus header row
+    bounceCsvCount = dataRows;
+
+    const countEl = document.getElementById('bounce-csv-count');
+    const nameEl = document.getElementById('bounce-csv-name');
+    const badgeEl = document.getElementById('bounce-lt40-badge');
+    const card = document.getElementById('bounce-csv-result');
+
+    countEl.textContent = dataRows + ' bounce' + (dataRows !== 1 ? 's' : '');
+    nameEl.textContent = file.name;
+
+    if (dataRows < 40) {
+      badgeEl.textContent = '< 40 ✓';
+      badgeEl.className = 'csv-lt40-badge ok';
+    } else {
+      badgeEl.textContent = '≥ 40 ⚠';
+      badgeEl.className = 'csv-lt40-badge warn';
+    }
+
+    card.classList.add('visible');
+    showToast(dataRows + ' bounce rows counted from ' + file.name);
+  };
+  reader.readAsText(file);
+}
+
+function clearCsv() {
+  bounceCsvCount = null;
+  document.getElementById('bounce-csv-result').classList.remove('visible');
+  document.getElementById('bounce-csv-count').textContent = '—';
+  document.getElementById('bounce-csv-name').textContent = '';
+  document.getElementById('bounce-lt40-badge').textContent = '';
+  document.getElementById('bounce-csv-input').value = '';
+}
+
 // ── Domain WHOIS + website state ─────────────────────────────────────────────
 const whoisCache = {};
 
@@ -652,8 +784,6 @@ async function lookupDomain(prefix) {
     card.classList.remove('error');
     card.classList.add('visible');
     showToast('Domain info fetched! Checking website…');
-
-    // Kick off website check in background (non-blocking)
     checkWebsite(prefix, domain);
 
   } catch (err) {
@@ -673,31 +803,20 @@ async function checkWebsite(prefix, domain) {
   const websiteEl = document.getElementById(prefix + '-result-website');
   const websiteSelect = document.getElementById(prefix + '-website');
   const hintEl = document.getElementById(prefix + '-website-hint');
-
   try {
     const res = await fetch('/api/website-check?domain=' + encodeURIComponent(domain));
     const data = await res.json();
     const verdict = data.verdict || 'Unknown';
     const reason = data.reason || '';
-
     let badgeClass = 'legit';
     if (verdict === 'Fake') badgeClass = 'fake';
     else if (verdict === 'No website' || verdict === 'Unreachable') badgeClass = 'nosite';
-
-    if (websiteEl) {
-      websiteEl.innerHTML = '<span class="website-badge ' + badgeClass + '">' + verdict + '</span>';
-    }
-
-    // Auto-set the dropdown (user can still override)
+    if (websiteEl) websiteEl.innerHTML = '<span class="website-badge ' + badgeClass + '">' + verdict + '</span>';
     if (websiteSelect && websiteSelect.value === '') {
       const map = { 'Legit': 'Legit', 'Fake': 'Fake', 'No website': 'No website', 'Unreachable': 'No website' };
       const mapped = map[verdict];
-      if (mapped) {
-        websiteSelect.value = mapped;
-        if (hintEl) hintEl.textContent = 'Auto-detected: ' + reason;
-      }
+      if (mapped) { websiteSelect.value = mapped; if (hintEl) hintEl.textContent = 'Auto-detected: ' + reason; }
     }
-
     showToast('Website check: ' + verdict);
   } catch (err) {
     if (websiteEl) websiteEl.innerHTML = '<span class="website-badge nosite">Check failed</span>';
@@ -706,7 +825,6 @@ async function checkWebsite(prefix, domain) {
 
 // ── Screenshots ──────────────────────────────────────────────────────────────
 const arfScreenshots = [];
-
 function handleDragOver(e, zoneId) { e.preventDefault(); document.getElementById(zoneId).classList.add('dragover'); }
 function handleDragLeave(e, zoneId) { document.getElementById(zoneId).classList.remove('dragover'); }
 function handleDrop(e, prefix) {
@@ -735,8 +853,7 @@ function renderPreviews() {
     container.appendChild(thumb);
   });
   if (arfScreenshots.length > 0) {
-    const c = document.createElement('span');
-    c.className = 'screenshot-count';
+    const c = document.createElement('span'); c.className = 'screenshot-count';
     c.textContent = arfScreenshots.length + ' screenshot' + (arfScreenshots.length > 1 ? 's' : '') + ' attached';
     container.appendChild(c);
   }
@@ -749,44 +866,32 @@ function toggleOtherBlockedField(val) {
   if (val === 'Yes') { wrap.classList.add('visible'); }
   else { wrap.classList.remove('visible'); document.getElementById('bounce-other-blocked-detail').value = ''; }
 }
-
 function toggleAssurance(btn, prefix) {
   btn.classList.toggle('active');
   if (btn.getAttribute('data-value') === 'Other') {
     const otherField = document.getElementById(prefix + '-other-field');
-    if (btn.classList.contains('active')) {
-      otherField.classList.add('visible');
-      document.getElementById(prefix + '-other-text').focus();
-    } else {
-      otherField.classList.remove('visible');
-      document.getElementById(prefix + '-other-text').value = '';
-    }
+    if (btn.classList.contains('active')) { otherField.classList.add('visible'); document.getElementById(prefix + '-other-text').focus(); }
+    else { otherField.classList.remove('visible'); document.getElementById(prefix + '-other-text').value = ''; }
   }
 }
-
 function getActiveAssurances(prefix) {
   const btns = document.querySelectorAll('#' + prefix + '-assurance-btns .assurance-btn.active');
   const vals = [];
   btns.forEach(b => {
-    if (b.getAttribute('data-value') === 'Other') {
-      const txt = document.getElementById(prefix + '-other-text').value.trim();
-      vals.push(txt ? txt : 'Other');
-    } else { vals.push(b.getAttribute('data-value')); }
+    if (b.getAttribute('data-value') === 'Other') { const txt = document.getElementById(prefix + '-other-text').value.trim(); vals.push(txt ? txt : 'Other'); }
+    else { vals.push(b.getAttribute('data-value')); }
   });
   return vals;
 }
-
 function clearAssurances(prefix) {
   document.querySelectorAll('#' + prefix + '-assurance-btns .assurance-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(prefix + '-other-field').classList.remove('visible');
-  const ot = document.getElementById(prefix + '-other-text');
-  if (ot) ot.value = '';
+  const ot = document.getElementById(prefix + '-other-text'); if (ot) ot.value = '';
 }
 
 // ── ARF Generate ─────────────────────────────────────────────────────────────
 function generateARF() {
-  const screenshotLine = arfScreenshots.length > 0
-    ? arfScreenshots.length + ' screenshot(s) attached (see below)' : '-';
+  const screenshotLine = arfScreenshots.length > 0 ? arfScreenshots.length + ' screenshot(s) attached (see below)' : '-';
   const assurances = getActiveAssurances('arf');
   const whois = whoisCache['arf'];
   const lines = [
@@ -807,18 +912,9 @@ function generateARF() {
   const imgContainer = document.getElementById('arf-output-images');
   imgContainer.innerHTML = '';
   if (arfScreenshots.length > 0) {
-    const label = document.createElement('div');
-    label.className = 'output-screenshots-label';
-    label.textContent = '-- Screenshots --';
-    imgContainer.appendChild(label);
-    const grid = document.createElement('div');
-    grid.className = 'output-screenshots';
-    arfScreenshots.forEach(s => {
-      const img = document.createElement('img');
-      img.src = s.dataUrl; img.alt = s.name; img.title = s.name;
-      img.loading = 'lazy'; img.width = 120; img.height = 120;
-      grid.appendChild(img);
-    });
+    const label = document.createElement('div'); label.className = 'output-screenshots-label'; label.textContent = '-- Screenshots --'; imgContainer.appendChild(label);
+    const grid = document.createElement('div'); grid.className = 'output-screenshots';
+    arfScreenshots.forEach(s => { const img = document.createElement('img'); img.src = s.dataUrl; img.alt = s.name; img.title = s.name; img.loading = 'lazy'; img.width = 120; img.height = 120; grid.appendChild(img); });
     imgContainer.appendChild(grid);
   }
   const section = document.getElementById('arf-output-section');
@@ -826,10 +922,8 @@ function generateARF() {
   section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   showToast('ARF report generated!');
 }
-
 function clearARF() {
-  ['arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2',
-   'arf-email-type','arf-website','arf-dkim','arf-domain-input']
+  ['arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim','arf-domain-input']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   arfScreenshots.length = 0; renderPreviews(); clearAssurances('arf');
   whoisCache['arf'] = null;
@@ -842,16 +936,16 @@ function clearARF() {
 
 // ── Bounce Generate ───────────────────────────────────────────────────────────
 function generateBounce() {
-  const count = v('bounce-count');
+  const count = bounceCsvCount !== null ? bounceCsvCount : null;
   const otherBlocked = v('bounce-other-blocked');
-  const countNum = parseInt(count);
-  const lt40 = !isNaN(countNum) ? (countNum < 40 ? 'Yes' : 'No') : '-';
+  const lt40 = count !== null ? (count < 40 ? 'Yes' : 'No') : '-';
+  const countDisplay = count !== null ? ' (' + count + ')' : '';
   const assurances = getActiveAssurances('bounce');
   const whois = whoisCache['bounce'];
   const lines = [
     '#Bounce',
     'Previous unblock request for the same account : ' + (v('bounce-prev-unblock') || '-'),
-    'Total bounce count at the time of last block < 40 : ' + lt40 + (count !== '' ? ' (' + count + ')' : ''),
+    'Total bounce count at the time of last block < 40 : ' + lt40 + countDisplay,
     'Other blocked email account in the same domain : ' + (otherBlocked || '-'),
   ];
   if (otherBlocked === 'Yes') lines.push('Blocked account(s) in same domain : ' + (v('bounce-other-blocked-detail') || '-'));
@@ -868,10 +962,10 @@ function generateBounce() {
   section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   showToast('Bounce report generated!');
 }
-
 function clearBounce() {
-  ['bounce-prev-unblock','bounce-count','bounce-other-blocked','bounce-website','bounce-dkim','bounce-domain-input']
+  ['bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-domain-input']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  clearCsv();
   toggleOtherBlockedField(''); clearAssurances('bounce');
   whoisCache['bounce'] = null;
   document.getElementById('bounce-domain-result').classList.remove('visible','error');
