@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ARF & Bounce Report Generator</title>
+<!-- Vercel Analytics -->
+<script defer src="/_vercel/insights/script.js"></script>
+<!-- Vercel Speed Insights -->
+<script defer src="/_vercel/speed-insights/script.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -606,7 +610,7 @@ function clearCsv() {
   document.getElementById('bounce-csv-input').value = '';
 }
 
-// ── Domain WHOIS + website + DKIM ────────────────────────────────────────
+// ── Domain WHOIS + website + DKIM ─────────────────────────────────
 const whoisCache = {};
 
 async function lookupDomain(prefix) {
@@ -695,7 +699,7 @@ async function checkDkim(prefix, domain) {
   } catch { if (dkimEl) dkimEl.innerHTML = '<span class="dkim-badge notset">Check failed</span>'; }
 }
 
-// ── Screenshots ─────────────────────────────────────────────────────────
+// ── Screenshots ──────────────────────────────────────────────────────
 const arfScreenshots = [];
 function handleDragOver(e, zoneId) { e.preventDefault(); document.getElementById(zoneId).classList.add('dragover'); }
 function handleDragLeave(e, zoneId) { document.getElementById(zoneId).classList.remove('dragover'); }
@@ -726,7 +730,7 @@ function renderPreviews() {
 }
 function removeScreenshot(idx) { arfScreenshots.splice(idx, 1); renderPreviews(); }
 
-// ── Conditional fields ────────────────────────────────────────────────────
+// ── Conditional fields ───────────────────────────────────────────────
 function toggleOtherBlockedField(val) {
   const wrap = document.getElementById('bounce-other-blocked-detail-wrap');
   if (val === 'Yes') wrap.classList.add('visible');
@@ -754,7 +758,7 @@ function clearAssurances(prefix) {
   const ot = document.getElementById(prefix + '-other-text'); if (ot) ot.value = '';
 }
 
-// ── ARF Generate ────────────────────────────────────────────────────────────
+// ── ARF Generate ──────────────────────────────────────────────────────
 function generateARF() {
   const screenshotLine = arfScreenshots.length > 0 ? arfScreenshots.length + ' screenshot(s) attached (see below)' : '-';
   const assurances = getActiveAssurances('arf'); const whois = whoisCache['arf'];
@@ -795,7 +799,7 @@ function clearARF() {
   document.getElementById('arf-output-images').innerHTML = '';
 }
 
-// ── Bounce Generate ──────────────────────────────────────────────────────────
+// ── Bounce Generate ──────────────────────────────────────────────────
 function generateBounce() {
   const count = bounceCsvCount !== null ? bounceCsvCount : null;
   const otherBlocked = v('bounce-other-blocked');
