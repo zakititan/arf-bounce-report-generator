@@ -108,9 +108,35 @@ input[type="text"]:focus, input[type="number"]:focus, select:focus, textarea:foc
   outline: none; border-color: var(--color-primary);
   box-shadow: 0 0 0 3px oklch(from var(--color-primary) l c h / 0.15);
 }
+input.field-error, select.field-error {
+  border-color: var(--color-error);
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--color-error) 15%, transparent);
+}
 select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237a7974' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right var(--space-3) center; padding-right: var(--space-8); }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
 .hint { font-size: var(--text-xs); color: var(--color-text-faint); margin-top: calc(-1 * var(--space-1)); }
+
+/* Validation error banner */
+.validation-banner {
+  display: none; flex-direction: column; gap: var(--space-2);
+  background: color-mix(in oklch, var(--color-error) 8%, var(--color-surface));
+  border: 1px solid color-mix(in oklch, var(--color-error) 30%, var(--color-border));
+  border-radius: var(--radius-md); padding: var(--space-3) var(--space-4);
+  animation: fadeSlideDown 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.validation-banner.visible { display: flex; }
+.validation-banner-title {
+  font-size: var(--text-xs); font-weight: 600; color: var(--color-error);
+  display: flex; align-items: center; gap: var(--space-2);
+}
+.validation-banner-list {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.validation-banner-list li {
+  font-size: var(--text-xs); color: var(--color-error); padding-left: var(--space-3);
+}
+.validation-banner-list li::before { content: "· "; font-weight: 700; }
 
 /* Domain Lookup Widget */
 .domain-lookup-wrap { display: flex; flex-direction: column; gap: var(--space-2); }
@@ -275,7 +301,8 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); padding: var(--space-2) var(--space-5); border-radius: var(--radius-md); font-size: var(--text-sm); font-weight: 500; min-height: 44px; }
 .btn-primary { background: var(--color-primary); color: var(--color-text-inverse); }
-.btn-primary:hover { background: var(--color-primary-hover); }
+.btn-primary:hover:not(:disabled) { background: var(--color-primary-hover); }
+.btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
 .btn-secondary { background: transparent; color: var(--color-text-muted); border: 1px solid var(--color-border); }
 .btn-secondary:hover { background: var(--color-surface-offset); }
 .btn-ghost { background: transparent; color: var(--color-text-muted); padding: var(--space-2); border-radius: var(--radius-md); }
@@ -422,9 +449,17 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
             <textarea id="arf-other-text" rows="2" placeholder="Describe additional assurance details..."></textarea>
           </div>
         </div>
+        <!-- Validation banner (ARF) -->
+        <div class="validation-banner" id="arf-validation-banner" role="alert" aria-live="polite">
+          <div class="validation-banner-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Please fill in the required fields:
+          </div>
+          <ul class="validation-banner-list" id="arf-validation-list"></ul>
+        </div>
       </div>
       <div class="panel-actions">
-        <button class="btn btn-primary btn-full" onclick="generateARF()">
+        <button class="btn btn-primary btn-full" id="arf-generate-btn" onclick="generateARF()">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Generate ARF Report
         </button>
         <button class="btn btn-secondary" onclick="clearARF()">Clear</button>
@@ -525,9 +560,17 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
             <textarea id="bounce-other-text" rows="2" placeholder="Describe additional assurance details..."></textarea>
           </div>
         </div>
+        <!-- Validation banner (Bounce) -->
+        <div class="validation-banner" id="bounce-validation-banner" role="alert" aria-live="polite">
+          <div class="validation-banner-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Please fill in the required fields:
+          </div>
+          <ul class="validation-banner-list" id="bounce-validation-list"></ul>
+        </div>
       </div>
       <div class="panel-actions">
-        <button class="btn btn-primary btn-full" onclick="generateBounce()">
+        <button class="btn btn-primary btn-full" id="bounce-generate-btn" onclick="generateBounce()">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Generate Bounce Report
         </button>
         <button class="btn btn-secondary" onclick="clearBounce()">Clear</button>
@@ -574,6 +617,21 @@ function copyOutput(id) {
   navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard!'));
 }
 function v(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+
+// ── Domain lookup in-flight tracking ─────────────────────────────────
+const lookupInFlight = { arf: false, bounce: false };
+
+function setGenerateBtnState(prefix) {
+  const btn = document.getElementById(prefix + '-generate-btn');
+  if (!btn) return;
+  if (lookupInFlight[prefix]) {
+    btn.disabled = true;
+    btn.title = 'Domain lookup is still in progress — please wait';
+  } else {
+    btn.disabled = false;
+    btn.title = '';
+  }
+}
 
 // ── CSV Bounce List ────────────────────────────────────────────────
 let bounceCsvCount = null;
@@ -623,6 +681,11 @@ async function lookupDomain(prefix) {
   const ageEl = document.getElementById(prefix + '-result-age');
   const websiteEl = document.getElementById(prefix + '-result-website');
   const dkimEl = document.getElementById(prefix + '-result-dkim');
+
+  // ── Fix #6: disable Generate while lookup is in-flight ──
+  lookupInFlight[prefix] = true;
+  setGenerateBtnState(prefix);
+
   btn.disabled = true; btn.textContent = 'Looking up…';
   card.classList.remove('visible', 'error');
   if (websiteEl) websiteEl.innerHTML = '<span class="website-badge checking">checking…</span>';
@@ -648,6 +711,9 @@ async function lookupDomain(prefix) {
   } finally {
     btn.disabled = false;
     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Lookup';
+    // ── Fix #6: re-enable Generate once lookup (WHOIS phase) completes ──
+    lookupInFlight[prefix] = false;
+    setGenerateBtnState(prefix);
   }
 }
 
@@ -758,8 +824,73 @@ function clearAssurances(prefix) {
   const ot = document.getElementById(prefix + '-other-text'); if (ot) ot.value = '';
 }
 
+// ── Fix #7: Validation helpers ────────────────────────────────────────
+function clearFieldErrors(ids) {
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('field-error');
+  });
+}
+
+function showValidationErrors(prefix, errors) {
+  const banner = document.getElementById(prefix + '-validation-banner');
+  const list = document.getElementById(prefix + '-validation-list');
+  if (!errors.length) {
+    banner.classList.remove('visible');
+    list.innerHTML = '';
+    return false;
+  }
+  list.innerHTML = errors.map(e => '<li>' + e.label + '</li>').join('');
+  banner.classList.add('visible');
+  errors.forEach(e => {
+    if (e.id) {
+      const el = document.getElementById(e.id);
+      if (el) el.classList.add('field-error');
+    }
+  });
+  banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  return true;
+}
+
+function validateARF() {
+  const fieldIds = ['arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim','arf-domain-input'];
+  clearFieldErrors(fieldIds);
+  const errors = [];
+  if (!v('arf-domain-type'))    errors.push({ id: 'arf-domain-type',    label: 'Domain Type' });
+  if (!v('arf-complaints'))     errors.push({ id: 'arf-complaints',     label: 'No. of ARF Complaints' });
+  if (!v('arf-prev-unblock'))   errors.push({ id: 'arf-prev-unblock',   label: 'Previous Unblock Request' });
+  if (!v('arf-blocked-lt2'))    errors.push({ id: 'arf-blocked-lt2',    label: 'Blocked Email Accounts < 2' });
+  if (!v('arf-email-type'))     errors.push({ id: 'arf-email-type',     label: 'Email Content Type' });
+  if (!v('arf-domain-input'))   errors.push({ id: 'arf-domain-input',   label: 'Domain Lookup (domain name required)' });
+  if (!whoisCache['arf'])       errors.push({ id: 'arf-domain-input',   label: 'Domain Lookup (run Lookup first)' });
+  if (!v('arf-website'))        errors.push({ id: 'arf-website',        label: 'Valid Website' });
+  if (!v('arf-dkim'))           errors.push({ id: 'arf-dkim',           label: 'DKIM Status' });
+  return errors;
+}
+
+function validateBounce() {
+  const fieldIds = ['bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-domain-input','bounce-other-blocked-detail'];
+  clearFieldErrors(fieldIds);
+  const errors = [];
+  if (!v('bounce-prev-unblock'))  errors.push({ id: 'bounce-prev-unblock',  label: 'Previous Unblock Request' });
+  if (bounceCsvCount === null)    errors.push({ id: null,                   label: 'Bounce List CSV (upload a CSV file)' });
+  if (!v('bounce-other-blocked')) errors.push({ id: 'bounce-other-blocked', label: 'Other Blocked Email in Domain' });
+  if (v('bounce-other-blocked') === 'Yes' && !v('bounce-other-blocked-detail'))
+                                  errors.push({ id: 'bounce-other-blocked-detail', label: 'Blocked Email Account(s) in Same Domain' });
+  if (!v('bounce-website'))       errors.push({ id: 'bounce-website',       label: 'Valid Website' });
+  if (!v('bounce-domain-input'))  errors.push({ id: 'bounce-domain-input',  label: 'Domain Lookup (domain name required)' });
+  if (!whoisCache['bounce'])      errors.push({ id: 'bounce-domain-input',  label: 'Domain Lookup (run Lookup first)' });
+  if (!v('bounce-dkim'))          errors.push({ id: 'bounce-dkim',          label: 'DKIM Status' });
+  return errors;
+}
+
 // ── ARF Generate ──────────────────────────────────────────────────────
 function generateARF() {
+  // Fix #7: validate before generating
+  const errors = validateARF();
+  if (showValidationErrors('arf', errors)) return;
+  document.getElementById('arf-validation-banner').classList.remove('visible');
+
   const screenshotLine = arfScreenshots.length > 0 ? arfScreenshots.length + ' screenshot(s) attached (see below)' : '-';
   const assurances = getActiveAssurances('arf'); const whois = whoisCache['arf'];
   const lines = [
@@ -797,10 +928,17 @@ function clearARF() {
   document.getElementById('arf-output-section').style.display = 'none';
   document.getElementById('arf-output-text').textContent = '';
   document.getElementById('arf-output-images').innerHTML = '';
+  document.getElementById('arf-validation-banner').classList.remove('visible');
+  clearFieldErrors(['arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim','arf-domain-input']);
 }
 
 // ── Bounce Generate ──────────────────────────────────────────────────
 function generateBounce() {
+  // Fix #7: validate before generating
+  const errors = validateBounce();
+  if (showValidationErrors('bounce', errors)) return;
+  document.getElementById('bounce-validation-banner').classList.remove('visible');
+
   const count = bounceCsvCount !== null ? bounceCsvCount : null;
   const otherBlocked = v('bounce-other-blocked');
   const lt40 = count !== null ? (count < 40 ? 'Yes' : 'No') : '-';
@@ -833,6 +971,8 @@ function clearBounce() {
   ['bounce-website-hint','bounce-dkim-hint'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = ''; });
   document.getElementById('bounce-output-section').style.display = 'none';
   document.getElementById('bounce-output-text').textContent = '';
+  document.getElementById('bounce-validation-banner').classList.remove('visible');
+  clearFieldErrors(['bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-domain-input','bounce-other-blocked-detail']);
 }
 </script>
 </body>
