@@ -137,6 +137,16 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .domain-result-label { font-weight: 600; color: var(--color-text-muted); min-width: 110px; }
 .domain-result-value { font-family: var(--font-mono); color: var(--color-text); }
 .domain-result-card.error .domain-result-value { color: var(--color-error); }
+.website-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: var(--radius-full);
+  font-size: var(--text-xs); font-weight: 600; font-family: var(--font-mono);
+}
+.website-badge.legit { background: var(--color-success-highlight); color: var(--color-success); }
+.website-badge.fake { background: var(--color-warning-highlight); color: var(--color-warning); }
+.website-badge.nosite { background: color-mix(in oklch, var(--color-text-faint) 20%, var(--color-surface)); color: var(--color-text-muted); }
+.website-badge.checking { color: var(--color-text-faint); background: none; }
+.website-hint { font-size: var(--text-xs); color: var(--color-text-faint); font-style: italic; margin-left: 2px; }
 
 .screenshot-field { display: flex; flex-direction: column; gap: var(--space-2); }
 .screenshot-field > label { font-size: var(--text-sm); font-weight: 500; color: var(--color-text-muted); }
@@ -373,6 +383,12 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
               <span class="domain-result-label">Domain Age</span>
               <span class="domain-result-value" id="arf-result-age">—</span>
             </div>
+            <div class="domain-result-row">
+              <span class="domain-result-label">Website</span>
+              <span class="domain-result-value" id="arf-result-website">
+                <span class="website-badge checking">checking…</span>
+              </span>
+            </div>
           </div>
         </div>
 
@@ -384,6 +400,7 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
             <option value="Fake">Fake</option>
             <option value="No website">No website</option>
           </select>
+          <span class="hint" id="arf-website-hint"></span>
         </div>
 
         <div class="field">
@@ -485,6 +502,7 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
               <option value="Fake">Fake</option>
               <option value="No website">No website</option>
             </select>
+            <span class="hint" id="bounce-website-hint"></span>
           </div>
         </div>
 
@@ -513,6 +531,12 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
             <div class="domain-result-row">
               <span class="domain-result-label">Domain Age</span>
               <span class="domain-result-value" id="bounce-result-age">—</span>
+            </div>
+            <div class="domain-result-row">
+              <span class="domain-result-label">Website</span>
+              <span class="domain-result-value" id="bounce-result-website">
+                <span class="website-badge checking">checking…</span>
+              </span>
             </div>
           </div>
         </div>
@@ -596,7 +620,7 @@ function copyOutput(id) {
 
 function v(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
 
-// ── Domain WHOIS state ──────────────────────────────────────────────────────
+// ── Domain WHOIS + website state ─────────────────────────────────────────────
 const whoisCache = {};
 
 async function lookupDomain(prefix) {
@@ -608,10 +632,12 @@ async function lookupDomain(prefix) {
   const card = document.getElementById(prefix + '-domain-result');
   const createdEl = document.getElementById(prefix + '-result-created');
   const ageEl = document.getElementById(prefix + '-result-age');
+  const websiteEl = document.getElementById(prefix + '-result-website');
 
   btn.disabled = true;
   btn.textContent = 'Looking up…';
   card.classList.remove('visible', 'error');
+  if (websiteEl) websiteEl.innerHTML = '<span class="website-badge checking">checking…</span>';
 
   try {
     const res = await fetch('/api/whois?domain=' + encodeURIComponent(domain));
@@ -625,16 +651,56 @@ async function lookupDomain(prefix) {
     ageEl.textContent = data.domain_age || '—';
     card.classList.remove('error');
     card.classList.add('visible');
-    showToast('Domain info fetched!');
+    showToast('Domain info fetched! Checking website…');
+
+    // Kick off website check in background (non-blocking)
+    checkWebsite(prefix, domain);
+
   } catch (err) {
     whoisCache[prefix] = null;
     createdEl.textContent = err.message || 'Lookup failed';
     ageEl.textContent = '—';
+    if (websiteEl) websiteEl.innerHTML = '—';
     card.classList.add('visible', 'error');
     showToast('Lookup failed: ' + (err.message || 'unknown error'));
   } finally {
     btn.disabled = false;
     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Lookup';
+  }
+}
+
+async function checkWebsite(prefix, domain) {
+  const websiteEl = document.getElementById(prefix + '-result-website');
+  const websiteSelect = document.getElementById(prefix + '-website');
+  const hintEl = document.getElementById(prefix + '-website-hint');
+
+  try {
+    const res = await fetch('/api/website-check?domain=' + encodeURIComponent(domain));
+    const data = await res.json();
+    const verdict = data.verdict || 'Unknown';
+    const reason = data.reason || '';
+
+    let badgeClass = 'legit';
+    if (verdict === 'Fake') badgeClass = 'fake';
+    else if (verdict === 'No website' || verdict === 'Unreachable') badgeClass = 'nosite';
+
+    if (websiteEl) {
+      websiteEl.innerHTML = '<span class="website-badge ' + badgeClass + '">' + verdict + '</span>';
+    }
+
+    // Auto-set the dropdown (user can still override)
+    if (websiteSelect && websiteSelect.value === '') {
+      const map = { 'Legit': 'Legit', 'Fake': 'Fake', 'No website': 'No website', 'Unreachable': 'No website' };
+      const mapped = map[verdict];
+      if (mapped) {
+        websiteSelect.value = mapped;
+        if (hintEl) hintEl.textContent = 'Auto-detected: ' + reason;
+      }
+    }
+
+    showToast('Website check: ' + verdict);
+  } catch (err) {
+    if (websiteEl) websiteEl.innerHTML = '<span class="website-badge nosite">Check failed</span>';
   }
 }
 
@@ -768,6 +834,7 @@ function clearARF() {
   arfScreenshots.length = 0; renderPreviews(); clearAssurances('arf');
   whoisCache['arf'] = null;
   document.getElementById('arf-domain-result').classList.remove('visible','error');
+  const wh = document.getElementById('arf-website-hint'); if (wh) wh.textContent = '';
   document.getElementById('arf-output-section').style.display = 'none';
   document.getElementById('arf-output-text').textContent = '';
   document.getElementById('arf-output-images').innerHTML = '';
@@ -808,6 +875,7 @@ function clearBounce() {
   toggleOtherBlockedField(''); clearAssurances('bounce');
   whoisCache['bounce'] = null;
   document.getElementById('bounce-domain-result').classList.remove('visible','error');
+  const wh = document.getElementById('bounce-website-hint'); if (wh) wh.textContent = '';
   document.getElementById('bounce-output-section').style.display = 'none';
   document.getElementById('bounce-output-text').textContent = '';
 }
