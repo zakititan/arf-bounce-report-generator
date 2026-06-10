@@ -23,16 +23,15 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ## Project Structure
 
 ```
-├── index.html                      # Main app UI (ARF + Bounce panels)
-├── login.html                      # Password login page
-├── arf-bounce-report-generator.html # Legacy standalone version
-├── middleware.js                   # Vercel Edge middleware (auth gate)
-├── vercel.json                     # Vercel config (clean URLs, security headers)
+├── index.html        # Main app UI (ARF + Bounce panels)
+├── login.html        # Password login page
+├── middleware.js     # Vercel Edge middleware (auth gate)
+├── vercel.json       # Vercel config (clean URLs, security headers)
 └── api/
-    ├── whois.js                    # WHOIS lookup serverless function
-    ├── website-check.js            # Website reachability & classification
-    ├── dkim-check.js               # DNS DKIM selector check
-    └── login.js                    # Login API handler
+    ├── whois.js          # WHOIS lookup serverless function
+    ├── website-check.js  # Website reachability & classification
+    ├── dkim-check.js     # DNS DKIM selector check
+    └── login.js          # Login API handler
 ```
 
 ---
