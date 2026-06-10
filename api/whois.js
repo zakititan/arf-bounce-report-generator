@@ -1,4 +1,4 @@
-const WHOISJSON_API_KEY = 'fcf49be1f4580586473b62287702feec7ad2fe9ffc0d32f510a19b7875be93b2';
+const WHOISJSON_API_KEY = process.env.WHOISJSON_API_KEY;
 
 function sanitiseDomain(raw) {
   if (!raw || typeof raw !== 'string') return null;
@@ -15,6 +15,11 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   if (req.method === 'OPTIONS') { res.status(200).end(); return; }
+
+  if (!WHOISJSON_API_KEY) {
+    res.status(500).json({ error: 'WHOISJSON_API_KEY environment variable is not set' });
+    return;
+  }
 
   const domain = sanitiseDomain(req.query.domain);
   if (!domain) {
