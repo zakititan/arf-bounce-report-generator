@@ -1,32 +1,30 @@
-// DKIM selector families to probe.
+import { sanitiseDomain, isRateLimited } from './_utils.js';
+
+const ALLOWED_ORIGIN = process.env.APP_URL || '';
+const rateLimitStore = new Map();
+
 const FAMILIES = ['titan', 'neo'];
 const INDEXED_RANGE = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-
 const SELECTORS = FAMILIES.flatMap(family => [
   family,
   ...INDEXED_RANGE.map(n => `${family}${n}`),
 ]);
 
-/**
- * Sanitise a raw domain query param into a bare hostname.
- * Strips protocol, path, query-string, port and whitespace.
- * Returns null if the result is not a plausible domain.
- */
-function sanitiseDomain(raw) {
-  if (!raw || typeof raw !== 'string') return null;
-  let d = raw.trim();
-  d = d.replace(/^https?:\/\//i, '');
-  d = d.split('/')[0].split('?')[0].split('#')[0];
-  d = d.split(':')[0];
-  d = d.toLowerCase().trim();
-  if (!/^[a-z0-9][a-z0-9\-\.]{1,252}[a-z0-9]$/.test(d)) return null;
-  return d;
-}
-
-module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+export default async function handler(req, res) {
+  const origin = req.headers.origin || '';
+  if (ALLOWED_ORIGIN) {
+    res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Vary', 'Origin');
   if (req.method === 'OPTIONS') return res.status(204).end();
+
+  const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
+  if (isRateLimited(rateLimitStore, ip)) {
+    return res.status(429).json({ error: 'Too many requests. Please wait a minute.' });
+  }
 
   const domain = sanitiseDomain(req.query.domain);
   if (!domain) {
@@ -57,7 +55,7 @@ module.exports = async function handler(req, res) {
     selectors_found: [],
     detail: null,
   });
-};
+}
 
 async function lookupDkim(selector, domain) {
   const hostname = `${selector}._domainkey.${domain}`;

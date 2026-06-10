@@ -1,30 +1,32 @@
-const WHOISJSON_API_KEY = process.env.WHOISJSON_API_KEY;
+import { sanitiseDomain, isRateLimited } from './_utils.js';
 
-function sanitiseDomain(raw) {
-  if (!raw || typeof raw !== 'string') return null;
-  let d = raw.trim();
-  d = d.replace(/^https?:\/\//i, '');
-  d = d.split('/')[0].split('?')[0].split('#')[0];
-  d = d.split(':')[0];
-  d = d.toLowerCase().trim();
-  if (!/^[a-z0-9][a-z0-9\-\.]{1,252}[a-z0-9]$/.test(d)) return null;
-  return d;
-}
+const WHOISJSON_API_KEY = process.env.WHOISJSON_API_KEY;
+const ALLOWED_ORIGIN = process.env.APP_URL || '';
+const rateLimitStore = new Map();
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin || '';
+  if (ALLOWED_ORIGIN) {
+    res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Vary', 'Origin');
   if (req.method === 'OPTIONS') { res.status(200).end(); return; }
 
+  const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
+  if (isRateLimited(rateLimitStore, ip)) {
+    return res.status(429).json({ error: 'Too many requests. Please wait a minute.' });
+  }
+
   if (!WHOISJSON_API_KEY) {
-    res.status(500).json({ error: 'WHOISJSON_API_KEY environment variable is not set' });
-    return;
+    return res.status(500).json({ error: 'WHOISJSON_API_KEY environment variable is not set' });
   }
 
   const domain = sanitiseDomain(req.query.domain);
   if (!domain) {
-    res.status(400).json({ error: 'Invalid or missing domain parameter' });
-    return;
+    return res.status(400).json({ error: 'Invalid or missing domain parameter' });
   }
 
   try {
