@@ -108,6 +108,36 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
 .hint { font-size: var(--text-xs); color: var(--color-text-faint); margin-top: calc(-1 * var(--space-1)); }
 
+/* Domain Lookup Widget */
+.domain-lookup-wrap { display: flex; flex-direction: column; gap: var(--space-2); }
+.domain-lookup-wrap > label { font-size: var(--text-sm); font-weight: 500; color: var(--color-text-muted); }
+.domain-lookup-row { display: flex; gap: var(--space-2); align-items: stretch; }
+.domain-lookup-row input { flex: 1; }
+.btn-lookup {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  padding: var(--space-2) var(--space-4); border-radius: var(--radius-md);
+  font-size: var(--text-sm); font-weight: 500; min-height: 40px; white-space: nowrap;
+  background: var(--color-primary); color: var(--color-text-inverse); border: none; flex-shrink: 0;
+}
+.btn-lookup:hover { background: var(--color-primary-hover); }
+.btn-lookup:disabled { opacity: 0.55; cursor: not-allowed; }
+.domain-result-card {
+  display: none; flex-direction: column; gap: var(--space-1);
+  background: var(--color-success-highlight);
+  border: 1px solid color-mix(in oklch, var(--color-success) 25%, var(--color-border));
+  border-radius: var(--radius-md); padding: var(--space-3) var(--space-4);
+  animation: fadeSlideDown 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.domain-result-card.visible { display: flex; }
+.domain-result-card.error {
+  background: color-mix(in oklch, var(--color-error) 6%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-error) 20%, var(--color-border));
+}
+.domain-result-row { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-xs); }
+.domain-result-label { font-weight: 600; color: var(--color-text-muted); min-width: 110px; }
+.domain-result-value { font-family: var(--font-mono); color: var(--color-text); }
+.domain-result-card.error .domain-result-value { color: var(--color-error); }
+
 .screenshot-field { display: flex; flex-direction: column; gap: var(--space-2); }
 .screenshot-field > label { font-size: var(--text-sm); font-weight: 500; color: var(--color-text-muted); }
 .upload-zone {
@@ -323,21 +353,37 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
           <span class="hint">Convert email file to .eml to capture this</span>
         </div>
 
-        <div class="field-row">
-          <div class="field">
-            <label for="arf-domain-age">Domain Age (months)<span class="req">*</span></label>
-            <input type="text" id="arf-domain-age" placeholder="e.g. 8 months">
-            <span class="hint">Check on whois.com</span>
+        <!-- Domain Lookup (ARF) -->
+        <div class="domain-lookup-wrap">
+          <label for="arf-domain-input">Domain Lookup<span class="req">*</span></label>
+          <div class="domain-lookup-row">
+            <input type="text" id="arf-domain-input" placeholder="e.g. example.com"
+              onkeydown="if(event.key==='Enter') lookupDomain('arf')">
+            <button class="btn-lookup" id="arf-lookup-btn" onclick="lookupDomain('arf')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              Lookup
+            </button>
           </div>
-          <div class="field">
-            <label for="arf-website">Valid Website?<span class="req">*</span></label>
-            <select id="arf-website">
-              <option value="">Select...</option>
-              <option value="Legit">Legit</option>
-              <option value="Fake">Fake</option>
-              <option value="No website">No website</option>
-            </select>
+          <div class="domain-result-card" id="arf-domain-result">
+            <div class="domain-result-row">
+              <span class="domain-result-label">Created On</span>
+              <span class="domain-result-value" id="arf-result-created">—</span>
+            </div>
+            <div class="domain-result-row">
+              <span class="domain-result-label">Domain Age</span>
+              <span class="domain-result-value" id="arf-result-age">—</span>
+            </div>
           </div>
+        </div>
+
+        <div class="field">
+          <label for="arf-website">Valid Website?<span class="req">*</span></label>
+          <select id="arf-website">
+            <option value="">Select...</option>
+            <option value="Legit">Legit</option>
+            <option value="Fake">Fake</option>
+            <option value="No website">No website</option>
+          </select>
         </div>
 
         <div class="field">
@@ -353,28 +399,22 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
           <span class="assurance-group-label">Assurances</span>
           <div class="assurance-btn-group" id="arf-assurance-btns">
             <button type="button" class="assurance-btn" data-value="Mailchimp" onclick="toggleAssurance(this,'arf')">
-              <svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-              Mailchimp
+              <svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Mailchimp
             </button>
             <button type="button" class="assurance-btn" data-value="Sendgrid" onclick="toggleAssurance(this,'arf')">
-              <svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-              Sendgrid
+              <svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Sendgrid
             </button>
             <button type="button" class="assurance-btn" data-value="Password Reset" onclick="toggleAssurance(this,'arf')">
-              <svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-              Password Reset
+              <svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Password Reset
             </button>
             <button type="button" class="assurance-btn" data-value="IP shared" onclick="toggleAssurance(this,'arf')">
-              <svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-              IP shared
+              <svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>IP shared
             </button>
             <button type="button" class="assurance-btn" data-value="Virus scan shared" onclick="toggleAssurance(this,'arf')">
-              <svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-              Virus scan shared
+              <svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Virus scan shared
             </button>
             <button type="button" class="assurance-btn other-btn" data-value="Other" onclick="toggleAssurance(this,'arf')">
-              <svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-              + Other
+              <svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>+ Other
             </button>
           </div>
           <div class="other-field" id="arf-other-field">
@@ -438,8 +478,13 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
             </select>
           </div>
           <div class="field">
-            <label for="bounce-domain-reg">Domain Registered On<span class="req">*</span></label>
-            <input type="text" id="bounce-domain-reg" placeholder="e.g. 15 Jan 2022">
+            <label for="bounce-website">Valid Website?<span class="req">*</span></label>
+            <select id="bounce-website">
+              <option value="">Select...</option>
+              <option value="Legit">Legit</option>
+              <option value="Fake">Fake</option>
+              <option value="No website">No website</option>
+            </select>
           </div>
         </div>
 
@@ -449,24 +494,36 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
           <span class="hint">List the other blocked email account(s) in this domain</span>
         </div>
 
-        <div class="field-row">
-          <div class="field">
-            <label for="bounce-website">Valid Website?<span class="req">*</span></label>
-            <select id="bounce-website">
-              <option value="">Select...</option>
-              <option value="Legit">Legit</option>
-              <option value="Fake">Fake</option>
-              <option value="No website">No website</option>
-            </select>
+        <!-- Domain Lookup (Bounce) -->
+        <div class="domain-lookup-wrap">
+          <label for="bounce-domain-input">Domain Lookup<span class="req">*</span></label>
+          <div class="domain-lookup-row">
+            <input type="text" id="bounce-domain-input" placeholder="e.g. example.com"
+              onkeydown="if(event.key==='Enter') lookupDomain('bounce')">
+            <button class="btn-lookup" id="bounce-lookup-btn" onclick="lookupDomain('bounce')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              Lookup
+            </button>
           </div>
-          <div class="field">
-            <label for="bounce-dkim">DKIM Status<span class="req">*</span></label>
-            <select id="bounce-dkim">
-              <option value="">Select...</option>
-              <option value="Set">Set</option>
-              <option value="Not Set">Not Set</option>
-            </select>
+          <div class="domain-result-card" id="bounce-domain-result">
+            <div class="domain-result-row">
+              <span class="domain-result-label">Created On</span>
+              <span class="domain-result-value" id="bounce-result-created">—</span>
+            </div>
+            <div class="domain-result-row">
+              <span class="domain-result-label">Domain Age</span>
+              <span class="domain-result-value" id="bounce-result-age">—</span>
+            </div>
           </div>
+        </div>
+
+        <div class="field">
+          <label for="bounce-dkim">DKIM Status<span class="req">*</span></label>
+          <select id="bounce-dkim">
+            <option value="">Select...</option>
+            <option value="Set">Set</option>
+            <option value="Not Set">Not Set</option>
+          </select>
         </div>
 
         <div class="assurance-group">
@@ -539,6 +596,49 @@ function copyOutput(id) {
 
 function v(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
 
+// ── Domain WHOIS state ──────────────────────────────────────────────────────
+const whoisCache = {};
+
+async function lookupDomain(prefix) {
+  const input = document.getElementById(prefix + '-domain-input');
+  const domain = input ? input.value.trim() : '';
+  if (!domain) { showToast('Please enter a domain name.'); return; }
+
+  const btn = document.getElementById(prefix + '-lookup-btn');
+  const card = document.getElementById(prefix + '-domain-result');
+  const createdEl = document.getElementById(prefix + '-result-created');
+  const ageEl = document.getElementById(prefix + '-result-age');
+
+  btn.disabled = true;
+  btn.textContent = 'Looking up…';
+  card.classList.remove('visible', 'error');
+
+  try {
+    const res = await fetch('/api/whois?domain=' + encodeURIComponent(domain));
+    const data = await res.json();
+
+    if (data.error || !data.creation_date) throw new Error(data.error || 'No creation date found');
+
+    whoisCache[prefix] = { creation_date: data.creation_date, domain_age: data.domain_age };
+
+    createdEl.textContent = data.creation_date;
+    ageEl.textContent = data.domain_age || '—';
+    card.classList.remove('error');
+    card.classList.add('visible');
+    showToast('Domain info fetched!');
+  } catch (err) {
+    whoisCache[prefix] = null;
+    createdEl.textContent = err.message || 'Lookup failed';
+    ageEl.textContent = '—';
+    card.classList.add('visible', 'error');
+    showToast('Lookup failed: ' + (err.message || 'unknown error'));
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Lookup';
+  }
+}
+
+// ── Screenshots ──────────────────────────────────────────────────────────────
 const arfScreenshots = [];
 
 function handleDragOver(e, zoneId) { e.preventDefault(); document.getElementById(zoneId).classList.add('dragover'); }
@@ -549,10 +649,7 @@ function handleDrop(e, prefix) {
   const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
   processFiles(files, prefix);
 }
-function handleFileSelect(e, prefix) {
-  processFiles(Array.from(e.target.files), prefix);
-  e.target.value = '';
-}
+function handleFileSelect(e, prefix) { processFiles(Array.from(e.target.files), prefix); e.target.value = ''; }
 function processFiles(files, prefix) {
   files.forEach(file => {
     const reader = new FileReader();
@@ -580,6 +677,7 @@ function renderPreviews() {
 }
 function removeScreenshot(idx) { arfScreenshots.splice(idx, 1); renderPreviews(); }
 
+// ── Conditional fields ───────────────────────────────────────────────────────
 function toggleOtherBlockedField(val) {
   const wrap = document.getElementById('bounce-other-blocked-detail-wrap');
   if (val === 'Yes') { wrap.classList.add('visible'); }
@@ -607,26 +705,24 @@ function getActiveAssurances(prefix) {
     if (b.getAttribute('data-value') === 'Other') {
       const txt = document.getElementById(prefix + '-other-text').value.trim();
       vals.push(txt ? txt : 'Other');
-    } else {
-      vals.push(b.getAttribute('data-value'));
-    }
+    } else { vals.push(b.getAttribute('data-value')); }
   });
   return vals;
 }
 
 function clearAssurances(prefix) {
   document.querySelectorAll('#' + prefix + '-assurance-btns .assurance-btn').forEach(b => b.classList.remove('active'));
-  const otherField = document.getElementById(prefix + '-other-field');
-  otherField.classList.remove('visible');
-  const otherText = document.getElementById(prefix + '-other-text');
-  if (otherText) otherText.value = '';
+  document.getElementById(prefix + '-other-field').classList.remove('visible');
+  const ot = document.getElementById(prefix + '-other-text');
+  if (ot) ot.value = '';
 }
 
+// ── ARF Generate ─────────────────────────────────────────────────────────────
 function generateARF() {
   const screenshotLine = arfScreenshots.length > 0
-    ? arfScreenshots.length + ' screenshot(s) attached (see below)'
-    : '-';
+    ? arfScreenshots.length + ' screenshot(s) attached (see below)' : '-';
   const assurances = getActiveAssurances('arf');
+  const whois = whoisCache['arf'];
   const lines = [
     '#ARF',
     'Domain: ' + (v('arf-domain-type') || '-'),
@@ -635,7 +731,8 @@ function generateARF() {
     'No. of blocked email accounts < 2 : ' + (v('arf-blocked-lt2') || '-'),
     'Email Content Type: ' + (v('arf-email-type') || '-'),
     'Screenshot of the Email Content: ' + screenshotLine,
-    'Domain Age (Check on https://whois.com) : ' + (v('arf-domain-age') || '-'),
+    'Domain Creation Date : ' + (whois ? whois.creation_date : '-'),
+    'Domain Age : ' + (whois ? whois.domain_age : '-'),
     'Valid Website or not : ' + (v('arf-website') || '-'),
     'DKIM: ' + (v('arf-dkim') || '-'),
     'Assurances : ' + (assurances.length > 0 ? assurances.join(', ') : '-'),
@@ -666,22 +763,24 @@ function generateARF() {
 
 function clearARF() {
   ['arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2',
-   'arf-email-type','arf-domain-age','arf-website','arf-dkim']
+   'arf-email-type','arf-website','arf-dkim','arf-domain-input']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-  arfScreenshots.length = 0;
-  renderPreviews();
-  clearAssurances('arf');
+  arfScreenshots.length = 0; renderPreviews(); clearAssurances('arf');
+  whoisCache['arf'] = null;
+  document.getElementById('arf-domain-result').classList.remove('visible','error');
   document.getElementById('arf-output-section').style.display = 'none';
   document.getElementById('arf-output-text').textContent = '';
   document.getElementById('arf-output-images').innerHTML = '';
 }
 
+// ── Bounce Generate ───────────────────────────────────────────────────────────
 function generateBounce() {
   const count = v('bounce-count');
   const otherBlocked = v('bounce-other-blocked');
   const countNum = parseInt(count);
   const lt40 = !isNaN(countNum) ? (countNum < 40 ? 'Yes' : 'No') : '-';
   const assurances = getActiveAssurances('bounce');
+  const whois = whoisCache['bounce'];
   const lines = [
     '#Bounce',
     'Previous unblock request for the same account : ' + (v('bounce-prev-unblock') || '-'),
@@ -690,7 +789,8 @@ function generateBounce() {
   ];
   if (otherBlocked === 'Yes') lines.push('Blocked account(s) in same domain : ' + (v('bounce-other-blocked-detail') || '-'));
   lines.push(
-    'Domain Age Registered on - ' + (v('bounce-domain-reg') || '-'),
+    'Domain Creation Date : ' + (whois ? whois.creation_date : '-'),
+    'Domain Age : ' + (whois ? whois.domain_age : '-'),
     'Valid Website or not : ' + (v('bounce-website') || '-'),
     'DKIM: ' + (v('bounce-dkim') || '-'),
     'Assurances : ' + (assurances.length > 0 ? assurances.join(', ') : '-')
@@ -703,10 +803,11 @@ function generateBounce() {
 }
 
 function clearBounce() {
-  ['bounce-prev-unblock','bounce-count','bounce-other-blocked','bounce-domain-reg','bounce-website','bounce-dkim']
+  ['bounce-prev-unblock','bounce-count','bounce-other-blocked','bounce-website','bounce-dkim','bounce-domain-input']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-  toggleOtherBlockedField('');
-  clearAssurances('bounce');
+  toggleOtherBlockedField(''); clearAssurances('bounce');
+  whoisCache['bounce'] = null;
+  document.getElementById('bounce-domain-result').classList.remove('visible','error');
   document.getElementById('bounce-output-section').style.display = 'none';
   document.getElementById('bounce-output-text').textContent = '';
 }
