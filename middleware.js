@@ -1,32 +1,31 @@
-import { NextResponse } from 'next/server';
-
-const PUBLIC_PATHS = ['/login', '/api/login'];
 const COOKIE_NAME = 'auth_session';
-const SESSION_VALUE = 'authenticated';
+const PUBLIC_PATHS = ['/login', '/api/login'];
 
-export function middleware(request) {
-  const { pathname } = request.nextUrl;
+export default function middleware(request) {
+  const url = new URL(request.url);
+  const { pathname } = url;
 
-  // Allow public paths and static assets through
+  // Allow public paths and static assets
   if (
     PUBLIC_PATHS.some(p => pathname.startsWith(p)) ||
-    pathname.startsWith('/_next') ||
-    pathname.startsWith('/favicon')
+    pathname.startsWith('/favicon') ||
+    pathname.match(/\.(css|js|png|jpg|jpeg|gif|webp|svg|ico|woff2?|ttf)$/)
   ) {
-    return NextResponse.next();
+    return;
   }
 
-  const sessionCookie = request.cookies.get(COOKIE_NAME);
-  if (sessionCookie && sessionCookie.value === SESSION_VALUE) {
-    return NextResponse.next();
-  }
+  const cookie = request.headers.get('cookie') || '';
+  const isAuthenticated = cookie
+    .split(';')
+    .some(c => c.trim() === `${COOKIE_NAME}=authenticated`);
 
-  // Not authenticated — redirect to login
+  if (isAuthenticated) return;
+
   const loginUrl = new URL('/login', request.url);
   loginUrl.searchParams.set('redirect', pathname);
-  return NextResponse.redirect(loginUrl);
+  return Response.redirect(loginUrl, 302);
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: '/(.*)',
 };
