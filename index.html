@@ -299,7 +299,7 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .assurance-btn.active .check-icon { display: inline-block; }
 .assurance-btn.other-btn { border-style: dashed; }
 
-/* Website assurance sub-options */
+/* Contact Form assurance sub-options */
 .website-suboptions {
   display: none;
   flex-wrap: wrap;
@@ -585,17 +585,17 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
             <button type="button" class="assurance-btn" data-value="Password reset" onclick="toggleAssurance(this,'bounce')"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Password reset</button>
             <button type="button" class="assurance-btn" data-value="IP shared" onclick="toggleAssurance(this,'bounce')"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>IP shared</button>
             <button type="button" class="assurance-btn" data-value="Virus scan shared" onclick="toggleAssurance(this,'bounce')"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Virus scan shared</button>
-            <!-- Website assurance button (NEW) -->
-            <button type="button" class="assurance-btn" data-value="Website" id="bounce-website-assurance-btn" onclick="toggleWebsiteAssurance(this)"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Website</button>
+            <!-- Contact Form assurance button -->
+            <button type="button" class="assurance-btn" data-value="Contact Form" id="bounce-contact-form-assurance-btn" onclick="toggleContactFormAssurance(this)"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Contact Form</button>
             <button type="button" class="assurance-btn other-btn" data-value="Other" onclick="toggleAssurance(this,'bounce')"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>+ Other</button>
           </div>
-          <!-- Website sub-options panel (NEW) -->
-          <div class="website-suboptions" id="bounce-website-suboptions">
-            <span class="website-suboptions-label">Website — select applicable:</span>
-            <button type="button" class="website-suboption-btn" data-value="Email Verification" onclick="toggleWebsiteSuboption(this)"><svg class="check-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Email Verification</button>
-            <button type="button" class="website-suboption-btn" data-value="Antivirus" onclick="toggleWebsiteSuboption(this)"><svg class="check-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Antivirus</button>
-            <button type="button" class="website-suboption-btn" data-value="Honeypot" onclick="toggleWebsiteSuboption(this)"><svg class="check-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Honeypot</button>
-            <button type="button" class="website-suboption-btn" data-value="Captcha" onclick="toggleWebsiteSuboption(this)"><svg class="check-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Captcha</button>
+          <!-- Contact Form sub-options panel -->
+          <div class="website-suboptions" id="bounce-contact-form-suboptions">
+            <span class="website-suboptions-label">Contact Form — select applicable:</span>
+            <button type="button" class="website-suboption-btn" data-value="Email Verification" onclick="toggleContactFormSuboption(this)"><svg class="check-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Email Verification</button>
+            <button type="button" class="website-suboption-btn" data-value="Antivirus" onclick="toggleContactFormSuboption(this)"><svg class="check-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Antivirus</button>
+            <button type="button" class="website-suboption-btn" data-value="Honeypot" onclick="toggleContactFormSuboption(this)"><svg class="check-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Honeypot</button>
+            <button type="button" class="website-suboption-btn" data-value="Captcha" onclick="toggleContactFormSuboption(this)"><svg class="check-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Captcha</button>
           </div>
           <div class="other-field" id="bounce-other-field">
             <label for="bounce-other-text">Other Assurance Details</label>
@@ -889,24 +889,23 @@ function toggleAssurance(btn, prefix) {
   }
 }
 
-// ── Website Assurance (NEW) ───────────────────────────────────────────
-function toggleWebsiteAssurance(btn) {
+// ── Contact Form Assurance ────────────────────────────────────────────
+function toggleContactFormAssurance(btn) {
   btn.classList.toggle('active');
-  const panel = document.getElementById('bounce-website-suboptions');
+  const panel = document.getElementById('bounce-contact-form-suboptions');
   if (btn.classList.contains('active')) {
     panel.classList.add('visible');
   } else {
     panel.classList.remove('visible');
-    // Deselect all sub-options when parent is toggled off
     panel.querySelectorAll('.website-suboption-btn').forEach(b => b.classList.remove('active'));
   }
 }
-function toggleWebsiteSuboption(btn) {
+function toggleContactFormSuboption(btn) {
   btn.classList.toggle('active');
 }
-function getActiveWebsiteSuboptions() {
+function getActiveContactFormSuboptions() {
   const vals = [];
-  document.querySelectorAll('#bounce-website-suboptions .website-suboption-btn.active').forEach(b => {
+  document.querySelectorAll('#bounce-contact-form-suboptions .website-suboption-btn.active').forEach(b => {
     vals.push(b.getAttribute('data-value'));
   });
   return vals;
@@ -919,12 +918,12 @@ function getActiveAssurances(prefix) {
     if (dataVal === 'Other') {
       const t = document.getElementById(prefix + '-other-text').value.trim();
       vals.push(t || 'Other');
-    } else if (dataVal === 'Website' && prefix === 'bounce') {
-      const subs = getActiveWebsiteSuboptions();
+    } else if (dataVal === 'Contact Form' && prefix === 'bounce') {
+      const subs = getActiveContactFormSuboptions();
       if (subs.length > 0) {
-        vals.push('Website (' + subs.join(', ') + ')');
+        vals.push('Contact Form (' + subs.join(', ') + ')');
       } else {
-        vals.push('Website');
+        vals.push('Contact Form');
       }
     } else {
       vals.push(dataVal);
@@ -937,7 +936,7 @@ function clearAssurances(prefix) {
   document.getElementById(prefix + '-other-field').classList.remove('visible');
   const ot = document.getElementById(prefix + '-other-text'); if (ot) ot.value = '';
   if (prefix === 'bounce') {
-    const panel = document.getElementById('bounce-website-suboptions');
+    const panel = document.getElementById('bounce-contact-form-suboptions');
     if (panel) {
       panel.classList.remove('visible');
       panel.querySelectorAll('.website-suboption-btn').forEach(b => b.classList.remove('active'));
