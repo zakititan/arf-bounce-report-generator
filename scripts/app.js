@@ -598,11 +598,12 @@ function generateBounce() {
       'DKIM: ' + (v('bounce-dkim') || '-'),
       'Assurances : ' + (assurances.length > 0 ? assurances.join(', ') : '-')
     );
-    const fullText = lines.join('\n\n');
+    // Display uses single line spacing; copy uses double
+    const displayText = lines.join('\n');
+    const fullCopyText = lines.join('\n\n');
     const outputEl = document.getElementById('bounce-output-text');
-    outputEl.textContent = fullText;
-    // Store on output area so copyOutputWithFeedback picks it up
-    outputEl.closest('.output-area').dataset.copyText = fullText;
+    outputEl.textContent = displayText;
+    outputEl.closest('.output-area').dataset.copyText = fullCopyText;
     const section = document.getElementById('bounce-output-section');
     section.style.display = 'block';
     section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
