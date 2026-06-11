@@ -12,12 +12,18 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Website Check** — classifies domain as Legit / Fake / No website via serverless API
 - **DKIM Check** — detects common DKIM selectors (titan, neo, google, etc.) via DNS lookup
 - **CSV parsing** — drag-and-drop bounce list upload with automatic row count and `< 40` threshold badge
-- **Screenshot attachments** — drag-and-drop image upload with inline previews in the generated report
-- **One-click copy** — copies the formatted report text to clipboard
+- **Auto-trigger Lookup from CSV** — domain is auto-detected from the CSV and Lookup fires automatically
+- **Email → Domain sanitisation** — pasting or typing a full email address in the domain field automatically strips the local-part (e.g. `user@example.com` → `example.com`)
+- **Screenshot attachments** — drag-and-drop image upload (max 10) with inline previews in the generated report
+- **One-click copy** — copies the formatted report text to clipboard with a "Copied ✓" visual confirmation
+- **Keyboard shortcut** — `Ctrl`/`Cmd` + `Enter` generates the report from whichever panel is active
+- **Form state persistence** — all field values are saved to `localStorage` and restored on next visit
 - **Dark / Light theme** — respects system preference with a manual toggle
 - **Login gate** — password-protected access via `login.html` + Vercel Edge middleware with HMAC-signed cookies
 - **CORS protection** — all API endpoints restricted to `APP_URL` origin
 - **IP rate limiting** — 20 requests/min per IP on all API endpoints
+- **Lookup debounce** — 1-second debounce prevents API spam from rapid button clicks or auto-triggers
+- **Stale cache invalidation** — changing the domain input immediately clears the cached WHOIS result
 - **Required field validation** — Generate button blocked until all required fields are filled
 - **Lookup-aware Generate button** — Generate is disabled while a domain lookup is in-flight
 - **Vercel Analytics & Speed Insights** — page view tracking and Core Web Vitals monitoring
@@ -116,17 +122,21 @@ APP_URL=http://localhost:3000
 
 ### ARF Report
 1. Select domain type and fill in complaint details
-2. Upload screenshot(s) of the email content
+2. Upload screenshot(s) of the email content (max 10)
 3. Enter the sender domain and click **Lookup** to auto-fill WHOIS, website, and DKIM fields
+   - You can paste a full email address — the local-part is stripped automatically
 4. Select active assurances
-5. Click **Generate ARF Report** → copy the output
+5. Click **Generate ARF Report** (or press `Ctrl`/`Cmd` + `Enter`) → copy the output
 
 ### Bounce Report
 1. Select previous unblock status
 2. Upload the bounce list CSV (header row is automatically excluded from the count)
-3. Fill in domain details and click **Lookup**
+   - Domain is auto-detected from the CSV and Lookup runs immediately
+3. Fill in remaining domain details
 4. Select active assurances
-5. Click **Generate Bounce Report** → copy the output
+5. Click **Generate Bounce Report** (or press `Ctrl`/`Cmd` + `Enter`) → copy the output
+
+> **Tip:** All form fields are saved automatically — refreshing the page restores your last session.
 
 ---
 
@@ -138,6 +148,23 @@ APP_URL=http://localhost:3000
 - **CORS** prevents API calls from unauthorized origins
 - **Rate limiting** mitigates brute-force and scraping attempts
 - **`AUTH_SECRET`** and **`APP_PASSWORD`** are never committed to the repo — always set via environment variables
+
+---
+
+## Changelog
+
+### 2026-06-11
+- **Email → domain sanitisation** — domain inputs now strip email local-parts on paste, blur, and before every Lookup call; also strips `http(s)://`, trailing paths, ports ([`4e43623`](https://github.com/zakititan/arf-bounce-report-generator/commit/4e436230420ef1ff0670e60a91f069570127b529))
+- **Auto-trigger Lookup from CSV** — after domain auto-detection from a CSV upload, Lookup fires automatically instead of requiring a manual click ([`2ae864f`](https://github.com/zakititan/arf-bounce-report-generator/commit/2ae864fa09326fbb53dd3d57442117adb0ff10ab))
+- **Form state persistence** — all 14 form fields saved to `localStorage` on change and restored on `DOMContentLoaded` ([`2ae864f`](https://github.com/zakititan/arf-bounce-report-generator/commit/2ae864fa09326fbb53dd3d57442117adb0ff10ab))
+- **`Ctrl`/`Cmd` + `Enter` shortcut** — generates the report for whichever panel is active ([`2ae864f`](https://github.com/zakititan/arf-bounce-report-generator/commit/2ae864fa09326fbb53dd3d57442117adb0ff10ab))
+- **"Copied ✓" button feedback** — copy button briefly shows green confirmation text instead of only a toast ([`2ae864f`](https://github.com/zakititan/arf-bounce-report-generator/commit/2ae864fa09326fbb53dd3d57442117adb0ff10ab))
+- **Unified `state` object** — consolidated all per-panel state (screenshots, whois cache, in-flight flags) into a single `state` object ([`2ae864f`](https://github.com/zakititan/arf-bounce-report-generator/commit/2ae864fa09326fbb53dd3d57442117adb0ff10ab))
+- **Stale cache invalidation** — editing the domain input immediately clears the cached WHOIS result and hides the result card ([`2ae864f`](https://github.com/zakititan/arf-bounce-report-generator/commit/2ae864fa09326fbb53dd3d57442117adb0ff10ab))
+- **`try/catch` on generate functions** — unexpected errors surface as a user-facing toast instead of silently failing ([`2ae864f`](https://github.com/zakititan/arf-bounce-report-generator/commit/2ae864fa09326fbb53dd3d57442117adb0ff10ab))
+- **10-screenshot cap** — excess files are skipped with a descriptive toast ([`2ae864f`](https://github.com/zakititan/arf-bounce-report-generator/commit/2ae864fa09326fbb53dd3d57442117adb0ff10ab))
+- **Lookup debounce** — 1-second debounce prevents API spam from rapid clicks or auto-triggers ([`2ae864f`](https://github.com/zakititan/arf-bounce-report-generator/commit/2ae864fa09326fbb53dd3d57442117adb0ff10ab))
+- **Screenshot remove button** — replaced bare `x` text with an SVG cross icon ([`2ae864f`](https://github.com/zakititan/arf-bounce-report-generator/commit/2ae864fa09326fbb53dd3d57442117adb0ff10ab))
 
 ---
 
