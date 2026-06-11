@@ -27,14 +27,55 @@ export const DKIM_SELECTORS = DKIM_FAMILIES.flatMap(family => [
 ]);
 
 // ── Website check ─────────────────────────────────────────────────────────────
-export const WEBSITE_MAX_BODY_BYTES   = 50_000;
-export const WEBSITE_MIN_CONTENT_LEN  = 200;
+export const WEBSITE_MAX_BODY_BYTES   = 80_000;
+export const WEBSITE_MIN_CONTENT_LEN  = 300;
 
+// Phrases that, when found in the page title, indicate a parked or placeholder site
+export const PARKED_TITLE_KEYWORDS = [
+  'parked', 'for sale', 'buy this domain', 'domain is parked',
+  'domain name is for sale', 'coming soon', 'under construction',
+  'this domain', 'default page', 'placeholder', 'sitio en construcción',
+  'site en construction', 'page d\'accueil', 'welcome to',
+  'it works', 'default web page', 'index of',
+];
+
+// Phrases anywhere in the body that strongly indicate parked/placeholder pages
 export const PARKED_KEYWORDS = [
-  'parked', 'for sale', 'buy this domain', 'domain for sale', 'under construction',
-  'coming soon', 'this domain', 'sedoparking', 'hugedomains', 'dan.com',
-  'godaddy', 'namecheap parking', 'afternic', 'brandbucket',
-  'this page is intentionally left blank', 'default web page',
+  'parked', 'for sale', 'buy this domain', 'domain for sale', 'domain is parked',
+  'under construction', 'coming soon', 'this domain', 'sedoparking',
+  'hugedomains', 'dan.com', 'godaddy', 'namecheap parking', 'afternic',
+  'brandbucket', 'this page is intentionally left blank', 'default web page',
   'placeholder page', 'welcome to nginx', 'welcome to apache',
   'it works!', 'test page for', 'apache2 ubuntu default',
+  'this domain is parked', 'domain name is for sale',
+  'buy this domain name', 'sedo parking', 'domain parking',
+  'this webpage is parked', 'is parked free', 'parking page',
+  'buy now', 'domain names', 'web hosting', 'register domain',
+  'this domain may be for sale', 'domain registration',
+  'your domain is expired', 'renew your domain',
+  'is for sale on afternic', 'is for sale at afternic',
+  'purchase this domain', 'own this domain',
+  'get this domain', 'claim this domain',
+  // Builder / CMS default pages
+  'welcome to your site', 'edit your site', 'start building your website',
+  'your website is coming soon', 'this site was built with',
+  'create your website', 'built with', 'powered by',
+  'welcome to wordpress', 'welcome to joomla',
+  'default page - cpanel', 'cpanel default page',
+  'plesk default page', 'iis windows server',
+  'apache is functioning normally', 'nginx is functioning normally',
+  'this is the default index page', 'no site configured',
+  'website is not configured', 'default website',
 ];
+
+// Known domain-parking / placeholder services (checked via redirect target)
+export const PARKED_DOMAIN_PATTERNS = [
+  'sedo.com', 'afternic.com', 'dan.com', 'hugedomains.com',
+  'godaddy.com', 'namecheap.com', 'brandbucket.com',
+  'bodis.com', 'parkingcrew.net', 'voodoo.com',
+  'cashparking.com', 'domainmarket.com', 'buydomains.com',
+  'undeveloped.com', 'afternic', 'sedoparking',
+];
+
+// Minimum ratio of visible text to total bytes (filters out image-only / thin-content pages)
+export const WEBSITE_MIN_TEXT_RATIO = 0.01;
