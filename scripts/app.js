@@ -5,7 +5,7 @@
  * Improvements applied:
  *  UX:      Auto-trigger lookup from CSV, localStorage persistence, Ctrl/Cmd+Enter
  *           shortcut, "Copied ✓" button feedback, email→domain sanitisation,
- *           inline screenshots in ARF output.
+ *           inline screenshots in ARF output, full-text copy (incl. screenshot labels).
  *  Quality: Unified `state` object, whoisCache invalidated on domain input change,
  *           try/catch on generate, addEventListener replacing window.* inline handlers
  *           where feasible, debounced Lookup button.
@@ -117,13 +117,18 @@ function initDomainInputs() {
   });
 }
 
-// ── Copy with visual button feedback ─────────────────────────────────
+// ── Copy with visual button feedback ──────────────────────────────────
+// Reads `data-copy-text` on the output area if present (set by generateARF/generateBounce
+// to include the full formatted text + screenshot labels). Falls back to textContent.
 function copyOutputWithFeedback(id) {
   const el = document.getElementById(id);
-  if (!el || !el.textContent.trim()) return;
-  navigator.clipboard.writeText(el.textContent).then(() => {
+  if (!el) return;
+  const outputArea = el.closest('.output-area');
+  const text = (outputArea && outputArea.dataset.copyText) || el.textContent;
+  if (!text.trim()) return;
+  navigator.clipboard.writeText(text).then(() => {
     showToast('Copied to clipboard!');
-    const btn = el.closest('.output-area')?.querySelector('.copy-btn-wrap button');
+    const btn = outputArea?.querySelector('.copy-btn-wrap button');
     if (btn) {
       const original = btn.textContent;
       btn.textContent = 'Copied ✓';
@@ -484,23 +489,32 @@ function generateARF() {
       'Assurances : ' + (assurances.length > 0 ? assurances.join(', ') : '-'),
     ];
 
-    // Build a single output container that interleaves text + inline images
+    // Build full plain-text copy string — includes screenshot filenames
+    const copyLines = [...lines];
+    if (hasScreenshots) {
+      copyLines.push('');
+      copyLines.push('── Screenshots ──');
+      state.arf.screenshots.forEach((s, i) => copyLines.push((i + 1) + '. ' + s.name));
+    }
+    const fullCopyText = copyLines.join('\n');
+
+    // Build DOM output
     const outputSection = document.getElementById('arf-output-section');
     const outputArea = outputSection.querySelector('.output-area');
 
-    // Clear previous output children (keep .copy-btn-wrap)
     const copyBtn = outputArea.querySelector('.copy-btn-wrap');
     outputArea.innerHTML = '';
     if (copyBtn) outputArea.appendChild(copyBtn);
 
-    // Text block
+    // Store formatted text for copy
+    outputArea.dataset.copyText = fullCopyText;
+
     const pre = document.createElement('pre');
     pre.id = 'arf-output-text';
     pre.className = 'output-text';
     pre.textContent = lines.join('\n');
     outputArea.appendChild(pre);
 
-    // Inline screenshots immediately after the text
     if (hasScreenshots) {
       const divider = document.createElement('div');
       divider.className = 'output-inline-divider';
@@ -547,10 +561,10 @@ function clearARF() {
   ['arf-website-hint','arf-dkim-hint'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = ''; });
   const outputSection = document.getElementById('arf-output-section');
   outputSection.style.display = 'none';
-  // Restore static pre element for next generation
   const outputArea = outputSection.querySelector('.output-area');
   const copyBtn = outputArea.querySelector('.copy-btn-wrap');
   outputArea.innerHTML = '';
+  delete outputArea.dataset.copyText;
   if (copyBtn) outputArea.appendChild(copyBtn);
   const pre = document.createElement('pre');
   pre.id = 'arf-output-text';
@@ -588,7 +602,11 @@ function generateBounce() {
       'DKIM: ' + (v('bounce-dkim') || '-'),
       'Assurances : ' + (assurances.length > 0 ? assurances.join(', ') : '-')
     );
-    document.getElementById('bounce-output-text').textContent = lines.join('\n');
+    const fullText = lines.join('\n');
+    const outputEl = document.getElementById('bounce-output-text');
+    outputEl.textContent = fullText;
+    // Store on output area so copyOutputWithFeedback picks it up
+    outputEl.closest('.output-area').dataset.copyText = fullText;
     const section = document.getElementById('bounce-output-section');
     section.style.display = 'block';
     section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -608,8 +626,10 @@ function clearBounce() {
   state.bounce.whois = null;
   document.getElementById('bounce-domain-result').classList.remove('visible', 'error');
   ['bounce-website-hint','bounce-dkim-hint'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = ''; });
+  const outputEl = document.getElementById('bounce-output-text');
+  outputEl.textContent = '';
+  delete outputEl.closest('.output-area').dataset.copyText;
   document.getElementById('bounce-output-section').style.display = 'none';
-  document.getElementById('bounce-output-text').textContent = '';
   document.getElementById('bounce-validation-banner').classList.remove('visible');
   clearFieldErrors(['bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-domain-input','bounce-other-blocked-detail']);
   saveFormState();
