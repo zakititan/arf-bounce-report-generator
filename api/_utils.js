@@ -1,3 +1,4 @@
+import { createHmac } from 'crypto';
 import { IPV4_PATTERN, IPV6_PATTERN, LOCALHOST_NAMES, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from './config.js';
 
 // ── Domain sanitisation ───────────────────────────────────────────────────────
@@ -27,6 +28,40 @@ export function sanitiseDomain(raw) {
   if (LOCALHOST_NAMES.includes(v)) return null;
 
   return v;
+}
+
+// ── Auth tokens (Node crypto — used by api/login.js) ─────────────────────────
+/**
+ * Sign a payload with HMAC-SHA256 using Node crypto.
+ * Returns "payload.hex_signature".
+ */
+export function signToken(payload) {
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) throw new Error('AUTH_SECRET is not set');
+  const sig = createHmac('sha256', secret).update(payload).digest('hex');
+  return `${payload}.${sig}`;
+}
+
+/**
+ * Verify a token produced by signToken().
+ * Uses constant-time comparison to prevent timing attacks.
+ */
+export function verifyToken(token) {
+  if (!token || !token.includes('.')) return false;
+  const lastDot = token.lastIndexOf('.');
+  const payload = token.slice(0, lastDot);
+  const sig = token.slice(lastDot + 1);
+  try {
+    const secret = process.env.AUTH_SECRET;
+    if (!secret) return false;
+    const expected = createHmac('sha256', secret).update(payload).digest('hex');
+    if (expected.length !== sig.length) return false;
+    let diff = 0;
+    for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ sig.charCodeAt(i);
+    return diff === 0;
+  } catch {
+    return false;
+  }
 }
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
