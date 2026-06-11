@@ -175,7 +175,6 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   font-size: var(--text-xs); font-weight: 600; font-family: var(--font-mono);
 }
 .website-badge.legit { background: var(--color-success-highlight); color: var(--color-success); }
-.website-badge.fake { background: var(--color-warning-highlight); color: var(--color-warning); }
 .website-badge.nosite { background: color-mix(in oklch, var(--color-text-faint) 20%, var(--color-surface)); color: var(--color-text-muted); }
 .website-badge.checking { color: var(--color-text-faint); background: none; }
 .dkim-badge {

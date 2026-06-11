@@ -363,11 +363,8 @@ async function lookupDomain(prefix) {
   }
 }
 
-// Maps API verdict to the two-option dropdown value.
-// Legit = real content → Valid Website
-// Everything else (Fake, Parked, Placeholder, No website, Unreachable) → No website
 function mapVerdictToSelect(verdict) {
-  if (verdict === 'Legit') return 'Valid Website';
+  if (verdict === 'Valid Website') return 'Valid Website';
   return 'No website';
 }
 
@@ -377,11 +374,9 @@ async function checkWebsite(prefix, domain) {
   const hintEl = document.getElementById(prefix + '-website-hint');
   try {
     const data = await fetchWebsiteCheck(domain);
-    const verdict = data.verdict || 'Unknown';
+    const verdict = data.verdict || 'No website';
     const reason = data.reason || '';
-    let bc = 'legit';
-    if (verdict === 'Fake') bc = 'fake';
-    else if (verdict === 'No website' || verdict === 'Unreachable' || verdict === 'Parked' || verdict === 'Placeholder') bc = 'nosite';
+    const bc = verdict === 'Valid Website' ? 'legit' : 'nosite';
     if (websiteEl) websiteEl.innerHTML = '<span class="website-badge ' + bc + '">' + verdict + '</span>';
     if (websiteSelect && websiteSelect.value === '') {
       const mapped = mapVerdictToSelect(verdict);

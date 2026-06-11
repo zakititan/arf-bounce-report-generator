@@ -87,7 +87,7 @@ export default withMiddleware(globalRateLimitStore, async function handler(req, 
       // Check if the final URL after redirects goes to a known parking service
       if (redirectsToParkedService(response)) {
         return res.status(200).json({
-          verdict: 'Fake',
+          verdict: 'No website',
           status,
           reason: `Redirected to known domain parking service: ${new URL(response.url).hostname}`,
         });
@@ -115,7 +115,7 @@ export default withMiddleware(globalRateLimitStore, async function handler(req, 
       const title = extractTitle(bodyText);
       if (title && titleMatchesParked(title)) {
         return res.status(200).json({
-          verdict: 'Fake',
+          verdict: 'No website',
           status,
           reason: `Page title suggests parked or placeholder site: "${title}"`,
         });
@@ -124,7 +124,7 @@ export default withMiddleware(globalRateLimitStore, async function handler(req, 
       // Check for meta robots noindex (common on placeholder / parked pages)
       if (hasNoindex(bodyText) && bodyLength < WEBSITE_MIN_CONTENT_LEN * 2) {
         return res.status(200).json({
-          verdict: 'Fake',
+          verdict: 'No website',
           status,
           reason: 'Page has noindex meta tag and very little content',
         });
@@ -133,7 +133,7 @@ export default withMiddleware(globalRateLimitStore, async function handler(req, 
       // Check parked keywords
       if (bodyMatchesParked(bodyLower)) {
         return res.status(200).json({
-          verdict: 'Fake',
+          verdict: 'No website',
           status,
           reason: 'Parked, placeholder, or default template content detected',
         });
@@ -142,18 +142,18 @@ export default withMiddleware(globalRateLimitStore, async function handler(req, 
       // Image-only or near-empty pages (e.g. just a logo image)
       if (isImageOnlyPage(bodyText, bytesRead) && bodyLength < WEBSITE_MIN_CONTENT_LEN * 1.5) {
         return res.status(200).json({
-          verdict: 'Fake',
+          verdict: 'No website',
           status,
           reason: 'Page contains mostly markup/images with very little text content',
         });
       }
 
       // SPA shell detection — if the page is a JS-driven app with a legitimate title,
-      // treat it as Legit even though the initial HTML has minimal content
+      // treat it as a valid website even though the initial HTML has minimal content
       const isSpa = isSpaShell(bodyText);
       if (isSpa && bodyLength < WEBSITE_MIN_CONTENT_LEN) {
         return res.status(200).json({
-          verdict: 'Legit',
+          verdict: 'Valid Website',
           status,
           reason: `JavaScript application detected (SPA) — content loaded client-side (HTTP ${status})`,
         });
@@ -162,14 +162,14 @@ export default withMiddleware(globalRateLimitStore, async function handler(req, 
       // Minimal content check
       if (bodyLength < WEBSITE_MIN_CONTENT_LEN) {
         return res.status(200).json({
-          verdict: 'Fake',
+          verdict: 'No website',
           status,
           reason: `Page has very little content (${bodyLength} chars)`,
         });
       }
 
       return res.status(200).json({
-        verdict: 'Legit',
+        verdict: 'Valid Website',
         status,
         reason: `Reachable with content (HTTP ${status})`,
       });
