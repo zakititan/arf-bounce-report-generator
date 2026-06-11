@@ -1,0 +1,9 @@
+{
+  "name": "arf-bounce-report-generator",
+  "version": "1.0.0",
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "test": "node --test tests/sanitiseDomain.test.js"
+  }
+}
