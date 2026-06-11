@@ -4,7 +4,8 @@
  *
  * Improvements applied:
  *  UX:      Auto-trigger lookup from CSV, localStorage persistence, Ctrl/Cmd+Enter
- *           shortcut, "Copied ✓" button feedback, email→domain sanitisation.
+ *           shortcut, "Copied ✓" button feedback, email→domain sanitisation,
+ *           inline screenshots in ARF output.
  *  Quality: Unified `state` object, whoisCache invalidated on domain input change,
  *           try/catch on generate, addEventListener replacing window.* inline handlers
  *           where feasible, debounced Lookup button.
@@ -50,7 +51,6 @@ Object.assign(window, {
   handleCsvDragOver, handleCsvDragLeave, handleCsvDrop, handleCsvSelect,
   removeScreenshot, clearCsv,
 });
-// Keep legacy copyOutput name working (used by existing HTML)
 window.copyOutput = copyOutputWithFeedback;
 
 // ── Init ──────────────────────────────────────────────────────────────
@@ -76,20 +76,11 @@ function initKeyboardShortcuts() {
 }
 
 // ── Domain input: sanitise email → domain + invalidate cache ──────────
-/**
- * Strips the local-part of an email address from a domain input.
- * e.g. "user@example.com" → "example.com"
- * Plain domains like "example.com" are left untouched.
- * Also strips http(s):// and any trailing paths/ports for convenience.
- */
 function sanitiseDomainInput(value) {
   let v = value.trim();
-  // Strip protocol
   v = v.replace(/^https?:\/\//i, '');
-  // Strip email local-part
   const atIdx = v.indexOf('@');
   if (atIdx !== -1) v = v.slice(atIdx + 1);
-  // Strip trailing path, query, hash, port
   v = v.split('/')[0].split('?')[0].split('#')[0].split(':')[0];
   return v.toLowerCase().trim();
 }
@@ -98,23 +89,15 @@ function initDomainInputs() {
   ['arf', 'bounce'].forEach(prefix => {
     const input = document.getElementById(prefix + '-domain-input');
     if (!input) return;
-
-    // Sanitise on paste — catches paste of full email immediately
     input.addEventListener('paste', (e) => {
       e.preventDefault();
       const pasted = (e.clipboardData || window.clipboardData).getData('text');
       const sanitised = sanitiseDomainInput(pasted);
       input.value = sanitised;
-      // Notify if something was stripped
-      if (sanitised !== pasted.trim()) {
-        showToast('Email stripped → ' + sanitised);
-      }
-      // Invalidate cache since value changed
+      if (sanitised !== pasted.trim()) showToast('Email stripped → ' + sanitised);
       state[prefix].whois = null;
       document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
     });
-
-    // Sanitise on blur — catches manual typing of an email
     input.addEventListener('blur', () => {
       const original = input.value;
       const sanitised = sanitiseDomainInput(original);
@@ -125,8 +108,6 @@ function initDomainInputs() {
         document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
       }
     });
-
-    // Invalidate cache whenever the raw value changes (existing behaviour)
     input.addEventListener('input', () => {
       if (state[prefix].whois) {
         state[prefix].whois = null;
@@ -147,10 +128,7 @@ function copyOutputWithFeedback(id) {
       const original = btn.textContent;
       btn.textContent = 'Copied ✓';
       btn.style.color = 'var(--color-success)';
-      setTimeout(() => {
-        btn.textContent = original;
-        btn.style.color = '';
-      }, 2000);
+      setTimeout(() => { btn.textContent = original; btn.style.color = ''; }, 2000);
     }
   }).catch(() => showToast('Copy failed — please copy manually.'));
 }
@@ -165,10 +143,7 @@ const PERSIST_FIELDS = [
 
 function saveFormState() {
   const saved = {};
-  PERSIST_FIELDS.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) saved[id] = el.value;
-  });
+  PERSIST_FIELDS.forEach(id => { const el = document.getElementById(id); if (el) saved[id] = el.value; });
   try { localStorage.setItem(LS_KEY, JSON.stringify(saved)); } catch (_) {}
 }
 
@@ -176,20 +151,14 @@ function restoreFormState() {
   let saved;
   try { saved = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (_) { return; }
   if (!saved) return;
-  PERSIST_FIELDS.forEach(id => {
-    const el = document.getElementById(id);
-    if (el && saved[id]) el.value = saved[id];
-  });
+  PERSIST_FIELDS.forEach(id => { const el = document.getElementById(id); if (el && saved[id]) el.value = saved[id]; });
   const otherBlocked = document.getElementById('bounce-other-blocked');
   if (otherBlocked && otherBlocked.value) toggleOtherBlockedField(otherBlocked.value);
   showToast('Form state restored from last session.');
 }
 
 function attachPersistListeners() {
-  PERSIST_FIELDS.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener('change', saveFormState);
-  });
+  PERSIST_FIELDS.forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', saveFormState); });
 }
 document.addEventListener('DOMContentLoaded', attachPersistListeners);
 
@@ -198,8 +167,7 @@ function setGenerateBtnState(prefix) {
   const btn = document.getElementById(prefix + '-generate-btn');
   if (!btn) return;
   btn.disabled = state[prefix].lookupInFlight;
-  btn.title = state[prefix].lookupInFlight
-    ? 'Domain lookup is still in progress — please wait' : '';
+  btn.title = state[prefix].lookupInFlight ? 'Domain lookup is still in progress — please wait' : '';
 }
 
 // ── CSV helpers ───────────────────────────────────────────────────────
@@ -211,11 +179,8 @@ function parseCsvRow(row) {
     if (ch === '"') {
       if (inQuotes && row[i + 1] === '"') { cur += '"'; i++; }
       else inQuotes = !inQuotes;
-    } else if (ch === ',' && !inQuotes) {
-      cols.push(cur.trim()); cur = '';
-    } else {
-      cur += ch;
-    }
+    } else if (ch === ',' && !inQuotes) { cols.push(cur.trim()); cur = ''; }
+    else cur += ch;
   }
   cols.push(cur.trim());
   return cols;
@@ -234,11 +199,7 @@ function handleCsvDrop(e) {
   const file = Array.from(e.dataTransfer.files).find(f => f.name.endsWith('.csv') || f.type === 'text/csv');
   if (file) processCsv(file); else showToast('Please drop a .csv file');
 }
-function handleCsvSelect(e) {
-  const file = e.target.files[0];
-  if (file) processCsv(file);
-  e.target.value = '';
-}
+function handleCsvSelect(e) { const file = e.target.files[0]; if (file) processCsv(file); e.target.value = ''; }
 function processCsv(file) {
   const reader = new FileReader();
   reader.onload = function (e) {
@@ -251,7 +212,6 @@ function processCsv(file) {
     if (dataRows < 40) { badge.textContent = '< 40 ✓'; badge.className = 'csv-lt40-badge ok'; }
     else { badge.textContent = '≥ 40 ⚠'; badge.className = 'csv-lt40-badge warn'; }
     document.getElementById('bounce-csv-result').classList.add('visible');
-
     if (lines.length >= 2) {
       const col3Value = parseCsvRow(lines[1])[2] || '';
       const detectedDomain = extractDomain(col3Value);
@@ -260,12 +220,8 @@ function processCsv(file) {
         domainInput.value = detectedDomain;
         showToast('Domain auto-detected: ' + detectedDomain + ' — running lookup…');
         lookupDomain('bounce');
-      } else {
-        showToast(dataRows + ' bounce rows counted from ' + file.name);
-      }
-    } else {
-      showToast(dataRows + ' bounce rows counted from ' + file.name);
-    }
+      } else showToast(dataRows + ' bounce rows counted from ' + file.name);
+    } else showToast(dataRows + ' bounce rows counted from ' + file.name);
   };
   reader.readAsText(file);
 }
@@ -285,7 +241,6 @@ async function lookupDomain(prefix) {
   state[prefix].lookupLastFired = now;
 
   const input = document.getElementById(prefix + '-domain-input');
-  // Sanitise one final time before sending to API
   if (input) input.value = sanitiseDomainInput(input.value);
   const domain = input ? input.value.trim() : '';
   if (!domain) { showToast('Please enter a domain name.'); return; }
@@ -349,9 +304,7 @@ async function checkWebsite(prefix, domain) {
       if (mapped) { websiteSelect.value = mapped; if (hintEl) hintEl.textContent = 'Auto-detected: ' + reason; }
     }
     showToast('Website: ' + verdict);
-  } catch {
-    if (websiteEl) websiteEl.innerHTML = '<span class="website-badge nosite">Check failed</span>';
-  }
+  } catch { if (websiteEl) websiteEl.innerHTML = '<span class="website-badge nosite">Check failed</span>'; }
 }
 
 async function checkDkim(prefix, domain) {
@@ -377,9 +330,7 @@ async function checkDkim(prefix, domain) {
       }
       showToast('DKIM: Not Set');
     }
-  } catch {
-    if (dkimEl) dkimEl.innerHTML = '<span class="dkim-badge notset">Check failed</span>';
-  }
+  } catch { if (dkimEl) dkimEl.innerHTML = '<span class="dkim-badge notset">Check failed</span>'; }
 }
 
 // ── Screenshots (capped at MAX_SCREENSHOTS) ───────────────────────────
@@ -388,28 +339,17 @@ function handleDrop(e, prefix) {
   document.getElementById(prefix + '-upload-zone').classList.remove('dragover');
   processFiles(Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/')), prefix);
 }
-function handleFileSelect(e, prefix) {
-  processFiles(Array.from(e.target.files), prefix);
-  e.target.value = '';
-}
+function handleFileSelect(e, prefix) { processFiles(Array.from(e.target.files), prefix); e.target.value = ''; }
 function processFiles(files, prefix) {
   if (prefix !== 'arf') return;
   const screenshots = state.arf.screenshots;
   const available = MAX_SCREENSHOTS - screenshots.length;
-  if (available <= 0) {
-    showToast('Maximum ' + MAX_SCREENSHOTS + ' screenshots allowed.');
-    return;
-  }
+  if (available <= 0) { showToast('Maximum ' + MAX_SCREENSHOTS + ' screenshots allowed.'); return; }
   const toProcess = files.slice(0, available);
-  if (files.length > available) {
-    showToast('Only ' + available + ' more screenshot(s) allowed (max ' + MAX_SCREENSHOTS + '). ' + (files.length - available) + ' file(s) skipped.');
-  }
+  if (files.length > available) showToast('Only ' + available + ' more screenshot(s) allowed (max ' + MAX_SCREENSHOTS + '). ' + (files.length - available) + ' file(s) skipped.');
   toProcess.forEach(file => {
     const reader = new FileReader();
-    reader.onload = ev => {
-      screenshots.push({ dataUrl: ev.target.result, name: file.name });
-      renderPreviews();
-    };
+    reader.onload = ev => { screenshots.push({ dataUrl: ev.target.result, name: file.name }); renderPreviews(); };
     reader.readAsDataURL(file);
   });
 }
@@ -429,15 +369,11 @@ function renderPreviews() {
   if (state.arf.screenshots.length > 0) {
     const c = document.createElement('span');
     c.className = 'screenshot-count';
-    c.textContent = state.arf.screenshots.length + ' / ' + MAX_SCREENSHOTS + ' screenshot' +
-      (state.arf.screenshots.length > 1 ? 's' : '') + ' attached';
+    c.textContent = state.arf.screenshots.length + ' / ' + MAX_SCREENSHOTS + ' screenshot' + (state.arf.screenshots.length > 1 ? 's' : '') + ' attached';
     container.appendChild(c);
   }
 }
-function removeScreenshot(idx) {
-  state.arf.screenshots.splice(idx, 1);
-  renderPreviews();
-}
+function removeScreenshot(idx) { state.arf.screenshots.splice(idx, 1); renderPreviews(); }
 
 // ── Conditional fields ────────────────────────────────────────────────
 function toggleOtherBlockedField(val) {
@@ -458,51 +394,32 @@ function toggleAssurance(btn, prefix) {
 function toggleContactFormAssurance(btn) {
   btn.classList.toggle('active');
   const panel = document.getElementById('bounce-contact-form-suboptions');
-  if (btn.classList.contains('active')) {
-    panel.classList.add('visible');
-  } else {
-    panel.classList.remove('visible');
-    panel.querySelectorAll('.website-suboption-btn').forEach(b => b.classList.remove('active'));
-  }
+  if (btn.classList.contains('active')) panel.classList.add('visible');
+  else { panel.classList.remove('visible'); panel.querySelectorAll('.website-suboption-btn').forEach(b => b.classList.remove('active')); }
 }
-function toggleContactFormSuboption(btn) {
-  btn.classList.toggle('active');
-}
+function toggleContactFormSuboption(btn) { btn.classList.toggle('active'); }
 function getActiveContactFormSuboptions() {
   const vals = [];
-  document.querySelectorAll('#bounce-contact-form-suboptions .website-suboption-btn.active').forEach(b => {
-    vals.push(b.getAttribute('data-value'));
-  });
+  document.querySelectorAll('#bounce-contact-form-suboptions .website-suboption-btn.active').forEach(b => vals.push(b.getAttribute('data-value')));
   return vals;
 }
-
 function getActiveAssurances(prefix) {
   const vals = [];
   document.querySelectorAll('#' + prefix + '-assurance-btns .assurance-btn.active').forEach(b => {
     const dataVal = b.getAttribute('data-value');
-    if (dataVal === 'Other') {
-      const t = document.getElementById(prefix + '-other-text').value.trim();
-      vals.push(t || 'Other');
-    } else if (dataVal === 'Contact Form' && prefix === 'bounce') {
-      const subs = getActiveContactFormSuboptions();
-      vals.push(subs.length > 0 ? 'Contact Form (' + subs.join(', ') + ')' : 'Contact Form');
-    } else {
-      vals.push(dataVal);
-    }
+    if (dataVal === 'Other') { const t = document.getElementById(prefix + '-other-text').value.trim(); vals.push(t || 'Other'); }
+    else if (dataVal === 'Contact Form' && prefix === 'bounce') { const subs = getActiveContactFormSuboptions(); vals.push(subs.length > 0 ? 'Contact Form (' + subs.join(', ') + ')' : 'Contact Form'); }
+    else vals.push(dataVal);
   });
   return vals;
 }
 function clearAssurances(prefix) {
   document.querySelectorAll('#' + prefix + '-assurance-btns .assurance-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(prefix + '-other-field').classList.remove('visible');
-  const ot = document.getElementById(prefix + '-other-text');
-  if (ot) ot.value = '';
+  const ot = document.getElementById(prefix + '-other-text'); if (ot) ot.value = '';
   if (prefix === 'bounce') {
     const panel = document.getElementById('bounce-contact-form-suboptions');
-    if (panel) {
-      panel.classList.remove('visible');
-      panel.querySelectorAll('.website-suboption-btn').forEach(b => b.classList.remove('active'));
-    }
+    if (panel) { panel.classList.remove('visible'); panel.querySelectorAll('.website-suboption-btn').forEach(b => b.classList.remove('active')); }
   }
 }
 
@@ -513,15 +430,15 @@ function validateARF() {
   const fieldIds = ['arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim','arf-domain-input'];
   clearFieldErrors(fieldIds);
   const errors = [];
-  if (!v('arf-domain-type'))       errors.push({ id: 'arf-domain-type',   label: 'Domain Type' });
-  if (!v('arf-complaints'))        errors.push({ id: 'arf-complaints',    label: 'No. of ARF Complaints' });
-  if (!v('arf-prev-unblock'))      errors.push({ id: 'arf-prev-unblock',  label: 'Previous Unblock Request' });
-  if (!v('arf-blocked-lt2'))       errors.push({ id: 'arf-blocked-lt2',   label: 'Blocked Email Accounts < 2' });
-  if (!v('arf-email-type'))        errors.push({ id: 'arf-email-type',    label: 'Email Content Type' });
-  if (!v('arf-domain-input'))      errors.push({ id: 'arf-domain-input',  label: 'Domain Lookup (domain name required)' });
-  if (!state.arf.whois)            errors.push({ id: 'arf-domain-input',  label: 'Domain Lookup (run Lookup first)' });
-  if (!v('arf-website'))           errors.push({ id: 'arf-website',       label: 'Valid Website' });
-  if (!v('arf-dkim'))              errors.push({ id: 'arf-dkim',          label: 'DKIM Status' });
+  if (!v('arf-domain-type'))  errors.push({ id: 'arf-domain-type',  label: 'Domain Type' });
+  if (!v('arf-complaints'))   errors.push({ id: 'arf-complaints',   label: 'No. of ARF Complaints' });
+  if (!v('arf-prev-unblock')) errors.push({ id: 'arf-prev-unblock', label: 'Previous Unblock Request' });
+  if (!v('arf-blocked-lt2'))  errors.push({ id: 'arf-blocked-lt2',  label: 'Blocked Email Accounts < 2' });
+  if (!v('arf-email-type'))   errors.push({ id: 'arf-email-type',   label: 'Email Content Type' });
+  if (!v('arf-domain-input')) errors.push({ id: 'arf-domain-input', label: 'Domain Lookup (domain name required)' });
+  if (!state.arf.whois)       errors.push({ id: 'arf-domain-input', label: 'Domain Lookup (run Lookup first)' });
+  if (!v('arf-website'))      errors.push({ id: 'arf-website',      label: 'Valid Website' });
+  if (!v('arf-dkim'))         errors.push({ id: 'arf-dkim',         label: 'DKIM Status' });
   return errors;
 }
 
@@ -529,15 +446,15 @@ function validateBounce() {
   const fieldIds = ['bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-domain-input','bounce-other-blocked-detail'];
   clearFieldErrors(fieldIds);
   const errors = [];
-  if (!v('bounce-prev-unblock'))   errors.push({ id: 'bounce-prev-unblock',  label: 'Previous Unblock Request' });
+  if (!v('bounce-prev-unblock'))  errors.push({ id: 'bounce-prev-unblock',  label: 'Previous Unblock Request' });
   if (state.bounce.csvCount === null) errors.push({ id: null,               label: 'Bounce List CSV (upload a CSV file)' });
-  if (!v('bounce-other-blocked'))  errors.push({ id: 'bounce-other-blocked', label: 'Other Blocked Email in Domain' });
+  if (!v('bounce-other-blocked')) errors.push({ id: 'bounce-other-blocked', label: 'Other Blocked Email in Domain' });
   if (v('bounce-other-blocked') === 'Yes' && !v('bounce-other-blocked-detail'))
     errors.push({ id: 'bounce-other-blocked-detail', label: 'Blocked Email Account(s) in Same Domain' });
-  if (!v('bounce-website'))        errors.push({ id: 'bounce-website',       label: 'Valid Website' });
-  if (!v('bounce-domain-input'))   errors.push({ id: 'bounce-domain-input',  label: 'Domain Lookup (domain name required)' });
-  if (!state.bounce.whois)         errors.push({ id: 'bounce-domain-input',  label: 'Domain Lookup (run Lookup first)' });
-  if (!v('bounce-dkim'))           errors.push({ id: 'bounce-dkim',          label: 'DKIM Status' });
+  if (!v('bounce-website'))       errors.push({ id: 'bounce-website',       label: 'Valid Website' });
+  if (!v('bounce-domain-input'))  errors.push({ id: 'bounce-domain-input',  label: 'Domain Lookup (domain name required)' });
+  if (!state.bounce.whois)        errors.push({ id: 'bounce-domain-input',  label: 'Domain Lookup (run Lookup first)' });
+  if (!v('bounce-dkim'))          errors.push({ id: 'bounce-dkim',          label: 'DKIM Status' });
   return errors;
 }
 
@@ -548,10 +465,10 @@ function generateARF() {
     if (showValidationErrors('arf', errors)) return;
     document.getElementById('arf-validation-banner').classList.remove('visible');
 
-    const screenshotLine = state.arf.screenshots.length > 0
-      ? state.arf.screenshots.length + ' screenshot(s) attached (see below)' : '-';
     const assurances = getActiveAssurances('arf');
     const whois = state.arf.whois;
+    const hasScreenshots = state.arf.screenshots.length > 0;
+
     const lines = [
       '#ARF',
       'Domain: ' + (v('arf-domain-type') || '-'),
@@ -559,34 +476,59 @@ function generateARF() {
       'No previous unblock request for the domain name : ' + (v('arf-prev-unblock') || '-'),
       'No. of blocked email accounts < 2 : ' + (v('arf-blocked-lt2') || '-'),
       'Email Content Type: ' + (v('arf-email-type') || '-'),
-      'Screenshot of the Email Content: ' + screenshotLine,
+      'Screenshot of the Email Content: ' + (hasScreenshots ? state.arf.screenshots.length + ' screenshot(s) attached (see below)' : '-'),
       'Domain Creation Date : ' + (whois ? whois.creation_date : '-'),
       'Domain Age : ' + (whois ? whois.domain_age : '-'),
       'Valid Website or not : ' + (v('arf-website') || '-'),
       'DKIM: ' + (v('arf-dkim') || '-'),
       'Assurances : ' + (assurances.length > 0 ? assurances.join(', ') : '-'),
     ];
-    document.getElementById('arf-output-text').textContent = lines.join('\n');
-    const imgContainer = document.getElementById('arf-output-images');
-    imgContainer.innerHTML = '';
-    if (state.arf.screenshots.length > 0) {
-      const label = document.createElement('div');
-      label.className = 'output-screenshots-label';
-      label.textContent = '-- Screenshots --';
-      imgContainer.appendChild(label);
+
+    // Build a single output container that interleaves text + inline images
+    const outputSection = document.getElementById('arf-output-section');
+    const outputArea = outputSection.querySelector('.output-area');
+
+    // Clear previous output children (keep .copy-btn-wrap)
+    const copyBtn = outputArea.querySelector('.copy-btn-wrap');
+    outputArea.innerHTML = '';
+    if (copyBtn) outputArea.appendChild(copyBtn);
+
+    // Text block
+    const pre = document.createElement('pre');
+    pre.id = 'arf-output-text';
+    pre.className = 'output-text';
+    pre.textContent = lines.join('\n');
+    outputArea.appendChild(pre);
+
+    // Inline screenshots immediately after the text
+    if (hasScreenshots) {
+      const divider = document.createElement('div');
+      divider.className = 'output-inline-divider';
+      divider.textContent = '── Screenshots ──';
+      outputArea.appendChild(divider);
+
       const grid = document.createElement('div');
-      grid.className = 'output-screenshots';
-      state.arf.screenshots.forEach(s => {
+      grid.className = 'output-screenshots-inline';
+      state.arf.screenshots.forEach((s, i) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'output-screenshot-item';
         const img = document.createElement('img');
-        img.src = s.dataUrl; img.alt = s.name; img.title = s.name;
-        img.loading = 'lazy'; img.width = 120; img.height = 120;
-        grid.appendChild(img);
+        img.src = s.dataUrl;
+        img.alt = s.name;
+        img.title = s.name;
+        img.loading = 'lazy';
+        const label = document.createElement('span');
+        label.className = 'output-screenshot-label';
+        label.textContent = (i + 1) + '. ' + s.name;
+        wrapper.appendChild(img);
+        wrapper.appendChild(label);
+        grid.appendChild(wrapper);
       });
-      imgContainer.appendChild(grid);
+      outputArea.appendChild(grid);
     }
-    const section = document.getElementById('arf-output-section');
-    section.style.display = 'block';
-    section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    outputSection.style.display = 'block';
+    outputSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     showToast('ARF report generated!');
   } catch (err) {
     showToast('Failed to generate report — please try again.');
@@ -603,9 +545,17 @@ function clearARF() {
   state.arf.whois = null;
   document.getElementById('arf-domain-result').classList.remove('visible', 'error');
   ['arf-website-hint','arf-dkim-hint'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = ''; });
-  document.getElementById('arf-output-section').style.display = 'none';
-  document.getElementById('arf-output-text').textContent = '';
-  document.getElementById('arf-output-images').innerHTML = '';
+  const outputSection = document.getElementById('arf-output-section');
+  outputSection.style.display = 'none';
+  // Restore static pre element for next generation
+  const outputArea = outputSection.querySelector('.output-area');
+  const copyBtn = outputArea.querySelector('.copy-btn-wrap');
+  outputArea.innerHTML = '';
+  if (copyBtn) outputArea.appendChild(copyBtn);
+  const pre = document.createElement('pre');
+  pre.id = 'arf-output-text';
+  pre.className = 'output-text';
+  outputArea.appendChild(pre);
   document.getElementById('arf-validation-banner').classList.remove('visible');
   clearFieldErrors(['arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim','arf-domain-input']);
   saveFormState();

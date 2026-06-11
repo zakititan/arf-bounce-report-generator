@@ -343,18 +343,59 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .panel-actions { padding: var(--space-4) var(--space-5); border-top: 1px solid var(--color-divider); display: flex; gap: var(--space-3); }
 hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--space-2) 0; }
 
-/* Output area */
+/* Output area — monospace, increased line-height for both ARF & Bounce */
 .output-area {
   background: var(--color-surface-2); border: 1px solid var(--color-border);
   border-radius: var(--radius-lg); padding: var(--space-4);
-  font-family: var(--font-mono); font-size: var(--text-xs); line-height: 1.7;
+  font-family: var(--font-mono); font-size: var(--text-xs);
   color: var(--color-text); position: relative;
+}
+.output-text {
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.9;
+  padding-right: var(--space-8);
 }
 .output-header { font-size: var(--text-sm); font-weight: 500; color: var(--color-text-muted); margin-bottom: var(--space-2); }
 .copy-btn-wrap { position: absolute; top: var(--space-3); right: var(--space-3); }
-.output-screenshots { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px dashed var(--color-divider); }
-.output-screenshots img { width: 120px; height: 120px; object-fit: cover; border-radius: var(--radius-md); border: 1px solid var(--color-border); }
-.output-screenshots-label { font-size: var(--text-xs); color: var(--color-text-muted); font-family: var(--font-mono); margin-top: var(--space-2); }
+
+/* Inline screenshot styles (ARF output) */
+.output-inline-divider {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-faint);
+  margin-top: var(--space-4);
+  margin-bottom: var(--space-3);
+  letter-spacing: 0.05em;
+}
+.output-screenshots-inline {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--space-3);
+}
+.output-screenshot-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.output-screenshot-item img {
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+  display: block;
+}
+.output-screenshot-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* Theme toggle & toast */
 .theme-toggle { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-md); color: var(--color-text-muted); }
