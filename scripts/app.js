@@ -273,17 +273,16 @@ async function lookupDomain(prefix) {
     card.classList.remove('error');
     card.classList.add('visible');
     showToast('Domain info fetched! Checking website & DKIM…');
-    checkWebsite(prefix, domain);
-    checkDkim(prefix, domain);
   } catch (err) {
     state[prefix].whois = null;
     createdEl.textContent = err.message || 'Lookup failed';
     ageEl.textContent = '—';
-    if (websiteEl) websiteEl.innerHTML = '—';
-    if (dkimEl) dkimEl.innerHTML = '—';
     card.classList.add('visible', 'error');
-    showToast('Lookup failed: ' + (err.message || 'unknown error'));
+    showToast('WHOIS lookup failed — still checking website & DKIM…');
   } finally {
+    // Always run website & DKIM checks regardless of WHOIS outcome
+    checkWebsite(prefix, domain);
+    checkDkim(prefix, domain);
     btn.disabled = false;
     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Lookup';
     state[prefix].lookupInFlight = false;
