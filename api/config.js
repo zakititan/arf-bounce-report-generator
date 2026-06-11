@@ -86,3 +86,13 @@ export const SPA_ROOT_PATTERNS = [
   'id="__nuxt"', 'id="__next"', 'id="gatsby-focus-wrapper"',
   '<app-root>', '<app-component>',
 ];
+
+// ── Security: domain sanitisation ────────────────────────────────────────────
+// Matches bare IPv4 addresses (e.g. 192.168.1.1) — already rejected in sanitiseDomain
+export const IPV4_PATTERN = /^(\d{1,3}\.){3}\d{1,3}$/;
+
+// Matches IPv6 addresses in bare or bracket form (e.g. ::1, [::1], 2001:db8::1)
+export const IPV6_PATTERN = /^\[?[0-9a-f:]+\]?$/i;
+
+// Hostnames that must never be fetched to prevent SSRF
+export const LOCALHOST_NAMES = ['localhost', '0.0.0.0', 'ip6-localhost', 'ip6-loopback'];
