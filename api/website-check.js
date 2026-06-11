@@ -19,7 +19,11 @@ function extractTitle(html) {
 }
 
 function extractMetaRobots(html) {
-  const m = html.match(/<meta\s+name=["']robots["'][^>]*content=["']([^"']*)["']/i);
+  // Matches both <meta name="robots" content="noindex"> and
+  // <meta content="noindex" name="robots"> (HTML5 allows attributes in any order)
+  const m =
+    html.match(/<meta\s[^>]*\bname=["']robots["'][^>]*\bcontent=["']([^"']*)["']/i) ||
+    html.match(/<meta\s[^>]*\bcontent=["']([^"']*)["'][^>]*\bname=["']robots["']/i);
   return m ? m[1].toLowerCase() : '';
 }
 
@@ -28,10 +32,9 @@ function hasNoindex(html) {
   return robots.includes('noindex');
 }
 
-function isImageOnlyPage(bodyText, bodyBytes) {
-  const textLen = bodyText.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().length;
+function isImageOnlyPage(bodyLength, bodyBytes) {
   if (bodyBytes === 0) return false;
-  return (textLen / bodyBytes) < WEBSITE_MIN_TEXT_RATIO;
+  return (bodyLength / bodyBytes) < WEBSITE_MIN_TEXT_RATIO;
 }
 
 function titleMatchesParked(title) {
@@ -183,7 +186,7 @@ export default withMiddleware(globalRateLimitStore, async function handler(req, 
       }
 
       // Image-only or near-empty pages (e.g. just a logo image)
-      if (isImageOnlyPage(bodyText, bytesRead) && bodyLength < WEBSITE_MIN_CONTENT_LEN * 1.5) {
+      if (isImageOnlyPage(bodyLength, bytesRead) && bodyLength < WEBSITE_MIN_CONTENT_LEN * 1.5) {
         return res.status(200).json({
           verdict: 'No website',
           status,

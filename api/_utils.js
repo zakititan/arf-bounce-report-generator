@@ -15,6 +15,9 @@ export function sanitiseDomain(raw) {
   let v = raw.trim();
   v = v.replace(/^https?:\/\//i, '');
   v = v.split('/')[0].split('?')[0].split('#')[0].split(':')[0];
+  // Strip email user part (frontend already does this, but belt-and-suspenders)
+  const atIdx = v.indexOf('@');
+  if (atIdx !== -1) v = v.slice(atIdx + 1);
   v = v.toLowerCase().trim();
   if (!v) return null;
 
@@ -26,6 +29,10 @@ export function sanitiseDomain(raw) {
 
   // Reject localhost variants
   if (LOCALHOST_NAMES.includes(v)) return null;
+
+  // Reject malformed hostnames (must contain at least one dot, valid chars only)
+  if (!/^[a-z0-9][a-z0-9\-\.]{1,252}[a-z0-9]$/.test(v)) return null;
+  if (v.split('.').length < 2) return null;
 
   return v;
 }
@@ -115,15 +122,16 @@ export function withMiddleware(rateLimitStore, handler) {
 export function classifyFetchError(err, context, timeoutMs) {
   if (err.name === 'AbortError' || err.name === 'TimeoutError') {
     return {
+      status: 504,
       error: `${context} timed out after ${timeoutMs / 1000}s`,
       reason: 'timeout',
     };
   }
   if (err.code === 'ENOTFOUND' || err.message?.includes('ENOTFOUND')) {
-    return { error: `${context}: domain not found (NXDOMAIN)`, reason: 'nxdomain' };
+    return { status: 502, error: `${context}: domain not found (NXDOMAIN)`, reason: 'nxdomain' };
   }
   if (err.code === 'ECONNREFUSED') {
-    return { error: `${context}: connection refused`, reason: 'connrefused' };
+    return { status: 502, error: `${context}: connection refused`, reason: 'connrefused' };
   }
-  return { error: `${context} failed: ${err.message}`, reason: 'unknown' };
+  return { status: 502, error: `${context} failed: ${err.message}`, reason: 'unknown' };
 }

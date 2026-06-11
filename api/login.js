@@ -1,12 +1,24 @@
-import { signToken } from './_utils.js';
+import { signToken, checkRateLimit } from './_utils.js';
+import { globalRateLimitStore } from './config.js';
 
-const PASSWORD = process.env.APP_PASSWORD || 'changeme';
+const PASSWORD = process.env.APP_PASSWORD;
 const COOKIE_NAME = 'auth_session';
 const MAX_AGE = 60 * 60 * 8; // 8 hours
 
 export default function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  if (!PASSWORD) {
+    res.status(500).json({ error: 'Server misconfiguration: APP_PASSWORD environment variable is not set' });
+    return;
+  }
+
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
+  if (checkRateLimit(globalRateLimitStore, ip)) {
+    res.status(429).json({ error: 'Too many login attempts — please wait a moment.' });
     return;
   }
 

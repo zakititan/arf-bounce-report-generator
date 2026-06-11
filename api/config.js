@@ -31,15 +31,19 @@ export const WEBSITE_MAX_BODY_BYTES   = 80_000;
 export const WEBSITE_MIN_CONTENT_LEN  = 300;
 
 // Phrases that, when found in the page title, indicate a parked or placeholder site
+// NOTE: avoid overly generic phrases like 'welcome to', 'it works', 'index of'
+// which commonly appear on legitimate sites.
 export const PARKED_TITLE_KEYWORDS = [
   'parked', 'for sale', 'buy this domain', 'domain is parked',
   'domain name is for sale', 'coming soon', 'under construction',
   'this domain', 'default page', 'placeholder', 'sitio en construcción',
-  'site en construction', 'page d\'accueil', 'welcome to',
-  'it works', 'default web page', 'index of',
+  'site en construction', 'page d\'accueil',
+  'default web page',
 ];
 
-// Phrases anywhere in the body that strongly indicate parked/placeholder pages
+// Phrases anywhere in the body that strongly indicate parked/placeholder pages.
+// NOTE: avoid overly generic phrases like 'powered by', 'built with', 'buy now',
+// 'register domain', 'web hosting' that commonly appear on legitimate sites.
 export const PARKED_KEYWORDS = [
   'parked', 'for sale', 'buy this domain', 'domain for sale', 'domain is parked',
   'under construction', 'coming soon', 'this domain', 'sedoparking',
@@ -50,16 +54,15 @@ export const PARKED_KEYWORDS = [
   'this domain is parked', 'domain name is for sale',
   'buy this domain name', 'sedo parking', 'domain parking',
   'this webpage is parked', 'is parked free', 'parking page',
-  'buy now', 'domain names', 'web hosting', 'register domain',
   'this domain may be for sale', 'domain registration',
   'your domain is expired', 'renew your domain',
   'is for sale on afternic', 'is for sale at afternic',
   'purchase this domain', 'own this domain',
   'get this domain', 'claim this domain',
   // Builder / CMS default pages
-  'welcome to your site', 'edit your site', 'start building your website',
+  'welcome to your site', 'edit your site',
   'your website is coming soon', 'this site was built with',
-  'create your website', 'built with', 'powered by',
+  'create your website',
   'welcome to wordpress', 'welcome to joomla',
   'default page - cpanel', 'cpanel default page',
   'plesk default page', 'iis windows server',
