@@ -44,17 +44,59 @@ function bodyMatchesParked(body) {
   return PARKED_KEYWORDS.some(kw => lower.includes(kw));
 }
 
-function redirectsToParkedService(response) {
-  const url = response.url || '';
-  const lower = url.toLowerCase();
-  return PARKED_DOMAIN_PATTERNS.some(pattern => lower.includes(pattern));
+/**
+ * Returns true only if the final URL after redirects points to a known parking
+ * service AND the redirect crossed domain boundaries (i.e. it is not a simple
+ * apex ↔ www normalisation redirect for the same registered domain).
+ *
+ * Examples that should NOT flag:
+ *   example.com  → www.example.com   (same domain, www prefix)
+ *   www.example.com → example.com    (apex normalisation)
+ *
+ * Examples that SHOULD flag:
+ *   example.com → sedo.com/park/...  (different domain, known parker)
+ */
+function redirectsToParkedService(response, requestedDomain) {
+  const finalUrl = response.url || '';
+  if (!finalUrl) return false;
+
+  let finalHostname;
+  try {
+    finalHostname = new URL(finalUrl).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+
+  // Strip leading 'www.' from both sides for comparison
+  const normalise = h => h.replace(/^www\./, '');
+  const normFinal = normalise(finalHostname);
+  const normRequested = normalise(requestedDomain.toLowerCase());
+
+  // Same registered domain — this is just a www/apex normalisation, not a parking redirect
+  if (normFinal === normRequested) return false;
+
+  return PARKED_DOMAIN_PATTERNS.some(pattern => finalHostname.includes(pattern));
 }
 
+/**
+ * Returns true if the page looks like a JS SPA shell (has a JS bundle + a known
+ * root mount element), AND the title does NOT match any parked/placeholder keywords.
+ *
+ * This prevents parked SPAs (rare but possible) from being incorrectly marked as
+ * Valid Website.
+ */
 function isSpaShell(bodyText) {
   const hasJsBundle = /<script\s[^>]*src=["'][^"']*\.js/i.test(bodyText);
   if (!hasJsBundle) return false;
   const lower = bodyText.toLowerCase();
-  return SPA_ROOT_PATTERNS.some(pattern => lower.includes(pattern));
+  const hasSpaRoot = SPA_ROOT_PATTERNS.some(pattern => lower.includes(pattern));
+  if (!hasSpaRoot) return false;
+
+  // If the SPA's <title> looks parked, do not treat it as a legit SPA
+  const title = extractTitle(bodyText);
+  if (title && titleMatchesParked(title)) return false;
+
+  return true;
 }
 
 // ── Main handler ──────────────────────────────────────────────────────
@@ -84,8 +126,9 @@ export default withMiddleware(globalRateLimitStore, async function handler(req, 
       if (status >= 500)
         return res.status(200).json({ verdict: 'Unreachable', status, reason: `Server error HTTP ${status}` });
 
-      // Check if the final URL after redirects goes to a known parking service
-      if (redirectsToParkedService(response)) {
+      // Check if the final URL after redirects goes to a known parking service.
+      // Pass the originally-requested domain so www ↔ apex redirects are not flagged.
+      if (redirectsToParkedService(response, domain)) {
         return res.status(200).json({
           verdict: 'No website',
           status,
@@ -148,8 +191,8 @@ export default withMiddleware(globalRateLimitStore, async function handler(req, 
         });
       }
 
-      // SPA shell detection — if the page is a JS-driven app with a legitimate title,
-      // treat it as a valid website even though the initial HTML has minimal content
+      // SPA shell detection — only marks Legit if title does NOT look parked.
+      // Prevents rare parked SPAs from being incorrectly classified as Valid Website.
       const isSpa = isSpaShell(bodyText);
       if (isSpa && bodyLength < WEBSITE_MIN_CONTENT_LEN) {
         return res.status(200).json({

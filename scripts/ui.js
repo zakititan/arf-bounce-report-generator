@@ -4,9 +4,12 @@
  */
 
 // ── Toast ─────────────────────────────────────────────────────────────
+// role=status + aria-live=polite ensures screen readers announce toasts.
 export function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
+  t.setAttribute('role', 'status');
+  t.setAttribute('aria-live', 'polite');
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2500);
 }

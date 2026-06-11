@@ -8,7 +8,8 @@
  *           inline screenshots in ARF output, full-text copy (incl. screenshot labels).
  *  Quality: Unified `state` object, whoisCache invalidated on domain input change,
  *           try/catch on generate, addEventListener replacing window.* inline handlers
- *           where feasible, debounced Lookup button.
+ *           where feasible, debounced Lookup button, per-panel generate-button gating,
+ *           lastActivePanel for keyboard shortcut, confirm before clear.
  *  Perf:    10-screenshot cap with warning toast.
  */
 
@@ -40,6 +41,7 @@ const state = {
     lookupLastFired: 0,
   },
 };
+let lastActivePanel = null; // tracks which panel the user last interacted with (for Ctrl/Cmd+Enter)
 
 // ── Init ──────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -52,16 +54,13 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── Keyboard shortcuts (Ctrl/Cmd + Enter) ─────────────────────────────
+// Uses lastActivePanel (set on field focus) instead of a fragile DOM heuristic.
 function initKeyboardShortcuts() {
   document.addEventListener('keydown', (e) => {
     if (!(e.ctrlKey || e.metaKey) || e.key !== 'Enter') return;
-    const active = document.activeElement;
-    const arfPanel = active && active.closest('#arf-generate-btn, .panel:first-of-type, [id^="arf-"]');
-    if (arfPanel || active === document.body) {
-      generateARF();
-    } else {
-      generateBounce();
-    }
+    if (!lastActivePanel) return; // no panel active yet
+    if (lastActivePanel === 'arf') generateARF();
+    else if (lastActivePanel === 'bounce') generateBounce();
   });
 }
 
@@ -108,8 +107,6 @@ function initDomainInputs() {
 }
 
 // ── Copy with visual button feedback ──────────────────────────────────
-// Reads `data-copy-text` on the output area if present (set by generateARF/generateBounce
-// to include the full formatted text + screenshot labels). Falls back to textContent.
 function copyOutputWithFeedback(id) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -130,6 +127,15 @@ function copyOutputWithFeedback(id) {
 
 // ── Event delegation (replaces inline onclick/onchange handlers) ──────
 function initEventDelegation() {
+  // Track which panel user last interacted with (for Ctrl/Cmd+Enter shortcut).
+  // Runs on every focusin that bubbles from an input or select inside a .panel.
+  document.querySelector('.app-shell').addEventListener('focusin', (e) => {
+    const panel = e.target.closest('[id$="-panel"]');
+    if (!panel) return;
+    if (panel.id === 'arf-panel') lastActivePanel = 'arf';
+    else if (panel.id === 'bounce-panel') lastActivePanel = 'bounce';
+  });
+
   document.querySelector('.app-shell').addEventListener('click', (e) => {
     const target = e.target.closest('[data-action]');
     if (!target) return;
@@ -232,12 +238,15 @@ function attachPersistListeners() {
 }
 document.addEventListener('DOMContentLoaded', attachPersistListeners);
 
-// ── Generate-button state ─────────────────────────────────────────────
+// ── Generate-button state (per-panel only) ────────────────────────────
+// Each panel's generate button is only gated by its own lookup being in
+// flight. Previously both were gated by either panel's lookupInFlight,
+// which unnecessarily blocked the other panel during an unrelated lookup.
 function setGenerateBtnState(prefix) {
   const btn = document.getElementById(prefix + '-generate-btn');
   if (!btn) return;
   const isLocked = state[prefix].lookupInFlight;
-  btn.disabled = isLocked || state.arf.lookupInFlight || state.bounce.lookupInFlight;
+  btn.disabled = isLocked;
   const label = isLocked ? 'Lookup in progress…' : (prefix === 'arf' ? 'Generate ARF Report' : 'Generate Bounce Report');
   if (isLocked) {
     btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 0.8s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> ' + label;
@@ -560,7 +569,6 @@ function generateARF() {
       'Assurances : ' + (assurances.length > 0 ? assurances.join(', ') : '-'),
     ];
 
-    // Build full plain-text copy string — includes screenshot filenames, double-spaced
     const copyLines = [...lines];
     if (hasScreenshots) {
       copyLines.push('');
@@ -569,7 +577,6 @@ function generateARF() {
     }
     const fullCopyText = copyLines.join('\n\n');
 
-    // Build DOM output
     const outputSection = document.getElementById('arf-output-section');
     const outputArea = outputSection.querySelector('.output-area');
 
@@ -577,13 +584,11 @@ function generateARF() {
     outputArea.innerHTML = '';
     if (copyBtn) outputArea.appendChild(copyBtn);
 
-    // Store formatted text for copy
     outputArea.dataset.copyText = fullCopyText;
 
     const pre = document.createElement('pre');
     pre.id = 'arf-output-text';
     pre.className = 'output-text';
-    // Display uses single line spacing; copy uses double (via fullCopyText above)
     pre.textContent = lines.join('\n');
     outputArea.appendChild(pre);
 
@@ -622,7 +627,10 @@ function generateARF() {
   }
 }
 
+// clearARF: confirm before destroying form data
 function clearARF() {
+  if (!confirm('Clear all ARF form data? This cannot be undone.')) return;
+
   ['arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim','arf-domain-input']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   state.arf.screenshots.length = 0;
@@ -674,7 +682,6 @@ function generateBounce() {
       'DKIM: ' + (v('bounce-dkim') || '-'),
       'Assurances : ' + (assurances.length > 0 ? assurances.join(', ') : '-')
     );
-    // Both display and copy use double line spacing for Bounce
     const fullText = lines.join('\n\n');
     const outputEl = document.getElementById('bounce-output-text');
     outputEl.textContent = fullText;
@@ -689,7 +696,10 @@ function generateBounce() {
   }
 }
 
+// clearBounce: confirm before destroying form data
 function clearBounce() {
+  if (!confirm('Clear all Bounce form data? This cannot be undone.')) return;
+
   ['bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-domain-input']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   clearCsv();

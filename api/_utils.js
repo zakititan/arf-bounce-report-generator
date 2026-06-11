@@ -1,43 +1,36 @@
-// Shared utilities for API handlers (Node.js runtime)
 import { createHmac } from 'crypto';
-import { RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from './config.js';
+import { IPV4_PATTERN, IPV6_PATTERN, LOCALHOST_NAMES, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from './config.js';
 
+// ── Domain sanitisation ───────────────────────────────────────────────────────
 /**
- * Sanitise a raw domain query param into a bare hostname.
+ * Strips protocol, path, query, fragment, and port from an input string,
+ * returning a clean lowercase hostname. Returns null for:
+ *  - empty / non-string input
+ *  - IPv4 addresses  (SSRF prevention)
+ *  - IPv6 addresses  (SSRF prevention)
+ *  - localhost names (SSRF prevention)
  */
-// Matches IPv4 addresses like 8.8.8.8 or 192.168.1.1
-const IPV4_RE = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
-
 export function sanitiseDomain(raw) {
   if (!raw || typeof raw !== 'string') return null;
-  let d = raw.trim();
-  d = d.replace(/^https?:\/\//i, '');
-  d = d.split('/')[0].split('?')[0].split('#')[0];
-  d = d.split(':')[0];
-  d = d.toLowerCase().trim();
-  if (IPV4_RE.test(d)) return null;
-  if (!/^[a-z0-9][a-z0-9\-\.]{1,252}[a-z0-9]$/.test(d)) return null;
-  return d;
+  let v = raw.trim();
+  v = v.replace(/^https?:\/\//i, '');
+  v = v.split('/')[0].split('?')[0].split('#')[0].split(':')[0];
+  v = v.toLowerCase().trim();
+  if (!v) return null;
+
+  // Reject IPv4
+  if (IPV4_PATTERN.test(v)) return null;
+
+  // Reject IPv6 (bare e.g. ::1 or bracketed e.g. [::1])
+  if (IPV6_PATTERN.test(v)) return null;
+
+  // Reject localhost variants
+  if (LOCALHOST_NAMES.includes(v)) return null;
+
+  return v;
 }
 
-/**
- * Simple in-memory IP rate limiter.
- * Uses RATE_LIMIT_MAX / RATE_LIMIT_WINDOW_MS from config by default.
- */
-export function isRateLimited(
-  store,
-  ip,
-  limit   = RATE_LIMIT_MAX,
-  windowMs = RATE_LIMIT_WINDOW_MS,
-) {
-  const now = Date.now();
-  const entry = store.get(ip) || { count: 0, resetAt: now + windowMs };
-  if (now > entry.resetAt) { entry.count = 0; entry.resetAt = now + windowMs; }
-  entry.count++;
-  store.set(ip, entry);
-  return entry.count > limit;
-}
-
+// ── Auth tokens (Node crypto — used by api/login.js) ─────────────────────────
 /**
  * Sign a payload with HMAC-SHA256 using Node crypto.
  * Returns "payload.hex_signature".
@@ -50,7 +43,8 @@ export function signToken(payload) {
 }
 
 /**
- * Verify a token signed by signToken().
+ * Verify a token produced by signToken().
+ * Uses constant-time comparison to prevent timing attacks.
  */
 export function verifyToken(token) {
   if (!token || !token.includes('.')) return false;
@@ -70,93 +64,66 @@ export function verifyToken(token) {
   }
 }
 
+// ── Rate limiting ─────────────────────────────────────────────────────────────
 /**
- * Higher-order wrapper that applies CORS headers and rate limiting
- * before delegating to the provided handler function.
+ * In-process sliding-window rate limiter.
+ * store: a shared Map (pass globalRateLimitStore from config.js)
+ */
+export function checkRateLimit(store, ip) {
+  const now = Date.now();
+  const entry = store.get(ip) || { count: 0, windowStart: now };
+
+  if (now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
+    // New window
+    store.set(ip, { count: 1, windowStart: now });
+    return false; // not limited
+  }
+
+  entry.count += 1;
+  store.set(ip, entry);
+  return entry.count > RATE_LIMIT_MAX; // true = over limit
+}
+
+// ── Middleware wrapper ────────────────────────────────────────────────────────
+/**
+ * Wraps a Vercel API handler with:
+ *  - CORS headers
+ *  - Rate limiting (uses the provided store)
+ *  - Method guard (GET only)
  */
 export function withMiddleware(rateLimitStore, handler) {
-  const ALLOWED_ORIGIN = process.env.APP_URL || '';
-
   return async function (req, res) {
-    const origin = req.headers.origin || '';
-
-    res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN || origin);
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.setHeader('Vary', 'Origin');
-
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     if (req.method === 'OPTIONS') return res.status(204).end();
+    if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-    const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
-    if (isRateLimited(rateLimitStore, ip)) {
-      return res.status(429).json({ error: 'Too many requests. Please wait a minute.' });
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
+    if (checkRateLimit(rateLimitStore, ip)) {
+      return res.status(429).json({ error: 'Too many requests — please slow down.' });
     }
 
     return handler(req, res);
   };
 }
 
+// ── Error classification ──────────────────────────────────────────────────────
 /**
- * Classifies a caught error from an external fetch into a user-facing
- * message and an HTTP status code.
+ * Classifies a fetch/network error into a user-friendly message + internal reason.
  */
-export function classifyFetchError(err, serviceName, timeoutMs) {
-  const name  = err?.name  || '';
-  const msg   = err?.message || '';
-  const lower = msg.toLowerCase();
-
-  if (name === 'AbortError' || lower.includes('timed out') || lower.includes('timeout')) {
+export function classifyFetchError(err, context, timeoutMs) {
+  if (err.name === 'AbortError' || err.name === 'TimeoutError') {
     return {
-      status: 504,
-      error:  `${serviceName} lookup timed out — try again in a moment.`,
+      error: `${context} timed out after ${timeoutMs / 1000}s`,
       reason: 'timeout',
     };
   }
-
-  const upstreamMatch = lower.match(/upstream (\d{3})/);
-  if (upstreamMatch) {
-    const code = Number(upstreamMatch[1]);
-    if (code === 401 || code === 403) {
-      return {
-        status: 502,
-        error:  `${serviceName} API key is invalid or unauthorised — check your environment variables.`,
-        reason: 'auth',
-      };
-    }
-    if (code === 429) {
-      return {
-        status: 502,
-        error:  `${serviceName} upstream rate limit reached — please wait a moment and try again.`,
-        reason: 'upstream_rate_limit',
-      };
-    }
-    if (code >= 500) {
-      return {
-        status: 502,
-        error:  `${serviceName} service is temporarily unavailable (upstream ${code}) — try again shortly.`,
-        reason: 'upstream_error',
-      };
-    }
+  if (err.code === 'ENOTFOUND' || err.message?.includes('ENOTFOUND')) {
+    return { error: `${context}: domain not found (NXDOMAIN)`, reason: 'nxdomain' };
   }
-
-  if (lower.includes('not set') || lower.includes('misconfigured') || lower.includes('api key')) {
-    return {
-      status: 500,
-      error:  `${serviceName} API key is not configured — contact the administrator.`,
-      reason: 'misconfigured',
-    };
+  if (err.code === 'ECONNREFUSED') {
+    return { error: `${context}: connection refused`, reason: 'connrefused' };
   }
-
-  if (lower.includes('fetch failed') || lower.includes('enotfound') || lower.includes('econnrefused')) {
-    return {
-      status: 502,
-      error:  `Could not reach the ${serviceName} service — check your internet connection and try again.`,
-      reason: 'network',
-    };
-  }
-
-  return {
-    status: 502,
-    error:  `${serviceName} lookup failed — ${msg || 'unknown error'}.`,
-    reason: 'unknown',
-  };
+  return { error: `${context} failed: ${err.message}`, reason: 'unknown' };
 }
