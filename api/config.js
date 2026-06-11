@@ -79,3 +79,10 @@ export const PARKED_DOMAIN_PATTERNS = [
 
 // Minimum ratio of visible text to total bytes (filters out image-only / thin-content pages)
 export const WEBSITE_MIN_TEXT_RATIO = 0.01;
+
+// SPA root mount element selectors — pages with these + JS bundles are likely legit SPAs
+export const SPA_ROOT_PATTERNS = [
+  'id="root"', "id='root'", 'id="app"', "id='app'",
+  'id="__nuxt"', 'id="__next"', 'id="gatsby-focus-wrapper"',
+  '<app-root>', '<app-component>',
+];

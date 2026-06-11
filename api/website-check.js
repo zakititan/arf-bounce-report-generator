@@ -7,6 +7,7 @@ import {
   PARKED_KEYWORDS,
   PARKED_TITLE_KEYWORDS,
   PARKED_DOMAIN_PATTERNS,
+  SPA_ROOT_PATTERNS,
   globalRateLimitStore,
 } from './config.js';
 
@@ -47,6 +48,13 @@ function redirectsToParkedService(response) {
   const url = response.url || '';
   const lower = url.toLowerCase();
   return PARKED_DOMAIN_PATTERNS.some(pattern => lower.includes(pattern));
+}
+
+function isSpaShell(bodyText) {
+  const hasJsBundle = /<script\s[^>]*src=["'][^"']*\.js/i.test(bodyText);
+  if (!hasJsBundle) return false;
+  const lower = bodyText.toLowerCase();
+  return SPA_ROOT_PATTERNS.some(pattern => lower.includes(pattern));
 }
 
 // ── Main handler ──────────────────────────────────────────────────────
@@ -137,6 +145,17 @@ export default withMiddleware(globalRateLimitStore, async function handler(req, 
           verdict: 'Fake',
           status,
           reason: 'Page contains mostly markup/images with very little text content',
+        });
+      }
+
+      // SPA shell detection — if the page is a JS-driven app with a legitimate title,
+      // treat it as Legit even though the initial HTML has minimal content
+      const isSpa = isSpaShell(bodyText);
+      if (isSpa && bodyLength < WEBSITE_MIN_CONTENT_LEN) {
+        return res.status(200).json({
+          verdict: 'Legit',
+          status,
+          reason: `JavaScript application detected (SPA) — content loaded client-side (HTTP ${status})`,
         });
       }
 
