@@ -63,10 +63,6 @@ export function verifyToken(token) {
 /**
  * Higher-order wrapper that applies CORS headers and rate limiting
  * before delegating to the provided handler function.
- *
- * Usage:
- *   const store = new Map();
- *   export default withMiddleware(store, async (req, res) => { ... });
  */
 export function withMiddleware(rateLimitStore, handler) {
   const ALLOWED_ORIGIN = process.env.APP_URL || '';
@@ -88,5 +84,81 @@ export function withMiddleware(rateLimitStore, handler) {
     }
 
     return handler(req, res);
+  };
+}
+
+/**
+ * Classifies a caught error from an external fetch into a user-facing
+ * message and an HTTP status code.
+ *
+ * @param {unknown} err          - The caught error
+ * @param {string}  serviceName  - Display name, e.g. 'WHOIS', 'website check'
+ * @param {number}  timeoutMs    - The timeout that was used (for the message)
+ * @returns {{ status: number, error: string, reason: string }}
+ */
+export function classifyFetchError(err, serviceName, timeoutMs) {
+  const name  = err?.name  || '';
+  const msg   = err?.message || '';
+  const lower = msg.toLowerCase();
+
+  // AbortError is thrown by AbortSignal.timeout()
+  if (name === 'AbortError' || lower.includes('timed out') || lower.includes('timeout')) {
+    return {
+      status: 504,
+      error:  `${serviceName} lookup timed out — try again in a moment.`,
+      reason: 'timeout',
+    };
+  }
+
+  // Upstream returned a non-2xx we propagated as an Error
+  const upstreamMatch = lower.match(/upstream (\d{3})/);
+  if (upstreamMatch) {
+    const code = Number(upstreamMatch[1]);
+    if (code === 401 || code === 403) {
+      return {
+        status: 502,
+        error:  `${serviceName} API key is invalid or unauthorised — check your environment variables.`,
+        reason: 'auth',
+      };
+    }
+    if (code === 429) {
+      return {
+        status: 502,
+        error:  `${serviceName} upstream rate limit reached — please wait a moment and try again.`,
+        reason: 'upstream_rate_limit',
+      };
+    }
+    if (code >= 500) {
+      return {
+        status: 502,
+        error:  `${serviceName} service is temporarily unavailable (upstream ${code}) — try again shortly.`,
+        reason: 'upstream_error',
+      };
+    }
+  }
+
+  // No API key set (caught before fetch but surfaced here for completeness)
+  if (lower.includes('not set') || lower.includes('misconfigured') || lower.includes('api key')) {
+    return {
+      status: 500,
+      error:  `${serviceName} API key is not configured — contact the administrator.`,
+      reason: 'misconfigured',
+    };
+  }
+
+  // Network / DNS failure
+  if (lower.includes('fetch failed') || lower.includes('enotfound') || lower.includes('econnrefused')) {
+    return {
+      status: 502,
+      error:  `Could not reach the ${serviceName} service — check your internet connection and try again.`,
+      reason: 'network',
+    };
+  }
+
+  // Unknown
+  return {
+    status: 502,
+    error:  `${serviceName} lookup failed — ${msg || 'unknown error'}.`,
+    reason: 'unknown',
   };
 }
