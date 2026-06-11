@@ -491,7 +491,7 @@ function generateARF() {
       copyLines.push('── Screenshots ──');
       state.arf.screenshots.forEach((s, i) => copyLines.push((i + 1) + '. ' + s.name));
     }
-    const fullCopyText = copyLines.join('\n');
+    const fullCopyText = copyLines.join('\n\n');
 
     // Build DOM output
     const outputSection = document.getElementById('arf-output-section');
@@ -507,7 +507,7 @@ function generateARF() {
     const pre = document.createElement('pre');
     pre.id = 'arf-output-text';
     pre.className = 'output-text';
-    pre.textContent = lines.join('\n');
+    pre.textContent = lines.join('\n\n');
     outputArea.appendChild(pre);
 
     if (hasScreenshots) {
@@ -597,7 +597,7 @@ function generateBounce() {
       'DKIM: ' + (v('bounce-dkim') || '-'),
       'Assurances : ' + (assurances.length > 0 ? assurances.join(', ') : '-')
     );
-    const fullText = lines.join('\n');
+    const fullText = lines.join('\n\n');
     const outputEl = document.getElementById('bounce-output-text');
     outputEl.textContent = fullText;
     // Store on output area so copyOutputWithFeedback picks it up
