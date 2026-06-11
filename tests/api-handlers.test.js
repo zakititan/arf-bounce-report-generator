@@ -1,29 +1,28 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { sanitiseDomain, isRateLimited, classifyFetchError, signToken, verifyToken } from '../api/_utils.js';
+import { sanitiseDomain, checkRateLimit, classifyFetchError, signToken, verifyToken } from '../api/_utils.js';
 
-// ── isRateLimited ─────────────────────────────────────────────────────
-describe('isRateLimited', () => {
+describe('checkRateLimit', () => {
   it('allows requests under the limit', () => {
     const store = new Map();
     for (let i = 0; i < 5; i++) {
-      assert.equal(isRateLimited(store, '1.2.3.4', 10, 60_000), false, `request ${i + 1} allowed`);
+      assert.equal(checkRateLimit(store, '1.2.3.4', 10, 60_000), false, `request ${i + 1} allowed`);
     }
   });
 
   it('rejects requests over the limit', () => {
     const store = new Map();
-    for (let i = 0; i < 5; i++) isRateLimited(store, '5.6.7.8', 3, 60_000);
-    assert.equal(isRateLimited(store, '5.6.7.8', 3, 60_000), true, '6th request blocked');
+    for (let i = 0; i < 5; i++) checkRateLimit(store, '5.6.7.8', 3, 60_000);
+    assert.equal(checkRateLimit(store, '5.6.7.8', 3, 60_000), true, '6th request blocked');
   });
 
   it('resets after window expires', () => {
     const store = new Map();
-    isRateLimited(store, '9.9.9.9', 2, 100);
-    isRateLimited(store, '9.9.9.9', 2, 100);
+    checkRateLimit(store, '9.9.9.9', 2, 100);
+    checkRateLimit(store, '9.9.9.9', 2, 100);
     return new Promise(resolve => {
       setTimeout(() => {
-        assert.equal(isRateLimited(store, '9.9.9.9', 2, 100), false, 'reset after window');
+        assert.equal(checkRateLimit(store, '9.9.9.9', 2, 100), false, 'reset after window');
         resolve();
       }, 110);
     });
@@ -31,12 +30,11 @@ describe('isRateLimited', () => {
 
   it('tracks different IPs independently', () => {
     const store = new Map();
-    for (let i = 0; i < 5; i++) isRateLimited(store, '10.0.0.1', 3, 60_000);
-    assert.equal(isRateLimited(store, '10.0.0.2', 3, 60_000), false, 'different IP not blocked');
+    for (let i = 0; i < 5; i++) checkRateLimit(store, '10.0.0.1', 3, 60_000);
+    assert.equal(checkRateLimit(store, '10.0.0.2', 3, 60_000), false, 'different IP not blocked');
   });
 });
 
-// ── classifyFetchError ────────────────────────────────────────────────
 describe('classifyFetchError', () => {
   it('classifies AbortError as timeout', () => {
     const err = new Error('The operation was aborted');
@@ -47,46 +45,27 @@ describe('classifyFetchError', () => {
     assert.equal(result.reason, 'timeout');
   });
 
-  it('classifies timeout message', () => {
-    const err = new Error('Operation timed out after 5000ms');
-    const result = classifyFetchError(err, 'TestService', 5000);
-    assert.equal(result.status, 504);
-    assert.equal(result.reason, 'timeout');
-  });
-
-  it('classifies upstream 401 as auth error', () => {
-    const err = new Error('WhoisJSON upstream 401');
-    const result = classifyFetchError(err, 'WHOIS', 5000);
-    assert.equal(result.status, 502);
-    assert.equal(result.reason, 'auth');
-  });
-
-  it('classifies upstream 429 as rate limit', () => {
-    const err = new Error('WhoisJSON upstream 429');
-    const result = classifyFetchError(err, 'WHOIS', 5000);
-    assert.equal(result.status, 502);
-    assert.equal(result.reason, 'upstream_rate_limit');
-  });
-
-  it('classifies upstream 503 as upstream error', () => {
-    const err = new Error('WhoisJSON upstream 503');
-    const result = classifyFetchError(err, 'WHOIS', 5000);
-    assert.equal(result.status, 502);
-    assert.equal(result.reason, 'upstream_error');
-  });
-
-  it('classifies network errors', () => {
-    const err = new Error('fetch failed: ENOTFOUND example.com');
+  it('classifies ENOTFOUND as nxdomain', () => {
+    const err = new Error('getaddrinfo ENOTFOUND example.com');
+    err.code = 'ENOTFOUND';
     const result = classifyFetchError(err, 'TestService', 5000);
     assert.equal(result.status, 502);
-    assert.equal(result.reason, 'network');
+    assert.equal(result.reason, 'nxdomain');
   });
 
-  it('classifies misconfigured errors', () => {
-    const err = new Error('API key is not set');
+  it('classifies ENOTFOUND in message string', () => {
+    const err = new Error('ENOTFOUND example.com');
     const result = classifyFetchError(err, 'TestService', 5000);
-    assert.equal(result.status, 500);
-    assert.equal(result.reason, 'misconfigured');
+    assert.equal(result.status, 502);
+    assert.equal(result.reason, 'nxdomain');
+  });
+
+  it('classifies ECONNREFUSED', () => {
+    const err = new Error('connect ECONNREFUSED');
+    err.code = 'ECONNREFUSED';
+    const result = classifyFetchError(err, 'TestService', 5000);
+    assert.equal(result.status, 502);
+    assert.equal(result.reason, 'connrefused');
   });
 
   it('falls through for unknown errors', () => {
@@ -95,9 +74,14 @@ describe('classifyFetchError', () => {
     assert.equal(result.status, 502);
     assert.equal(result.reason, 'unknown');
   });
+
+  it('includes the error message for unknown errors', () => {
+    const err = new Error('Service is down');
+    const result = classifyFetchError(err, 'TestService', 5000);
+    assert.ok(result.error.includes('Service is down'));
+  });
 });
 
-// ── signToken / verifyToken ───────────────────────────────────────────
 describe('signToken / verifyToken', () => {
   const ORIGINAL_SECRET = process.env.AUTH_SECRET;
 

@@ -20,10 +20,20 @@ function bodyMatchesParked(body) {
   return PARKED_KEYWORDS.some(kw => lower.includes(kw));
 }
 
-function redirectsToParkedService(response) {
-  const url = response.url || '';
-  const lower = url.toLowerCase();
-  return PARKED_DOMAIN_PATTERNS.some(pattern => lower.includes(pattern));
+function redirectsToParkedService(response, requestedDomain) {
+  const finalUrl = response.url || '';
+  if (!finalUrl) return false;
+  let finalHostname;
+  try {
+    finalHostname = new URL(finalUrl).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  const normalise = h => h.replace(/^www\./, '');
+  const normFinal = normalise(finalHostname);
+  const normRequested = normalise((requestedDomain || '').toLowerCase());
+  if (normFinal === normRequested) return false;
+  return PARKED_DOMAIN_PATTERNS.some(pattern => finalHostname.includes(pattern));
 }
 
 // ── extractTitle ──────────────────────────────────────────────────────
@@ -101,34 +111,44 @@ describe('bodyMatchesParked', () => {
 
 // ── redirectsToParkedService ──────────────────────────────────────────
 describe('redirectsToParkedService', () => {
-  it('detects Sedo redirect', () => {
+  it('detects Sedo redirect (cross-domain)', () => {
     const resp = { url: 'https://sedo.com/search/details/?domain=example.com' };
-    assert.ok(redirectsToParkedService(resp));
+    assert.ok(redirectsToParkedService(resp, 'example.com'));
   });
 
-  it('detects Afternic redirect', () => {
+  it('detects Afternic redirect (cross-domain)', () => {
     const resp = { url: 'https://www.afternic.com/domain/example.com' };
-    assert.ok(redirectsToParkedService(resp));
+    assert.ok(redirectsToParkedService(resp, 'example.com'));
   });
 
-  it('detects Dan.com redirect', () => {
+  it('detects Dan.com redirect (cross-domain)', () => {
     const resp = { url: 'https://dan.com/buy/example.com' };
-    assert.ok(redirectsToParkedService(resp));
+    assert.ok(redirectsToParkedService(resp, 'example.com'));
   });
 
-  it('detects GoDaddy redirect', () => {
+  it('detects GoDaddy redirect (cross-domain)', () => {
     const resp = { url: 'https://www.godaddy.com/domainsearch/find?domain=example.com' };
-    assert.ok(redirectsToParkedService(resp));
+    assert.ok(redirectsToParkedService(resp, 'example.com'));
   });
 
-  it('allows legitimate redirects', () => {
+  it('does NOT flag apex → www normalisation', () => {
+    const resp = { url: 'https://www.example.com/page' };
+    assert.equal(redirectsToParkedService(resp, 'example.com'), false);
+  });
+
+  it('does NOT flag www → apex normalisation', () => {
+    const resp = { url: 'https://example.com/page' };
+    assert.equal(redirectsToParkedService(resp, 'www.example.com'), false);
+  });
+
+  it('allows legitimate redirects within same domain', () => {
     const resp = { url: 'https://example.com/blog/article' };
-    assert.equal(redirectsToParkedService(resp), false);
+    assert.equal(redirectsToParkedService(resp, 'example.com'), false);
   });
 
   it('handles response with no url', () => {
     const resp = {};
-    assert.equal(redirectsToParkedService(resp), false);
+    assert.equal(redirectsToParkedService(resp, 'example.com'), false);
   });
 });
 

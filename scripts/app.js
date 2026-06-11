@@ -448,11 +448,22 @@ function renderPreviews() {
   state.arf.screenshots.forEach((s, i) => {
     const thumb = document.createElement('div');
     thumb.className = 'screenshot-thumb';
-    thumb.innerHTML =
-      '<img src="' + s.dataUrl + '" alt="' + s.name + '" loading="lazy" width="72" height="72">' +
-      '<button class="remove-btn" data-action="remove-screenshot" data-index="' + i + '" title="Remove" aria-label="Remove screenshot">' +
-      '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
-      '</button>';
+    const img = document.createElement('img');
+    img.src = s.dataUrl;
+    img.alt = s.name;
+    img.loading = 'lazy';
+    img.width = 72;
+    img.height = 72;
+    thumb.appendChild(img);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'remove-btn';
+    removeBtn.setAttribute('data-action', 'remove-screenshot');
+    removeBtn.setAttribute('data-index', String(i));
+    removeBtn.title = 'Remove';
+    removeBtn.setAttribute('aria-label', 'Remove screenshot');
+    removeBtn.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+    thumb.appendChild(removeBtn);
     container.appendChild(thumb);
   });
   if (state.arf.screenshots.length > 0) {

@@ -2,7 +2,6 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { sanitiseDomain } from '../api/_utils.js';
 
-// ── Helpers ───────────────────────────────────────────────────────────
 function ok(input, expected, label) {
   const result = sanitiseDomain(input);
   assert.equal(result, expected, `[PASS expected] ${label}: got ${result}`);
@@ -12,7 +11,6 @@ function reject(input, label) {
   assert.equal(result, null, `[REJECT expected] ${label}: got ${result}`);
 }
 
-// ── Valid domains ─────────────────────────────────────────────────────
 describe('sanitiseDomain — valid inputs', () => {
   it('bare domain', () => ok('example.com', 'example.com', 'bare domain'));
   it('strips http://', () => ok('http://example.com', 'example.com', 'http prefix'));
@@ -30,10 +28,13 @@ describe('sanitiseDomain — valid inputs', () => {
   it('two-char TLD', () => ok('example.io', 'example.io', 'short TLD'));
 });
 
-// ── Punycode domains ──────────────────────────────────────────────────
+describe('sanitiseDomain — email stripping', () => {
+  it('strips email user part', () => ok('admin@example.com', 'example.com', 'admin@example.com'));
+  it('strips email with http', () => ok('http://user@example.com/path', 'example.com', 'http + email'));
+  it('strips email with port', () => ok('user@example.com:8080', 'example.com', 'email + port'));
+});
+
 describe('sanitiseDomain — punycode (ASCII-compatible encoding)', () => {
-  // Browsers and DNS resolve IDN via punycode; the function receives
-  // the already-encoded xn-- form from the API query param.
   it('münchen.de punycode', () =>
     ok('xn--mnchen-3ya.de', 'xn--mnchen-3ya.de', 'münchen.de encoded'));
   it('bücher.de punycode', () =>
@@ -44,29 +45,29 @@ describe('sanitiseDomain — punycode (ASCII-compatible encoding)', () => {
     ok('mail.xn--mnchen-3ya.de', 'mail.xn--mnchen-3ya.de', 'punycode with subdomain'));
 });
 
-// ── IDN — raw unicode (should be rejected) ────────────────────────────
 describe('sanitiseDomain — raw unicode IDN (must be rejected)', () => {
-  // Raw unicode characters are not valid in DNS queries;
-  // callers must encode to punycode first.
   it('rejects münchen.de (raw unicode ü)', () => reject('münchen.de', 'raw unicode ü'));
   it('rejects 中文.com', () => reject('中文.com', 'Chinese characters'));
   it('rejects αβγ.gr', () => reject('αβγ.gr', 'Greek characters'));
   it('rejects emoji domain 🍕.ws', () => reject('🍕.ws', 'emoji domain'));
 });
 
-// ── Edge cases — localhost & IP addresses ─────────────────────────────
 describe('sanitiseDomain — localhost and IP addresses', () => {
-  it('rejects localhost (too short for regex)', () => reject('localhost', 'localhost'));
+  it('rejects localhost', () => reject('localhost', 'localhost'));
   it('rejects 127.0.0.1', () => reject('127.0.0.1', 'IPv4 loopback'));
   it('rejects 192.168.1.1', () => reject('192.168.1.1', 'private IPv4'));
-  it('rejects ::1 (IPv6)', () => reject('::1', 'IPv6 loopback'));
+  it('rejects ::1 (bare IPv6)', () => reject('::1', 'IPv6 loopback'));
+  it('rejects [::1] (bracketed IPv6)', () => reject('[::1]', 'bracketed IPv6 loopback'));
+  it('rejects 2001:db8::1 (IPv6)', () => reject('2001:db8::1', 'IPv6 address'));
   it('rejects bare IP with port', () => reject('127.0.0.1:3000', 'IP with port'));
   it('rejects 8.8.8.8 (bare IPv4)', () => reject('8.8.8.8', 'Google DNS IPv4'));
   it('rejects 10.0.0.1 (private IPv4)', () => reject('10.0.0.1', 'private IPv4 range'));
   it('rejects 255.255.255.255 (broadcast)', () => reject('255.255.255.255', 'broadcast IPv4'));
+  it('rejects 0.0.0.0', () => reject('0.0.0.0', 'zero IPv4'));
+  it('rejects ip6-localhost', () => reject('ip6-localhost', 'ip6-localhost'));
+  it('rejects ip6-loopback', () => reject('ip6-loopback', 'ip6-loopback'));
 });
 
-// ── Null / invalid inputs ─────────────────────────────────────────────
 describe('sanitiseDomain — null and invalid inputs', () => {
   it('rejects null', () => reject(null, 'null'));
   it('rejects undefined', () => reject(undefined, 'undefined'));
@@ -77,7 +78,7 @@ describe('sanitiseDomain — null and invalid inputs', () => {
   it('rejects domain with space', () => reject('exa mple.com', 'space in domain'));
   it('rejects leading hyphen label', () => reject('-example.com', 'leading hyphen'));
   it('rejects trailing hyphen label', () => reject('example-.com', 'trailing hyphen'));
-  it('rejects single label (no dot)', () => reject('nodot', 'no dot — too short'));
+  it('rejects single label (no dot)', () => reject('nodot', 'no dot'));
   it('rejects domain exceeding 253 chars', () => {
     const long = 'a'.repeat(200) + '.' + 'b'.repeat(60);
     reject(long, 'domain > 253 chars');
