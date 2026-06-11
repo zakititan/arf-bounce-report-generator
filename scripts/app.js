@@ -484,7 +484,7 @@ function generateARF() {
       'Assurances : ' + (assurances.length > 0 ? assurances.join(', ') : '-'),
     ];
 
-    // Build full plain-text copy string — includes screenshot filenames
+    // Build full plain-text copy string — includes screenshot filenames, double-spaced
     const copyLines = [...lines];
     if (hasScreenshots) {
       copyLines.push('');
@@ -507,7 +507,8 @@ function generateARF() {
     const pre = document.createElement('pre');
     pre.id = 'arf-output-text';
     pre.className = 'output-text';
-    pre.textContent = lines.join('\n\n');
+    // Display uses single line spacing; copy uses double (via fullCopyText above)
+    pre.textContent = lines.join('\n');
     outputArea.appendChild(pre);
 
     if (hasScreenshots) {
