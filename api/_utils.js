@@ -1,5 +1,6 @@
 // Shared utilities for API handlers (Node.js runtime)
 import { createHmac } from 'crypto';
+import { RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from './config.js';
 
 /**
  * Sanitise a raw domain query param into a bare hostname.
@@ -17,8 +18,14 @@ export function sanitiseDomain(raw) {
 
 /**
  * Simple in-memory IP rate limiter.
+ * Uses RATE_LIMIT_MAX / RATE_LIMIT_WINDOW_MS from config by default.
  */
-export function isRateLimited(store, ip, limit = 20, windowMs = 60_000) {
+export function isRateLimited(
+  store,
+  ip,
+  limit   = RATE_LIMIT_MAX,
+  windowMs = RATE_LIMIT_WINDOW_MS,
+) {
   const now = Date.now();
   const entry = store.get(ip) || { count: 0, resetAt: now + windowMs };
   if (now > entry.resetAt) { entry.count = 0; entry.resetAt = now + windowMs; }
@@ -50,7 +57,6 @@ export function verifyToken(token) {
     const secret = process.env.AUTH_SECRET;
     if (!secret) return false;
     const expected = createHmac('sha256', secret).update(payload).digest('hex');
-    // Constant-time comparison
     if (expected.length !== sig.length) return false;
     let diff = 0;
     for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ sig.charCodeAt(i);
@@ -70,14 +76,12 @@ export function withMiddleware(rateLimitStore, handler) {
   return async function (req, res) {
     const origin = req.headers.origin || '';
 
-    // CORS
     res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN || origin);
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
     res.setHeader('Vary', 'Origin');
 
     if (req.method === 'OPTIONS') return res.status(204).end();
 
-    // Rate limiting
     const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
     if (isRateLimited(rateLimitStore, ip)) {
       return res.status(429).json({ error: 'Too many requests. Please wait a minute.' });
@@ -90,18 +94,12 @@ export function withMiddleware(rateLimitStore, handler) {
 /**
  * Classifies a caught error from an external fetch into a user-facing
  * message and an HTTP status code.
- *
- * @param {unknown} err          - The caught error
- * @param {string}  serviceName  - Display name, e.g. 'WHOIS', 'website check'
- * @param {number}  timeoutMs    - The timeout that was used (for the message)
- * @returns {{ status: number, error: string, reason: string }}
  */
 export function classifyFetchError(err, serviceName, timeoutMs) {
   const name  = err?.name  || '';
   const msg   = err?.message || '';
   const lower = msg.toLowerCase();
 
-  // AbortError is thrown by AbortSignal.timeout()
   if (name === 'AbortError' || lower.includes('timed out') || lower.includes('timeout')) {
     return {
       status: 504,
@@ -110,7 +108,6 @@ export function classifyFetchError(err, serviceName, timeoutMs) {
     };
   }
 
-  // Upstream returned a non-2xx we propagated as an Error
   const upstreamMatch = lower.match(/upstream (\d{3})/);
   if (upstreamMatch) {
     const code = Number(upstreamMatch[1]);
@@ -137,7 +134,6 @@ export function classifyFetchError(err, serviceName, timeoutMs) {
     }
   }
 
-  // No API key set (caught before fetch but surfaced here for completeness)
   if (lower.includes('not set') || lower.includes('misconfigured') || lower.includes('api key')) {
     return {
       status: 500,
@@ -146,7 +142,6 @@ export function classifyFetchError(err, serviceName, timeoutMs) {
     };
   }
 
-  // Network / DNS failure
   if (lower.includes('fetch failed') || lower.includes('enotfound') || lower.includes('econnrefused')) {
     return {
       status: 502,
@@ -155,7 +150,6 @@ export function classifyFetchError(err, serviceName, timeoutMs) {
     };
   }
 
-  // Unknown
   return {
     status: 502,
     error:  `${serviceName} lookup failed — ${msg || 'unknown error'}.`,

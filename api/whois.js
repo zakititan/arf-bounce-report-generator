@@ -1,13 +1,13 @@
 import { sanitiseDomain, withMiddleware, classifyFetchError } from './_utils.js';
+import { TIMEOUT_WHOIS_MS } from './config.js';
 
 const WHOISJSON_API_KEY = process.env.WHOISJSON_API_KEY;
-const TIMEOUT_MS = 10_000;
 const rateLimitStore = new Map();
 
 export default withMiddleware(rateLimitStore, async function handler(req, res) {
   if (!WHOISJSON_API_KEY) {
     return res.status(500).json({
-      error: 'WHOIS API key is not configured — contact the administrator.',
+      error:  'WHOIS API key is not configured — contact the administrator.',
       reason: 'misconfigured',
     });
   }
@@ -21,11 +21,8 @@ export default withMiddleware(rateLimitStore, async function handler(req, res) {
     const response = await fetch(
       `https://whoisjson.com/api/v1/whois?domain=${encodeURIComponent(domain)}`,
       {
-        headers: {
-          Authorization: `TOKEN=${WHOISJSON_API_KEY}`,
-          Accept: 'application/json',
-        },
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        headers: { Authorization: `TOKEN=${WHOISJSON_API_KEY}`, Accept: 'application/json' },
+        signal: AbortSignal.timeout(TIMEOUT_WHOIS_MS),
       }
     );
 
@@ -37,9 +34,9 @@ export default withMiddleware(rateLimitStore, async function handler(req, res) {
 
     if (creationRaw) {
       let createdAt;
-      if (typeof creationRaw === 'number') createdAt = new Date(creationRaw * 1000);
-      else if (Array.isArray(creationRaw)) createdAt = new Date(creationRaw[0]);
-      else createdAt = new Date(creationRaw);
+      if (typeof creationRaw === 'number')       createdAt = new Date(creationRaw * 1000);
+      else if (Array.isArray(creationRaw))        createdAt = new Date(creationRaw[0]);
+      else                                        createdAt = new Date(creationRaw);
 
       if (!isNaN(createdAt.getTime())) {
         creationFormatted = createdAt.toLocaleDateString('en-GB', {
@@ -48,8 +45,8 @@ export default withMiddleware(rateLimitStore, async function handler(req, res) {
         const now = new Date();
         const totalMonths =
           (now.getFullYear() - createdAt.getFullYear()) * 12 +
-          (now.getMonth() - createdAt.getMonth());
-        const years = Math.floor(totalMonths / 12);
+          (now.getMonth()    - createdAt.getMonth());
+        const years  = Math.floor(totalMonths / 12);
         const months = totalMonths % 12;
         domainAgeMonths = totalMonths;
         if (years > 0 && months > 0)
@@ -63,12 +60,12 @@ export default withMiddleware(rateLimitStore, async function handler(req, res) {
 
     return res.status(200).json({
       domain,
-      creation_date: creationFormatted,
-      domain_age: domainAgeText,
-      domain_age_months: domainAgeMonths,
+      creation_date:      creationFormatted,
+      domain_age:         domainAgeText,
+      domain_age_months:  domainAgeMonths,
     });
   } catch (err) {
-    const { status, error, reason } = classifyFetchError(err, 'WHOIS', TIMEOUT_MS);
+    const { status, error, reason } = classifyFetchError(err, 'WHOIS', TIMEOUT_WHOIS_MS);
     return res.status(status).json({ error, reason });
   }
 });

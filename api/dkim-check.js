@@ -1,13 +1,7 @@
 import { sanitiseDomain, withMiddleware } from './_utils.js';
+import { DKIM_SELECTORS, TIMEOUT_DKIM_MS } from './config.js';
 
 const rateLimitStore = new Map();
-
-const FAMILIES = ['titan', 'neo'];
-const INDEXED_RANGE = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-const SELECTORS = FAMILIES.flatMap(family => [
-  family,
-  ...INDEXED_RANGE.map(n => `${family}${n}`),
-]);
 
 export default withMiddleware(rateLimitStore, async function handler(req, res) {
   const domain = sanitiseDomain(req.query.domain);
@@ -16,13 +10,13 @@ export default withMiddleware(rateLimitStore, async function handler(req, res) {
   }
 
   const results = await Promise.allSettled(
-    SELECTORS.map(selector => lookupDkim(selector, domain))
+    DKIM_SELECTORS.map(selector => lookupDkim(selector, domain))
   );
 
   const matched = [];
   results.forEach((r, i) => {
     if (r.status === 'fulfilled' && r.value) {
-      matched.push({ selector: SELECTORS[i], record: r.value });
+      matched.push({ selector: DKIM_SELECTORS[i], record: r.value });
     }
   });
 
@@ -34,11 +28,7 @@ export default withMiddleware(rateLimitStore, async function handler(req, res) {
     });
   }
 
-  return res.status(200).json({
-    status: 'Not Set',
-    selectors_found: [],
-    detail: null,
-  });
+  return res.status(200).json({ status: 'Not Set', selectors_found: [], detail: null });
 });
 
 async function lookupDkim(selector, domain) {
@@ -47,7 +37,7 @@ async function lookupDkim(selector, domain) {
   try {
     const r = await fetch(url, {
       headers: { Accept: 'application/json' },
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(TIMEOUT_DKIM_MS),
     });
     if (!r.ok) return null;
     const data = await r.json();
