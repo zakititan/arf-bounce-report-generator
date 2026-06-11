@@ -431,7 +431,7 @@ function clearAssurances(prefix) {
 function v(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
 
 function validateARF() {
-  const fieldIds = ['arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim','arf-domain-input'];
+  const fieldIds = ['arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim'];
   clearFieldErrors(fieldIds);
   const errors = [];
   if (!v('arf-domain-type'))  errors.push({ id: 'arf-domain-type',  label: 'Domain Type' });
@@ -439,15 +439,13 @@ function validateARF() {
   if (!v('arf-prev-unblock')) errors.push({ id: 'arf-prev-unblock', label: 'Previous Unblock Request' });
   if (!v('arf-blocked-lt2'))  errors.push({ id: 'arf-blocked-lt2',  label: 'Blocked Email Accounts < 2' });
   if (!v('arf-email-type'))   errors.push({ id: 'arf-email-type',   label: 'Email Content Type' });
-  if (!v('arf-domain-input')) errors.push({ id: 'arf-domain-input', label: 'Domain Lookup (domain name required)' });
-  if (!state.arf.whois)       errors.push({ id: 'arf-domain-input', label: 'Domain Lookup (run Lookup first)' });
   if (!v('arf-website'))      errors.push({ id: 'arf-website',      label: 'Valid Website' });
   if (!v('arf-dkim'))         errors.push({ id: 'arf-dkim',         label: 'DKIM Status' });
   return errors;
 }
 
 function validateBounce() {
-  const fieldIds = ['bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-domain-input','bounce-other-blocked-detail'];
+  const fieldIds = ['bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-other-blocked-detail'];
   clearFieldErrors(fieldIds);
   const errors = [];
   if (!v('bounce-prev-unblock'))  errors.push({ id: 'bounce-prev-unblock',  label: 'Previous Unblock Request' });
@@ -456,8 +454,6 @@ function validateBounce() {
   if (v('bounce-other-blocked') === 'Yes' && !v('bounce-other-blocked-detail'))
     errors.push({ id: 'bounce-other-blocked-detail', label: 'Blocked Email Account(s) in Same Domain' });
   if (!v('bounce-website'))       errors.push({ id: 'bounce-website',       label: 'Valid Website' });
-  if (!v('bounce-domain-input'))  errors.push({ id: 'bounce-domain-input',  label: 'Domain Lookup (domain name required)' });
-  if (!state.bounce.whois)        errors.push({ id: 'bounce-domain-input',  label: 'Domain Lookup (run Lookup first)' });
   if (!v('bounce-dkim'))          errors.push({ id: 'bounce-dkim',          label: 'DKIM Status' });
   return errors;
 }
@@ -570,7 +566,7 @@ function clearARF() {
   pre.className = 'output-text';
   outputArea.appendChild(pre);
   document.getElementById('arf-validation-banner').classList.remove('visible');
-  clearFieldErrors(['arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim','arf-domain-input']);
+  clearFieldErrors(['arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim']);
   saveFormState();
 }
 
@@ -630,6 +626,6 @@ function clearBounce() {
   delete outputEl.closest('.output-area').dataset.copyText;
   document.getElementById('bounce-output-section').style.display = 'none';
   document.getElementById('bounce-validation-banner').classList.remove('visible');
-  clearFieldErrors(['bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-domain-input','bounce-other-blocked-detail']);
+  clearFieldErrors(['bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-other-blocked-detail']);
   saveFormState();
 }
