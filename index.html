@@ -71,8 +71,8 @@
         </div>
         <div class="screenshot-field">
           <label>Screenshot / EML Details</label>
-          <div class="upload-zone" id="arf-upload-zone" ondragover="handleDragOver(event,'arf-upload-zone')" ondragleave="handleDragLeave(event,'arf-upload-zone')" ondrop="handleDrop(event,'arf')">
-            <input type="file" id="arf-screenshot-input" accept="image/*" multiple onchange="handleFileSelect(event,'arf')" aria-label="Upload screenshots">
+          <div class="upload-zone" id="arf-upload-zone">
+            <input type="file" id="arf-screenshot-input" accept="image/*" multiple aria-label="Upload screenshots">
             <svg class="upload-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
             <span class="upload-zone-text">Click to upload or drag &amp; drop screenshots</span>
             <span class="upload-zone-sub">PNG, JPG, GIF, WEBP - multiple files supported</span>
@@ -84,8 +84,8 @@
         <div class="domain-lookup-wrap">
           <label for="arf-domain-input">Domain Lookup</label>
           <div class="domain-lookup-row">
-            <input type="text" id="arf-domain-input" placeholder="e.g. example.com" onkeydown="if(event.key==='Enter') lookupDomain('arf')">
-            <button class="btn-lookup" id="arf-lookup-btn" onclick="lookupDomain('arf')">
+            <input type="text" id="arf-domain-input" placeholder="e.g. example.com">
+            <button class="btn-lookup" id="arf-lookup-btn" data-action="lookup" data-panel="arf">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Lookup
             </button>
           </div>
@@ -109,12 +109,12 @@
         <div class="assurance-group">
           <span class="assurance-group-label">Assurances</span>
           <div class="assurance-btn-group" id="arf-assurance-btns">
-            <button type="button" class="assurance-btn" data-value="Mailchimp" onclick="toggleAssurance(this,'arf')"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Mailchimp</button>
-            <button type="button" class="assurance-btn" data-value="Sendgrid" onclick="toggleAssurance(this,'arf')"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Sendgrid</button>
-            <button type="button" class="assurance-btn" data-value="Password Reset" onclick="toggleAssurance(this,'arf')"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Password Reset</button>
-            <button type="button" class="assurance-btn" data-value="IP shared" onclick="toggleAssurance(this,'arf')"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>IP shared</button>
-            <button type="button" class="assurance-btn" data-value="Virus scan shared" onclick="toggleAssurance(this,'arf')"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Virus scan shared</button>
-            <button type="button" class="assurance-btn other-btn" data-value="Other" onclick="toggleAssurance(this,'arf')"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>+ Other</button>
+            <button type="button" class="assurance-btn" data-value="Mailchimp" data-action="toggle-assurance" data-panel="arf"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Mailchimp</button>
+            <button type="button" class="assurance-btn" data-value="Sendgrid" data-action="toggle-assurance" data-panel="arf"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Sendgrid</button>
+            <button type="button" class="assurance-btn" data-value="Password Reset" data-action="toggle-assurance" data-panel="arf"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Password Reset</button>
+            <button type="button" class="assurance-btn" data-value="IP shared" data-action="toggle-assurance" data-panel="arf"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>IP shared</button>
+            <button type="button" class="assurance-btn" data-value="Virus scan shared" data-action="toggle-assurance" data-panel="arf"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Virus scan shared</button>
+            <button type="button" class="assurance-btn other-btn" data-value="Other" data-action="toggle-assurance" data-panel="arf"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>+ Other</button>
           </div>
           <div class="other-field" id="arf-other-field">
             <label for="arf-other-text">Other Assurance Details</label>
@@ -131,16 +131,16 @@
         </div>
       </div>
       <div class="panel-actions">
-        <button class="btn btn-primary btn-full" id="arf-generate-btn" onclick="generateARF()">
+        <button class="btn btn-primary btn-full" id="arf-generate-btn" data-action="generate" data-panel="arf">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Generate ARF Report
         </button>
-        <button class="btn btn-secondary" onclick="clearARF()">Clear</button>
+        <button class="btn btn-secondary" data-action="clear" data-panel="arf">Clear</button>
       </div>
       <div class="panel-body" id="arf-output-section" style="display:none;">
         <hr>
         <div class="output-header">Generated Report</div>
         <div class="output-area">
-          <div class="copy-btn-wrap"><button class="btn btn-secondary" style="padding:var(--space-1) var(--space-3);font-size:var(--text-xs);" onclick="copyOutput('arf-output-text')">Copy</button></div>
+          <div class="copy-btn-wrap"><button class="btn btn-secondary" style="padding:var(--space-1) var(--space-3);font-size:var(--text-xs);" data-action="copy" data-target="arf-output-text">Copy</button></div>
           <pre id="arf-output-text" style="white-space:pre-wrap;font-family:var(--font-mono);padding-right:var(--space-8);"></pre>
           <div id="arf-output-images"></div>
         </div>
@@ -161,8 +161,8 @@
         <!-- CSV Bounce List Upload -->
         <div class="csv-upload-field">
           <label>Bounce List CSV<span class="req">*</span></label>
-          <div class="csv-drop-zone" id="bounce-csv-zone" ondragover="handleCsvDragOver(event)" ondragleave="handleCsvDragLeave(event)" ondrop="handleCsvDrop(event)">
-            <input type="file" id="bounce-csv-input" accept=".csv,text/csv" onchange="handleCsvSelect(event)" aria-label="Upload bounce list CSV">
+          <div class="csv-drop-zone" id="bounce-csv-zone">
+            <input type="file" id="bounce-csv-input" accept=".csv,text/csv" aria-label="Upload bounce list CSV">
             <svg class="csv-drop-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="18"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
             <div class="csv-drop-text">
               <span class="csv-drop-main">Click or drag &amp; drop bounce list</span>
@@ -175,7 +175,7 @@
               <span class="csv-result-name" id="bounce-csv-name"></span>
             </div>
             <span class="csv-lt40-badge" id="bounce-lt40-badge"></span>
-            <button class="csv-clear-btn" onclick="clearCsv()" title="Remove CSV" aria-label="Remove CSV">
+            <button class="csv-clear-btn" data-action="clear-csv" title="Remove CSV" aria-label="Remove CSV">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>
@@ -183,7 +183,7 @@
         <div class="field-row">
           <div class="field">
             <label for="bounce-other-blocked">Other Blocked Email in Domain?<span class="req">*</span></label>
-            <select id="bounce-other-blocked" onchange="toggleOtherBlockedField(this.value)"><option value="">Select...</option><option value="Yes">Yes</option><option value="No">No</option></select>
+            <select id="bounce-other-blocked" data-action="toggle-other-blocked"><option value="">Select...</option><option value="Yes">Yes</option><option value="No">No</option></select>
           </div>
           <div class="field">
             <label for="bounce-website">Valid Website?<span class="req">*</span></label>
@@ -200,8 +200,8 @@
         <div class="domain-lookup-wrap">
           <label for="bounce-domain-input">Domain Lookup</label>
           <div class="domain-lookup-row">
-            <input type="text" id="bounce-domain-input" placeholder="e.g. example.com" onkeydown="if(event.key==='Enter') lookupDomain('bounce')">
-            <button class="btn-lookup" id="bounce-lookup-btn" onclick="lookupDomain('bounce')">
+            <input type="text" id="bounce-domain-input" placeholder="e.g. example.com">
+            <button class="btn-lookup" id="bounce-lookup-btn" data-action="lookup" data-panel="bounce">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Lookup
             </button>
           </div>
@@ -220,22 +220,22 @@
         <div class="assurance-group">
           <span class="assurance-group-label">Assurances</span>
           <div class="assurance-btn-group" id="bounce-assurance-btns">
-            <button type="button" class="assurance-btn" data-value="Neverbounce" onclick="toggleAssurance(this,'bounce')"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Neverbounce</button>
-            <button type="button" class="assurance-btn" data-value="Zerobounce" onclick="toggleAssurance(this,'bounce')"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Zerobounce</button>
-            <button type="button" class="assurance-btn" data-value="Mailchimp" onclick="toggleAssurance(this,'bounce')"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Mailchimp</button>
-            <button type="button" class="assurance-btn" data-value="Sendgrid" onclick="toggleAssurance(this,'bounce')"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Sendgrid</button>
-            <button type="button" class="assurance-btn" data-value="Password reset" onclick="toggleAssurance(this,'bounce')"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Password reset</button>
-            <button type="button" class="assurance-btn" data-value="IP shared" onclick="toggleAssurance(this,'bounce')"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>IP shared</button>
-            <button type="button" class="assurance-btn" data-value="Virus scan shared" onclick="toggleAssurance(this,'bounce')"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Virus scan shared</button>
-            <button type="button" class="assurance-btn" data-value="Contact Form" id="bounce-contact-form-assurance-btn" onclick="toggleContactFormAssurance(this)"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Contact Form</button>
-            <button type="button" class="assurance-btn other-btn" data-value="Other" onclick="toggleAssurance(this,'bounce')"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>+ Other</button>
+            <button type="button" class="assurance-btn" data-value="Neverbounce" data-action="toggle-assurance" data-panel="bounce"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Neverbounce</button>
+            <button type="button" class="assurance-btn" data-value="Zerobounce" data-action="toggle-assurance" data-panel="bounce"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Zerobounce</button>
+            <button type="button" class="assurance-btn" data-value="Mailchimp" data-action="toggle-assurance" data-panel="bounce"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Mailchimp</button>
+            <button type="button" class="assurance-btn" data-value="Sendgrid" data-action="toggle-assurance" data-panel="bounce"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Sendgrid</button>
+            <button type="button" class="assurance-btn" data-value="Password reset" data-action="toggle-assurance" data-panel="bounce"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Password reset</button>
+            <button type="button" class="assurance-btn" data-value="IP shared" data-action="toggle-assurance" data-panel="bounce"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>IP shared</button>
+            <button type="button" class="assurance-btn" data-value="Virus scan shared" data-action="toggle-assurance" data-panel="bounce"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Virus scan shared</button>
+            <button type="button" class="assurance-btn" data-value="Contact Form" id="bounce-contact-form-assurance-btn" data-action="toggle-contact-form"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Contact Form</button>
+            <button type="button" class="assurance-btn other-btn" data-value="Other" data-action="toggle-assurance" data-panel="bounce"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>+ Other</button>
           </div>
           <div class="website-suboptions" id="bounce-contact-form-suboptions">
             <span class="website-suboptions-label">Contact Form — select applicable:</span>
-            <button type="button" class="website-suboption-btn" data-value="Email Verification" onclick="toggleContactFormSuboption(this)"><svg class="check-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Email Verification</button>
-            <button type="button" class="website-suboption-btn" data-value="Antivirus" onclick="toggleContactFormSuboption(this)"><svg class="check-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Antivirus</button>
-            <button type="button" class="website-suboption-btn" data-value="Honeypot" onclick="toggleContactFormSuboption(this)"><svg class="check-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Honeypot</button>
-            <button type="button" class="website-suboption-btn" data-value="Captcha" onclick="toggleContactFormSuboption(this)"><svg class="check-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Captcha</button>
+            <button type="button" class="website-suboption-btn" data-value="Email Verification" data-action="toggle-suboption"><svg class="check-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Email Verification</button>
+            <button type="button" class="website-suboption-btn" data-value="Antivirus" data-action="toggle-suboption"><svg class="check-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Antivirus</button>
+            <button type="button" class="website-suboption-btn" data-value="Honeypot" data-action="toggle-suboption"><svg class="check-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Honeypot</button>
+            <button type="button" class="website-suboption-btn" data-value="Captcha" data-action="toggle-suboption"><svg class="check-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Captcha</button>
           </div>
           <div class="other-field" id="bounce-other-field">
             <label for="bounce-other-text">Other Assurance Details</label>
@@ -251,16 +251,16 @@
         </div>
       </div>
       <div class="panel-actions">
-        <button class="btn btn-primary btn-full" id="bounce-generate-btn" onclick="generateBounce()">
+        <button class="btn btn-primary btn-full" id="bounce-generate-btn" data-action="generate" data-panel="bounce">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Generate Bounce Report
         </button>
-        <button class="btn btn-secondary" onclick="clearBounce()">Clear</button>
+        <button class="btn btn-secondary" data-action="clear" data-panel="bounce">Clear</button>
       </div>
       <div class="panel-body" id="bounce-output-section" style="display:none;">
         <hr>
         <div class="output-header">Generated Report</div>
         <div class="output-area">
-          <div class="copy-btn-wrap"><button class="btn btn-secondary" style="padding:var(--space-1) var(--space-3);font-size:var(--text-xs);" onclick="copyOutput('bounce-output-text')">Copy</button></div>
+          <div class="copy-btn-wrap"><button class="btn btn-secondary" style="padding:var(--space-1) var(--space-3);font-size:var(--text-xs);" data-action="copy" data-target="bounce-output-text">Copy</button></div>
           <pre id="bounce-output-text" style="white-space:pre-wrap;font-family:var(--font-mono);padding-right:var(--space-8);"></pre>
         </div>
       </div>

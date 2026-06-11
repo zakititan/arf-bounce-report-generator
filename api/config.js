@@ -7,6 +7,9 @@
 export const RATE_LIMIT_MAX      = 20;      // requests per window per IP
 export const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
 
+// Shared rate-limit store across all API handlers (single Map, not per-endpoint)
+export const globalRateLimitStore = new Map();
+
 // ── Timeouts (ms) ────────────────────────────────────────────────────────────
 export const TIMEOUT_WHOIS_MS   = 10_000; // WhoisJSON is occasionally slow
 export const TIMEOUT_WEBSITE_MS =  8_000; // website-check (two-URL fallback)

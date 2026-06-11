@@ -1,7 +1,5 @@
 import { withMiddleware } from './_utils.js';
-import { TIMEOUT_HEALTH_MS } from './config.js';
-
-const rateLimitStore = new Map();
+import { TIMEOUT_HEALTH_MS, globalRateLimitStore } from './config.js';
 
 async function checkWhoisAPI() {
   const key = process.env.WHOISJSON_API_KEY;
@@ -62,7 +60,7 @@ async function checkDnsAPI() {
   }
 }
 
-export default withMiddleware(rateLimitStore, async function handler(req, res) {
+export default withMiddleware(globalRateLimitStore, async function handler(req, res) {
   const [whoisjson, googleDns] = await Promise.all([checkWhoisAPI(), checkDnsAPI()]);
   const allOk = whoisjson.ok && googleDns.ok;
   return res.status(allOk ? 200 : 503).json({

@@ -4,11 +4,10 @@ import {
   WEBSITE_MAX_BODY_BYTES,
   WEBSITE_MIN_CONTENT_LEN,
   PARKED_KEYWORDS,
+  globalRateLimitStore,
 } from './config.js';
 
-const rateLimitStore = new Map();
-
-export default withMiddleware(rateLimitStore, async function handler(req, res) {
+export default withMiddleware(globalRateLimitStore, async function handler(req, res) {
   const domain = sanitiseDomain(req.query.domain);
   if (!domain) return res.status(400).json({ error: 'Invalid or missing domain parameter' });
 

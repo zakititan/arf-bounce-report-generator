@@ -11,13 +11,6 @@ export function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2500);
 }
 
-// ── Clipboard ─────────────────────────────────────────────────────────
-export function copyOutput(id) {
-  const text = document.getElementById(id).textContent;
-  if (!text.trim()) return;
-  navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard!'));
-}
-
 // ── Theme toggle ──────────────────────────────────────────────────────
 export function initThemeToggle() {
   const btn = document.querySelector('[data-theme-toggle]');

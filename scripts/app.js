@@ -14,7 +14,7 @@
 
 import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck } from './api.js';
 import {
-  showToast, copyOutput, initThemeToggle,
+  showToast, initThemeToggle,
   clearFieldErrors, showValidationErrors,
   handleDragOver, handleDragLeave,
   handleCsvDragOver, handleCsvDragLeave
@@ -41,24 +41,14 @@ const state = {
   },
 };
 
-// ── Expose helpers needed by inline HTML event attributes ─────────────
-Object.assign(window, {
-  lookupDomain, generateARF, clearARF, generateBounce, clearBounce,
-  copyOutputWithFeedback,
-  toggleAssurance, toggleOtherBlockedField,
-  toggleContactFormAssurance, toggleContactFormSuboption,
-  handleDragOver, handleDragLeave, handleDrop, handleFileSelect,
-  handleCsvDragOver, handleCsvDragLeave, handleCsvDrop, handleCsvSelect,
-  removeScreenshot, clearCsv,
-});
-window.copyOutput = copyOutputWithFeedback;
-
 // ── Init ──────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   initThemeToggle();
   restoreFormState();
   initKeyboardShortcuts();
   initDomainInputs();
+  initEventDelegation();
+  initDragDrop();
 });
 
 // ── Keyboard shortcuts (Ctrl/Cmd + Enter) ─────────────────────────────
@@ -138,6 +128,81 @@ function copyOutputWithFeedback(id) {
   }).catch(() => showToast('Copy failed — please copy manually.'));
 }
 
+// ── Event delegation (replaces inline onclick/onchange handlers) ──────
+function initEventDelegation() {
+  document.querySelector('.app-shell').addEventListener('click', (e) => {
+    const target = e.target.closest('[data-action]');
+    if (!target) return;
+    const action = target.getAttribute('data-action');
+    const panel = target.getAttribute('data-panel');
+
+    switch (action) {
+      case 'generate':
+        if (panel === 'arf') generateARF();
+        else if (panel === 'bounce') generateBounce();
+        break;
+      case 'clear':
+        if (panel === 'arf') clearARF();
+        else if (panel === 'bounce') clearBounce();
+        break;
+      case 'lookup':
+        if (panel) lookupDomain(panel);
+        break;
+      case 'copy': {
+        const copyTarget = target.getAttribute('data-target');
+        if (copyTarget) copyOutputWithFeedback(copyTarget);
+        break;
+      }
+      case 'clear-csv':
+        clearCsv();
+        break;
+      case 'toggle-assurance':
+        if (panel) toggleAssurance(target, panel);
+        break;
+      case 'toggle-contact-form':
+        toggleContactFormAssurance(target);
+        break;
+      case 'toggle-suboption':
+        toggleContactFormSuboption(target);
+        break;
+      case 'remove-screenshot': {
+        const idx = parseInt(target.getAttribute('data-index'), 10);
+        if (!isNaN(idx)) removeScreenshot(idx);
+        break;
+      }
+    }
+  });
+
+  document.querySelector('.app-shell').addEventListener('change', (e) => {
+    const target = e.target.closest('[data-action]');
+    if (!target) return;
+    const action = target.getAttribute('data-action');
+    if (action === 'toggle-other-blocked') {
+      toggleOtherBlockedField(target.value);
+    }
+  });
+
+  // File inputs need special handling (change events on file inputs)
+  document.getElementById('arf-screenshot-input')?.addEventListener('change', (e) => handleFileSelect(e, 'arf'));
+  document.getElementById('bounce-csv-input')?.addEventListener('change', (e) => handleCsvSelect(e));
+}
+
+// ── Drag-and-drop init ───────────────────────────────────────────────
+function initDragDrop() {
+  const arfZone = document.getElementById('arf-upload-zone');
+  if (arfZone) {
+    arfZone.addEventListener('dragover', (e) => handleDragOver(e, 'arf-upload-zone'));
+    arfZone.addEventListener('dragleave', (e) => handleDragLeave(e, 'arf-upload-zone'));
+    arfZone.addEventListener('drop', (e) => handleDrop(e, 'arf'));
+  }
+  const csvZone = document.getElementById('bounce-csv-zone');
+  if (csvZone) {
+    csvZone.addEventListener('dragover', handleCsvDragOver);
+    csvZone.addEventListener('dragleave', handleCsvDragLeave);
+    csvZone.addEventListener('drop', handleCsvDrop);
+  }
+}
+
 // ── localStorage persistence ──────────────────────────────────────────
 const PERSIST_FIELDS = [
   'arf-domain-type', 'arf-complaints', 'arf-prev-unblock',
@@ -155,7 +220,7 @@ function saveFormState() {
 function restoreFormState() {
   let saved;
   try { saved = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (_) { return; }
-  if (!saved) return;
+  if (!saved || !Object.keys(saved).some(k => saved[k])) return;
   PERSIST_FIELDS.forEach(id => { const el = document.getElementById(id); if (el && saved[id]) el.value = saved[id]; });
   const otherBlocked = document.getElementById('bounce-other-blocked');
   if (otherBlocked && otherBlocked.value) toggleOtherBlockedField(otherBlocked.value);
@@ -171,8 +236,16 @@ document.addEventListener('DOMContentLoaded', attachPersistListeners);
 function setGenerateBtnState(prefix) {
   const btn = document.getElementById(prefix + '-generate-btn');
   if (!btn) return;
-  btn.disabled = state[prefix].lookupInFlight;
-  btn.title = state[prefix].lookupInFlight ? 'Domain lookup is still in progress — please wait' : '';
+  const isLocked = state[prefix].lookupInFlight;
+  btn.disabled = isLocked || state.arf.lookupInFlight || state.bounce.lookupInFlight;
+  const label = isLocked ? 'Lookup in progress…' : (prefix === 'arf' ? 'Generate ARF Report' : 'Generate Bounce Report');
+  if (isLocked) {
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 0.8s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> ' + label;
+  } else {
+    const icon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
+    btn.innerHTML = icon + ' ' + label;
+  }
+  btn.title = isLocked ? 'Domain lookup is still in progress — please wait' : '';
 }
 
 // ── CSV helpers ───────────────────────────────────────────────────────
@@ -373,7 +446,7 @@ function renderPreviews() {
     thumb.className = 'screenshot-thumb';
     thumb.innerHTML =
       '<img src="' + s.dataUrl + '" alt="' + s.name + '" loading="lazy" width="72" height="72">' +
-      '<button class="remove-btn" onclick="removeScreenshot(' + i + ')" title="Remove" aria-label="Remove screenshot">' +
+      '<button class="remove-btn" data-action="remove-screenshot" data-index="' + i + '" title="Remove" aria-label="Remove screenshot">' +
       '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
       '</button>';
     container.appendChild(thumb);
