@@ -1,6 +1,5 @@
-import { sanitiseDomain, isRateLimited } from './_utils.js';
+import { sanitiseDomain, withMiddleware } from './_utils.js';
 
-const ALLOWED_ORIGIN = process.env.APP_URL || '';
 const rateLimitStore = new Map();
 
 const FAMILIES = ['titan', 'neo'];
@@ -10,22 +9,7 @@ const SELECTORS = FAMILIES.flatMap(family => [
   ...INDEXED_RANGE.map(n => `${family}${n}`),
 ]);
 
-export default async function handler(req, res) {
-  const origin = req.headers.origin || '';
-  if (ALLOWED_ORIGIN) {
-    res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  }
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Vary', 'Origin');
-  if (req.method === 'OPTIONS') return res.status(204).end();
-
-  const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
-  if (isRateLimited(rateLimitStore, ip)) {
-    return res.status(429).json({ error: 'Too many requests. Please wait a minute.' });
-  }
-
+export default withMiddleware(rateLimitStore, async function handler(req, res) {
   const domain = sanitiseDomain(req.query.domain);
   if (!domain) {
     return res.status(400).json({ error: 'Invalid or missing domain parameter' });
@@ -55,7 +39,7 @@ export default async function handler(req, res) {
     selectors_found: [],
     detail: null,
   });
-}
+});
 
 async function lookupDkim(selector, domain) {
   const hostname = `${selector}._domainkey.${domain}`;

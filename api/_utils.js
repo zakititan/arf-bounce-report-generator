@@ -59,3 +59,34 @@ export function verifyToken(token) {
     return false;
   }
 }
+
+/**
+ * Higher-order wrapper that applies CORS headers and rate limiting
+ * before delegating to the provided handler function.
+ *
+ * Usage:
+ *   const store = new Map();
+ *   export default withMiddleware(store, async (req, res) => { ... });
+ */
+export function withMiddleware(rateLimitStore, handler) {
+  const ALLOWED_ORIGIN = process.env.APP_URL || '';
+
+  return async function (req, res) {
+    const origin = req.headers.origin || '';
+
+    // CORS
+    res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN || origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Vary', 'Origin');
+
+    if (req.method === 'OPTIONS') return res.status(204).end();
+
+    // Rate limiting
+    const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
+    if (isRateLimited(rateLimitStore, ip)) {
+      return res.status(429).json({ error: 'Too many requests. Please wait a minute.' });
+    }
+
+    return handler(req, res);
+  };
+}
