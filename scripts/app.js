@@ -4,7 +4,7 @@
  *
  * Improvements applied:
  *  UX:      Auto-trigger lookup from CSV, localStorage persistence, Ctrl/Cmd+Enter
- *           shortcut, "Copied ✓" button feedback.
+ *           shortcut, "Copied ✓" button feedback, email→domain sanitisation.
  *  Quality: Unified `state` object, whoisCache invalidated on domain input change,
  *           try/catch on generate, addEventListener replacing window.* inline handlers
  *           where feasible, debounced Lookup button.
@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initThemeToggle();
   restoreFormState();
   initKeyboardShortcuts();
-  initDomainInputInvalidation();
+  initDomainInputs();
 });
 
 // ── Keyboard shortcuts (Ctrl/Cmd + Enter) ─────────────────────────────
@@ -66,7 +66,6 @@ function initKeyboardShortcuts() {
   document.addEventListener('keydown', (e) => {
     if (!(e.ctrlKey || e.metaKey) || e.key !== 'Enter') return;
     const active = document.activeElement;
-    // Determine which panel the focused element is inside
     const arfPanel = active && active.closest('#arf-generate-btn, .panel:first-of-type, [id^="arf-"]');
     if (arfPanel || active === document.body) {
       generateARF();
@@ -76,16 +75,62 @@ function initKeyboardShortcuts() {
   });
 }
 
-// ── Invalidate whois cache when domain input changes ──────────────────
-function initDomainInputInvalidation() {
+// ── Domain input: sanitise email → domain + invalidate cache ──────────
+/**
+ * Strips the local-part of an email address from a domain input.
+ * e.g. "user@example.com" → "example.com"
+ * Plain domains like "example.com" are left untouched.
+ * Also strips http(s):// and any trailing paths/ports for convenience.
+ */
+function sanitiseDomainInput(value) {
+  let v = value.trim();
+  // Strip protocol
+  v = v.replace(/^https?:\/\//i, '');
+  // Strip email local-part
+  const atIdx = v.indexOf('@');
+  if (atIdx !== -1) v = v.slice(atIdx + 1);
+  // Strip trailing path, query, hash, port
+  v = v.split('/')[0].split('?')[0].split('#')[0].split(':')[0];
+  return v.toLowerCase().trim();
+}
+
+function initDomainInputs() {
   ['arf', 'bounce'].forEach(prefix => {
     const input = document.getElementById(prefix + '-domain-input');
     if (!input) return;
+
+    // Sanitise on paste — catches paste of full email immediately
+    input.addEventListener('paste', (e) => {
+      e.preventDefault();
+      const pasted = (e.clipboardData || window.clipboardData).getData('text');
+      const sanitised = sanitiseDomainInput(pasted);
+      input.value = sanitised;
+      // Notify if something was stripped
+      if (sanitised !== pasted.trim()) {
+        showToast('Email stripped → ' + sanitised);
+      }
+      // Invalidate cache since value changed
+      state[prefix].whois = null;
+      document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
+    });
+
+    // Sanitise on blur — catches manual typing of an email
+    input.addEventListener('blur', () => {
+      const original = input.value;
+      const sanitised = sanitiseDomainInput(original);
+      if (sanitised !== original.trim()) {
+        input.value = sanitised;
+        showToast('Email stripped → ' + sanitised);
+        state[prefix].whois = null;
+        document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
+      }
+    });
+
+    // Invalidate cache whenever the raw value changes (existing behaviour)
     input.addEventListener('input', () => {
       if (state[prefix].whois) {
         state[prefix].whois = null;
-        const card = document.getElementById(prefix + '-domain-result');
-        if (card) card.classList.remove('visible', 'error');
+        document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
       }
     });
   });
@@ -97,7 +142,6 @@ function copyOutputWithFeedback(id) {
   if (!el || !el.textContent.trim()) return;
   navigator.clipboard.writeText(el.textContent).then(() => {
     showToast('Copied to clipboard!');
-    // Find the copy button nearest to this output element and flash it
     const btn = el.closest('.output-area')?.querySelector('.copy-btn-wrap button');
     if (btn) {
       const original = btn.textContent;
@@ -136,7 +180,6 @@ function restoreFormState() {
     const el = document.getElementById(id);
     if (el && saved[id]) el.value = saved[id];
   });
-  // Restore conditional visibility
   const otherBlocked = document.getElementById('bounce-other-blocked');
   if (otherBlocked && otherBlocked.value) toggleOtherBlockedField(otherBlocked.value);
   showToast('Form state restored from last session.');
@@ -215,7 +258,6 @@ function processCsv(file) {
       const domainInput = document.getElementById('bounce-domain-input');
       if (detectedDomain && domainInput) {
         domainInput.value = detectedDomain;
-        // Auto-trigger lookup immediately after domain detection
         showToast('Domain auto-detected: ' + detectedDomain + ' — running lookup…');
         lookupDomain('bounce');
       } else {
@@ -243,6 +285,8 @@ async function lookupDomain(prefix) {
   state[prefix].lookupLastFired = now;
 
   const input = document.getElementById(prefix + '-domain-input');
+  // Sanitise one final time before sending to API
+  if (input) input.value = sanitiseDomainInput(input.value);
   const domain = input ? input.value.trim() : '';
   if (!domain) { showToast('Please enter a domain name.'); return; }
 
