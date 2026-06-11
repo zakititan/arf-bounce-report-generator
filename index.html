@@ -633,6 +633,33 @@ function setGenerateBtnState(prefix) {
   }
 }
 
+// ── CSV helpers ──────────────────────────────────────────────────────
+// Parse a single CSV row respecting quoted fields.
+function parseCsvRow(row) {
+  const cols = [];
+  let cur = '', inQuotes = false;
+  for (let i = 0; i < row.length; i++) {
+    const ch = row[i];
+    if (ch === '"') {
+      if (inQuotes && row[i + 1] === '"') { cur += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if (ch === ',' && !inQuotes) {
+      cols.push(cur.trim()); cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  cols.push(cur.trim());
+  return cols;
+}
+
+// Extract domain from an email address or a bare domain string.
+function extractDomain(value) {
+  if (!value) return '';
+  const atIdx = value.indexOf('@');
+  return atIdx !== -1 ? value.slice(atIdx + 1).toLowerCase().trim() : value.toLowerCase().trim();
+}
+
 // ── CSV Bounce List ────────────────────────────────────────────────
 let bounceCsvCount = null;
 function handleCsvDragOver(e) { e.preventDefault(); document.getElementById('bounce-csv-zone').classList.add('dragover'); }
@@ -655,7 +682,22 @@ function processCsv(file) {
     if (dataRows < 40) { badge.textContent = '< 40 ✓'; badge.className = 'csv-lt40-badge ok'; }
     else { badge.textContent = '≥ 40 ⚠'; badge.className = 'csv-lt40-badge warn'; }
     document.getElementById('bounce-csv-result').classList.add('visible');
-    showToast(dataRows + ' bounce rows counted from ' + file.name);
+
+    // ── Auto-detect domain from 3rd column (index 2) of first data row ──
+    if (lines.length >= 2) {
+      const firstDataRow = parseCsvRow(lines[1]);
+      const col3Value = firstDataRow[2] || '';
+      const detectedDomain = extractDomain(col3Value);
+      const domainInput = document.getElementById('bounce-domain-input');
+      if (detectedDomain && domainInput) {
+        domainInput.value = detectedDomain;
+        showToast('Domain auto-detected: ' + detectedDomain + ' — click Lookup to verify');
+      } else {
+        showToast(dataRows + ' bounce rows counted from ' + file.name);
+      }
+    } else {
+      showToast(dataRows + ' bounce rows counted from ' + file.name);
+    }
   };
   reader.readAsText(file);
 }
@@ -682,7 +724,6 @@ async function lookupDomain(prefix) {
   const websiteEl = document.getElementById(prefix + '-result-website');
   const dkimEl = document.getElementById(prefix + '-result-dkim');
 
-  // ── Fix #6: disable Generate while lookup is in-flight ──
   lookupInFlight[prefix] = true;
   setGenerateBtnState(prefix);
 
@@ -711,7 +752,6 @@ async function lookupDomain(prefix) {
   } finally {
     btn.disabled = false;
     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Lookup';
-    // ── Fix #6: re-enable Generate once lookup (WHOIS phase) completes ──
     lookupInFlight[prefix] = false;
     setGenerateBtnState(prefix);
   }
@@ -824,7 +864,7 @@ function clearAssurances(prefix) {
   const ot = document.getElementById(prefix + '-other-text'); if (ot) ot.value = '';
 }
 
-// ── Fix #7: Validation helpers ────────────────────────────────────────
+// ── Validation helpers ────────────────────────────────────────────────
 function clearFieldErrors(ids) {
   ids.forEach(id => {
     const el = document.getElementById(id);
@@ -886,7 +926,6 @@ function validateBounce() {
 
 // ── ARF Generate ──────────────────────────────────────────────────────
 function generateARF() {
-  // Fix #7: validate before generating
   const errors = validateARF();
   if (showValidationErrors('arf', errors)) return;
   document.getElementById('arf-validation-banner').classList.remove('visible');
@@ -934,7 +973,6 @@ function clearARF() {
 
 // ── Bounce Generate ──────────────────────────────────────────────────
 function generateBounce() {
-  // Fix #7: validate before generating
   const errors = validateBounce();
   if (showValidationErrors('bounce', errors)) return;
   document.getElementById('bounce-validation-banner').classList.remove('visible');
