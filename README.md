@@ -33,17 +33,29 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ## Project Structure
 
 ```
-├── index.html            # Main app UI (ARF + Bounce panels)
-├── login.html            # Password login page
-├── middleware.js         # Vercel Edge middleware (auth gate + HMAC cookie verification)
-├── vercel.json           # Vercel config (clean URLs, security headers)
+├── index.html                      # Main app UI (ARF + Bounce panels)
+├── login.html                      # Password login page
+├── favicon.svg                     # App favicon
+├── middleware.js                   # Vercel Edge middleware (auth gate + HMAC cookie verification)
+├── vercel.json                     # Vercel config (clean URLs, security headers)
+├── package.json                    # Node deps (used for local dev / tests)
 ├── .gitignore
-└── api/
-    ├── _utils.js         # Shared helpers: sanitiseDomain, isRateLimited, signToken, verifyToken
-    ├── whois.js          # WHOIS lookup serverless function
-    ├── website-check.js  # Website reachability & classification
-    ├── dkim-check.js     # DNS DKIM selector check
-    └── login.js          # Login handler — validates password, sets signed auth cookie
+├── api/
+│   ├── _utils.js                   # Shared helpers: sanitiseDomain, isRateLimited, signToken, verifyToken
+│   ├── config.js                   # Centralised API config (allowed origins, rate-limit settings, etc.)
+│   ├── whois.js                    # WHOIS lookup serverless function
+│   ├── website-check.js            # Website reachability & classification
+│   ├── dkim-check.js               # DNS DKIM selector check
+│   ├── health.js                   # Health-check endpoint
+│   └── login.js                    # Login handler — validates password, sets signed auth cookie
+├── scripts/
+│   ├── app.js                      # Core app logic (ARF + Bounce generate, domain lookup, CSV, state)
+│   ├── api.js                      # Frontend API helpers (fetchWhois, fetchWebsiteCheck, fetchDkimCheck)
+│   └── ui.js                       # UI helpers (showToast, copyOutput, drag events, validation display)
+├── styles/
+│   └── main.css                    # All styles (light/dark theme, layout, components)
+└── tests/
+    └── sanitiseDomain.test.js      # Unit tests for domain sanitisation logic
 ```
 
 ---
