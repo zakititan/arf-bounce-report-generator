@@ -1,9 +1,7 @@
 import { sanitiseDomain, withMiddleware } from './_utils.js';
-import { DKIM_SELECTORS, TIMEOUT_DKIM_MS } from './config.js';
+import { DKIM_SELECTORS, TIMEOUT_DKIM_MS, globalRateLimitStore } from './config.js';
 
-const rateLimitStore = new Map();
-
-export default withMiddleware(rateLimitStore, async function handler(req, res) {
+export default withMiddleware(globalRateLimitStore, async function handler(req, res) {
   const domain = sanitiseDomain(req.query.domain);
   if (!domain) {
     return res.status(400).json({ error: 'Invalid or missing domain parameter' });

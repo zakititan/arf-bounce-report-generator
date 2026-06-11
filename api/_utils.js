@@ -5,6 +5,9 @@ import { RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from './config.js';
 /**
  * Sanitise a raw domain query param into a bare hostname.
  */
+// Matches IPv4 addresses like 8.8.8.8 or 192.168.1.1
+const IPV4_RE = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+
 export function sanitiseDomain(raw) {
   if (!raw || typeof raw !== 'string') return null;
   let d = raw.trim();
@@ -12,6 +15,7 @@ export function sanitiseDomain(raw) {
   d = d.split('/')[0].split('?')[0].split('#')[0];
   d = d.split(':')[0];
   d = d.toLowerCase().trim();
+  if (IPV4_RE.test(d)) return null;
   if (!/^[a-z0-9][a-z0-9\-\.]{1,252}[a-z0-9]$/.test(d)) return null;
   return d;
 }

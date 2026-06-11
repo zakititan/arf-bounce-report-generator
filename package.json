@@ -4,6 +4,6 @@
   "type": "module",
   "engines": { "node": ">=18" },
   "scripts": {
-    "test": "node --test tests/sanitiseDomain.test.js"
+    "test": "node --test tests/sanitiseDomain.test.js tests/api-handlers.test.js tests/website-check.test.js"
   }
 }

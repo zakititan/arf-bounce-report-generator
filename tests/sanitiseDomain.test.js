@@ -61,14 +61,9 @@ describe('sanitiseDomain — localhost and IP addresses', () => {
   it('rejects 192.168.1.1', () => reject('192.168.1.1', 'private IPv4'));
   it('rejects ::1 (IPv6)', () => reject('::1', 'IPv6 loopback'));
   it('rejects bare IP with port', () => reject('127.0.0.1:3000', 'IP with port'));
-  // Note: plain IPv4 addresses pass the hostname regex (digits + dots fit
-  // [a-z0-9][a-z0-9-.]{1,252}[a-z0-9]) — document this known behaviour.
-  it('documents: IPv4 like 8.8.8.8 is NOT rejected by regex', () => {
-    // This is a known limitation; callers should validate IPs separately if needed.
-    const result = sanitiseDomain('8.8.8.8');
-    assert.ok(result === '8.8.8.8' || result === null,
-      `8.8.8.8 returns ${result} — document actual behaviour`);
-  });
+  it('rejects 8.8.8.8 (bare IPv4)', () => reject('8.8.8.8', 'Google DNS IPv4'));
+  it('rejects 10.0.0.1 (private IPv4)', () => reject('10.0.0.1', 'private IPv4 range'));
+  it('rejects 255.255.255.255 (broadcast)', () => reject('255.255.255.255', 'broadcast IPv4'));
 });
 
 // ── Null / invalid inputs ─────────────────────────────────────────────
