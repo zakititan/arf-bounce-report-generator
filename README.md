@@ -39,6 +39,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 
 ### UX & Polish
 - **Email → domain sanitisation** — pasting or typing a full email address (`user@example.com`) in the domain field automatically strips the local-part to `example.com`; also strips `http(s)://`, trailing paths, and ports
+- **Auto-lookup on paste (ARF)** — pasting a domain or email into the ARF domain field automatically fires the WHOIS/Website/DKIM lookup without needing to click the Lookup button
 - **Form state persistence** — all 14 field values are saved to `localStorage` on every change and restored on next visit
 - **Dark / Light theme** — respects system preference with a manual toggle; preference is persisted to `localStorage` with a smooth 250ms crossfade transition
 - **Required field validation** — all required fields are highlighted with inline error messages before generation is allowed
@@ -215,6 +216,7 @@ APP_ORIGIN=http://localhost:3000
 ### 2026-06-12
 - **Rich clipboard copy with embedded images** — `copyOutputWithFeedback()` uses `navigator.clipboard.write()` with `ClipboardItem` (`text/plain` + `text/html`) when screenshots are present; HTML embeds `<img src="data:...">` tags for inline image rendering in email clients, Word, and Google Docs ([`70bd834`](https://github.com/zakititan/arf-bounce-report-generator/commit/70bd834))
 - **Assurance screenshot sections** — separate upload zones for ARF and Bounce assurance evidence; `assuranceScreenshots: []` in both panel states; `processFiles`, `renderPreviews`, `removeScreenshot`, `handleDrop` generalised to accept prefix + key; output includes `── Assurance Screenshots ──` divider with inline images ([`65c2813`](https://github.com/zakititan/arf-bounce-report-generator/commit/65c2813))
+- **Auto-lookup on paste (ARF)** — pasting a domain or email into the ARF domain field automatically fires the WHOIS/Website/DKIM lookup; the 1-second debounce prevents rapid re-triggers ([`a48ff2a`](https://github.com/zakititan/arf-bounce-report-generator/commit/a48ff2a))
 - **Paste images on hover** — `initPasteSupport()` uses document-level paste listener + `mouseenter`/`mouseleave` tracking per upload zone; `_pasteZone` variable routes `Ctrl+V` to the hovered zone without requiring a click to focus ([`480cb86`](https://github.com/zakititan/arf-bounce-report-generator/commit/480cb86), [`cc94992`](https://github.com/zakititan/arf-bounce-report-generator/commit/cc94992))
 - **Fix: HTML clipboard uses `<br>` for line spacing** — newlines converted to `<br>` tags instead of relying on `white-space: pre-wrap` for universal paste-target compatibility ([`3544c94`](https://github.com/zakititan/arf-bounce-report-generator/commit/3544c94))
 - **Fix: screenshot filename list stripped from HTML clipboard text** — `text.split('\n── ')[0]` removes duplicate filename info from the HTML portion since images with labels below already carry that information; `text/plain` keeps the full text ([`f04f9bf`](https://github.com/zakititan/arf-bounce-report-generator/commit/f04f9bf))
