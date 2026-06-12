@@ -478,8 +478,10 @@ async function lookupDomain(prefix) {
     showToast('WHOIS lookup failed — still checking website & DKIM…');
   } finally {
     // Always run website & DKIM checks regardless of WHOIS outcome
-    checkWebsite(prefix, domain);
-    checkDkim(prefix, domain);
+    await Promise.allSettled([
+      checkWebsite(prefix, domain),
+      checkDkim(prefix, domain),
+    ]);
     btn.disabled = false;
     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Lookup';
     state[prefix].lookupInFlight = false;
@@ -501,7 +503,10 @@ async function checkWebsite(prefix, domain) {
     const verdict = data.verdict || 'No website';
     const reason = data.reason || '';
     const bc = verdict === 'Valid Website' ? 'legit' : 'nosite';
-    if (websiteEl) websiteEl.innerHTML = '<span class="website-badge ' + bc + '">' + verdict + '</span>';
+    if (websiteEl) {
+      websiteEl.innerHTML = '<span class="website-badge ' + bc + '"></span>';
+      websiteEl.firstChild.textContent = verdict;
+    }
     if (websiteSelect && websiteSelect.value === '') {
       const mapped = mapVerdictToSelect(verdict);
       websiteSelect.value = mapped;
@@ -522,7 +527,10 @@ async function checkDkim(prefix, domain) {
     const status = data.status || 'Not Set';
     const selectors = data.selectors_found || [];
     if (status === 'Set') {
-      if (dkimEl) dkimEl.innerHTML = '<span class="dkim-badge set">Set — ' + selectors.join(', ') + '</span>';
+      if (dkimEl) {
+        dkimEl.innerHTML = '<span class="dkim-badge set"></span>';
+        dkimEl.firstChild.textContent = 'Set — ' + selectors.join(', ');
+      }
       if (dkimSelect && dkimSelect.value === '') {
         dkimSelect.value = 'Set';
         if (hintEl) hintEl.textContent = 'Auto-detected via selector: ' + selectors.join(', ');

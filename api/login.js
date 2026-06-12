@@ -2,7 +2,7 @@ import { signToken, checkRateLimit } from './_utils.js';
 import { globalRateLimitStore } from './config.js';
 
 const PASSWORD = process.env.APP_PASSWORD;
-const COOKIE_NAME = 'auth_session';
+const COOKIE_NAME = '__Host-auth_session';
 const MAX_AGE = 60 * 60 * 8; // 8 hours
 
 /**
@@ -28,7 +28,7 @@ export default function handler(req, res) {
     return;
   }
 
-  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
+  const ip = req.headers['x-forwarded-for']?.split(',').pop()?.trim() || req.socket?.remoteAddress || 'unknown';
   if (checkRateLimit(globalRateLimitStore, ip)) {
     res.status(429).json({ error: 'Too many login attempts — please wait a moment.' });
     return;
@@ -43,7 +43,8 @@ export default function handler(req, res) {
 
   let token;
   try {
-    token = signToken('authenticated');
+    const payload = JSON.stringify({ sub: 'authenticated', iat: Date.now() });
+    token = signToken(payload);
   } catch {
     res.status(500).json({ error: 'Server misconfiguration: AUTH_SECRET not set' });
     return;
