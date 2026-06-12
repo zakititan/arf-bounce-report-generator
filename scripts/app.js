@@ -58,6 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initDomainInputs();
   initEventDelegation();
   initDragDrop();
+  initPasteSupport();
   // attachPersistListeners called exactly once here — do NOT add another
   // DOMContentListener for it elsewhere in this file.
   attachPersistListeners();
@@ -277,6 +278,29 @@ function initDragDrop() {
     csvZone.addEventListener('dragleave', handleCsvDragLeave);
     csvZone.addEventListener('drop', handleCsvDrop);
   }
+}
+
+// ── Paste images from clipboard ───────────────────────────────────────
+function initPasteSupport() {
+  const zones = [
+    { id: 'arf-upload-zone',            prefix: 'arf',   key: 'screenshots' },
+    { id: 'arf-assurance-upload-zone',  prefix: 'arf',   key: 'assuranceScreenshots' },
+    { id: 'bounce-assurance-upload-zone', prefix: 'bounce', key: 'assuranceScreenshots' },
+  ];
+  zones.forEach(({ id, prefix, key }) => {
+    const zone = document.getElementById(id);
+    if (!zone) return;
+    zone.tabIndex = 0;
+    zone.addEventListener('paste', (e) => {
+      const images = Array.from(e.clipboardData.items)
+        .filter(item => item.type.startsWith('image/'))
+        .map(item => item.getAsFile())
+        .filter(Boolean);
+      if (images.length === 0) return;
+      e.preventDefault();
+      processFiles(images, prefix, key);
+    });
+  });
 }
 
 // ── localStorage persistence ──────────────────────────────────────────
