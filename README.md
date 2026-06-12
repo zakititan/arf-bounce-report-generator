@@ -96,8 +96,9 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 │   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, responsive)
 └── tests/
     ├── sanitiseDomain.test.js      # Unit tests for domain sanitisation logic
-    ├── api-handlers.test.js        # Integration tests for API handlers
-    └── website-check.test.js       # Tests for website classification logic
+    ├── api-handlers.test.js        # Tests for checkRateLimit, classifyFetchError, signToken/verifyToken
+    ├── website-check.test.js       # Tests for website classification helpers + config integrity
+    └── withMiddleware.test.js       # Tests for CORS, rate limiting, and method guard middleware
 ```
 
 ---
