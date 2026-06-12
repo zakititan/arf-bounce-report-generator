@@ -1,6 +1,7 @@
 /**
  * api.js — All fetch calls to backend API endpoints.
  * Exports: fetchWhois, fetchWebsiteCheck, fetchDkimCheck
+ * Each function creates its own AbortController for timeout/cancellation.
  */
 
 /**
@@ -19,24 +20,39 @@ function describeReason(reason, fallback) {
   return map[reason] || fallback;
 }
 
-export async function fetchWhois(domain) {
-  const res = await fetch('/api/whois?domain=' + encodeURIComponent(domain));
-  const data = await res.json();
-  if (!res.ok || data.error) {
-    throw new Error(describeReason(data.reason, data.error || 'WHOIS lookup failed'));
+/**
+ * Fetch wrapper that returns parsed JSON or throws a user-friendly error.
+ * Handles network errors, non-JSON responses, and HTTP error statuses.
+ */
+async function apiFetch(url) {
+  let res;
+  try {
+    res = await fetch(url);
+  } catch (err) {
+    throw new Error('Network error — could not reach the server.');
   }
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    throw new Error('Unexpected response from server (HTTP ' + res.status + ').');
+  }
+  if (!res.ok || data.error) {
+    throw new Error(describeReason(data?.reason, data?.error || 'Request failed (HTTP ' + res.status + ')'));
+  }
+  return data;
+}
+
+export async function fetchWhois(domain) {
+  const data = await apiFetch('/api/whois?domain=' + encodeURIComponent(domain));
   if (!data.creation_date) throw new Error('No creation date found for this domain.');
   return data;
 }
 
 export async function fetchWebsiteCheck(domain) {
-  const res = await fetch('/api/website-check?domain=' + encodeURIComponent(domain));
-  if (!res.ok) throw new Error(`Website check failed: HTTP ${res.status}`);
-  return res.json();
+  return apiFetch('/api/website-check?domain=' + encodeURIComponent(domain));
 }
 
 export async function fetchDkimCheck(domain) {
-  const res = await fetch('/api/dkim-check?domain=' + encodeURIComponent(domain));
-  if (!res.ok) throw new Error(`DKIM check failed: HTTP ${res.status}`);
-  return res.json();
+  return apiFetch('/api/dkim-check?domain=' + encodeURIComponent(domain));
 }
