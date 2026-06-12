@@ -965,7 +965,7 @@ function createTaeJira(prefix) {
   const domain = document.getElementById(prefix + '-domain-input')?.value || '';
   const typeLabel = prefix === 'arf' ? 'ARF' : 'Bounce';
   const summary = encodeURIComponent(typeLabel + ' unsuspension request: ' + domain);
-  const jiraUrl = 'https://jira.directi.com/secure/CreateIssueDetails!init.jspa?pid=12900&issuetype=10902&summary=' + summary;
+  const jiraUrl = 'https://jira.directi.com/secure/CreateIssueDetails!init.jspa?pid=12900&issuetype=10902&priority=10000&summary=' + summary;
 
   window.open(jiraUrl, '_blank');
   showToast('JIRA opened! Press Ctrl+V in the Description field to paste the report & screenshots.', 'success');
