@@ -55,6 +55,13 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Mobile layout** — full-width lookup buttons and vertical stepper on narrow screens
 - **Vercel Analytics & Speed Insights** — page view tracking and Core Web Vitals monitoring
 
+### JIRA Integration
+- **Create TAE JIRA** — a "Create TAE JIRA" button appears next to the Copy button in both ARF and Bounce output sections
+- **Prefilled fields** — clicking the button opens JIRA's create issue page with Project (TAE), Issue Type (Task), Priority (P3), and Summary pre-filled from the report
+- **Dynamic labels** — ARF reports get the `ARF_unsuspension` label; Bounce reports get `Bounce_unsuspension`
+- **Rich clipboard paste** — the full report text and embedded screenshots are copied to the clipboard before opening JIRA, so pressing `Ctrl+V` in the Description field pastes everything inline
+- **Safety gate** — the button shows a warning if no report has been generated yet
+
 ### Testing
 - **105 unit tests across 4 files** — covers `sanitiseDomain` (38 edge cases), `checkRateLimit`/`classifyFetchError`/token helpers (25 test cases), website-check helpers (~38 test cases), and `withMiddleware` CORS/rate-limit middleware (8 test cases)
 - **Config integrity checks** — all keyword/pattern arrays are verified at test time for empty strings and lowercase consistency
@@ -219,6 +226,9 @@ APP_ORIGIN=http://localhost:3000
 ## Changelog
 
 ### 2026-06-12
+- **JIRA integration: Create TAE JIRA button** — new button in both ARF and Bounce output sections; copies the full report + images to clipboard, then opens a pre-filled JIRA create-issue URL with project/issue type/priority/summary/labels ([`f75fdeb`](https://github.com/zakititan/arf-bounce-report-generator/commit/f75fdeb), [`79b6334`](https://github.com/zakititan/arf-bounce-report-generator/commit/79b6334))
+- **JIRA: pre-filled priority** — default priority set to P3 (ID `10000`) in the JIRA create-issue URL ([`3ef1c48`](https://github.com/zakititan/arf-bounce-report-generator/commit/3ef1c48))
+- **JIRA: dynamic labels** — ARF reports labelled `ARF_unsuspension`, Bounce reports labelled `Bounce_unsuspension` via the `labels` query parameter ([`79b6334`](https://github.com/zakititan/arf-bounce-report-generator/commit/79b6334))
 - **Auto-lookup on paste (Bounce)** — pasting a domain or email into the Bounce domain field now also fires the WHOIS/Website/DKIM lookup, matching the ARF panel behaviour ([`4efa868`](https://github.com/zakititan/arf-bounce-report-generator/commit/4efa868))
 - **Test coverage expanded to 105 test cases** — added `withMiddleware.test.js` (8 CORS/rate-limit/method-guard tests), fixed rate-limit tests to match 2-arg function signature, added 13 `sanitiseDomain` edge cases, 5 classifyFetchError error types, 4 signToken/verifyToken edge cases, 16 website-check helper tests, and config integrity checks for `PARKED_TITLE_KEYWORDS`/`PARKED_DOMAIN_PATTERNS`/`SPA_ROOT_PATTERNS` ([`3b25306`](https://github.com/zakititan/arf-bounce-report-generator/commit/3b25306), [`bd46a6d`](https://github.com/zakititan/arf-bounce-report-generator/commit/bd46a6d))
 - **Rich clipboard copy with embedded images** — `copyOutputWithFeedback()` uses `navigator.clipboard.write()` with `ClipboardItem` (`text/plain` + `text/html`) when screenshots are present; HTML embeds `<img src="data:...">` tags for inline image rendering in email clients, Word, and Google Docs ([`70bd834`](https://github.com/zakititan/arf-bounce-report-generator/commit/70bd834))
