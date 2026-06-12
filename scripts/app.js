@@ -181,6 +181,9 @@ function initEventDelegation() {
       case 'toggle-suboption':
         toggleContactFormSuboption(target);
         break;
+      case 'toggle-result-card':
+        toggleResultCard(target.closest('.result-card').id.replace('-domain-result', ''));
+        break;
       case 'remove-screenshot': {
         const idx = parseInt(target.getAttribute('data-index'), 10);
         if (!isNaN(idx)) removeScreenshot(idx);
@@ -362,7 +365,7 @@ async function lookupDomain(prefix) {
   setGenerateBtnState(prefix);
   btn.disabled = true;
   btn.textContent = 'Looking up…';
-  card.classList.remove('visible', 'error');
+  card.classList.remove('visible', 'error', 'open');
   if (websiteEl) websiteEl.innerHTML = '<span class="website-badge checking">checking…</span>';
   if (dkimEl) dkimEl.innerHTML = '<span class="dkim-badge checking">checking…</span>';
 
@@ -372,7 +375,9 @@ async function lookupDomain(prefix) {
     createdEl.textContent = data.creation_date;
     ageEl.textContent = data.domain_age || '—';
     card.classList.remove('error');
-    card.classList.add('visible');
+    card.classList.add('visible', 'open');
+    const summaryEl = document.getElementById(prefix + '-result-summary');
+    if (summaryEl) summaryEl.textContent = data.domain_age ? data.creation_date + ' — ' + data.domain_age : data.creation_date;
     updateStepper(prefix, '1');
     applyDomainAgeColor(prefix);
     showToast('Domain info fetched! Checking website & DKIM…');
@@ -380,7 +385,9 @@ async function lookupDomain(prefix) {
     state[prefix].whois = null;
     createdEl.textContent = err.message || 'Lookup failed';
     ageEl.textContent = '—';
-    card.classList.add('visible', 'error');
+    card.classList.add('visible', 'error', 'open');
+    const summaryEl = document.getElementById(prefix + '-result-summary');
+    if (summaryEl) summaryEl.textContent = err.message || 'Lookup failed';
     updateStepper(prefix, '1');
     showToast('WHOIS lookup failed — still checking website & DKIM…');
   } finally {
