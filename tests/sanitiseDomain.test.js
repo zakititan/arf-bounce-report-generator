@@ -24,8 +24,8 @@ describe('sanitiseDomain — valid inputs', () => {
   it('subdomain', () => ok('mail.example.com', 'mail.example.com', 'subdomain'));
   it('deep subdomain', () => ok('a.b.c.example.com', 'a.b.c.example.com', 'deep subdomain'));
   it('hyphenated label', () => ok('my-domain.com', 'my-domain.com', 'hyphen in label'));
-  it('numeric TLD', () => ok('example.123', 'example.123', 'numeric TLD'));
   it('two-char TLD', () => ok('example.io', 'example.io', 'short TLD'));
+  it('ftp subdomain', () => ok('ftp.example.com', 'ftp.example.com', 'ftp subdomain'));
 });
 
 describe('sanitiseDomain — email stripping', () => {
@@ -83,4 +83,17 @@ describe('sanitiseDomain — null and invalid inputs', () => {
     const long = 'a'.repeat(200) + '.' + 'b'.repeat(60);
     reject(long, 'domain > 253 chars');
   });
+  it('rejects single-char TLD', () => reject('example.x', 'single-char TLD'));
+  it('rejects numeric TLD', () => reject('example.123', 'numeric TLD'));
+  it('rejects ftp:// protocol', () => reject('ftp://example.com', 'ftp protocol'));
+  it('rejects file:// protocol', () => reject('file:///etc/passwd', 'file protocol'));
+  it('rejects http auth (user:pass)', () => reject('http://user:pass@example.com', 'http auth'));
+  it('rejects trailing dot FQDN', () => reject('example.com.', 'trailing dot'));
+  it('rejects underscore in label', () => reject('my_domain.com', 'underscore in label'));
+  it('rejects tab inside domain', () => reject('exa\tmple.com', 'tab inside'));
+  it('rejects newline inside domain', () => reject('exa\nmple.com', 'newline inside'));
+  it('rejects IPv6 with zone ID', () => reject('fe80::1%eth0', 'IPv6 zone ID'));
+  it('rejects boolean true', () => reject(true, 'boolean true'));
+  it('rejects boolean false', () => reject(false, 'boolean false'));
+  it('rejects multiple @ signs', () => reject('user@name@example.com', 'multiple @'));
 });

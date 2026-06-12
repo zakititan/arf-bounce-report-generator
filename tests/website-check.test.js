@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  PARKED_KEYWORDS, PARKED_TITLE_KEYWORDS, PARKED_DOMAIN_PATTERNS,
+  PARKED_KEYWORDS, PARKED_TITLE_KEYWORDS, PARKED_DOMAIN_PATTERNS, SPA_ROOT_PATTERNS,
 } from '../api/config.js';
 
 // Replicate helpers here since they're not exported from website-check.js
@@ -51,6 +51,29 @@ describe('extractTitle', () => {
     const html = '<title data-test="1">My Site</title>';
     assert.equal(extractTitle(html), 'My Site');
   });
+
+  it('returns empty string for empty title tag', () => {
+    assert.equal(extractTitle('<title></title>'), '');
+  });
+
+  it('handles nested HTML inside title (truncates at inner tag)', () => {
+    // Known limitation: regex stops at first < inside title
+    assert.equal(extractTitle('<title>My <b>Bold</b> Site</title>'), 'My');
+  });
+
+  it('handles multiline title', () => {
+    const html = '<title>\n  My Site\n</title>';
+    assert.equal(extractTitle(html), 'My Site');
+  });
+
+  it('handles title with HTML entities (raw, not decoded)', () => {
+    assert.equal(extractTitle('<title>Acme &amp; Co</title>'), 'Acme &amp; Co');
+  });
+
+  it('returns first match when multiple title tags exist', () => {
+    const html = '<title>First</title><title>Second</title>';
+    assert.equal(extractTitle(html), 'First');
+  });
 });
 
 // ── titleMatchesParked ────────────────────────────────────────────────
@@ -75,6 +98,22 @@ describe('titleMatchesParked', () => {
     assert.equal(titleMatchesParked('Acme Corp | Official Website'), false);
     assert.equal(titleMatchesParked('Blog - My Personal Thoughts'), false);
     assert.equal(titleMatchesParked('Shop Online | Best Deals'), false);
+  });
+
+  it('detects uppercase PARKED', () => {
+    assert.ok(titleMatchesParked('THIS DOMAIN IS PARKED'));
+  });
+
+  it('detects "buy this domain" in title', () => {
+    assert.ok(titleMatchesParked('Buy this domain today!'));
+  });
+
+  it('detects "default page" in title', () => {
+    assert.ok(titleMatchesParked('Default Page'));
+  });
+
+  it('detects "placeholder" in title', () => {
+    assert.ok(titleMatchesParked('Placeholder Site'));
   });
 });
 
@@ -106,6 +145,30 @@ describe('bodyMatchesParked', () => {
 
   it('allows normal content', () => {
     assert.equal(bodyMatchesParked('<html><body><h1>Welcome to our store</h1><p>We sell products.</p></body></html>'), false);
+  });
+
+  it('detects "hugedomains" in body', () => {
+    assert.ok(bodyMatchesParked('<html>This domain is listed at hugedomains.com</html>'));
+  });
+
+  it('detects "welcome to wordpress" in body', () => {
+    assert.ok(bodyMatchesParked('<html>Welcome to WordPress. This is your first post.</html>'));
+  });
+
+  it('detects "plesk default page" in body', () => {
+    assert.ok(bodyMatchesParked('<html>Plesk Default Page</html>'));
+  });
+
+  it('detects "iis windows server" in body', () => {
+    assert.ok(bodyMatchesParked('<html>IIS Windows Server</html>'));
+  });
+
+  it('detects "brandbucket" in body', () => {
+    assert.ok(bodyMatchesParked('<html>brandbucket parking page</html>'));
+  });
+
+  it('detects "no site configured" in body', () => {
+    assert.ok(bodyMatchesParked('<html>No site configured</html>'));
   });
 });
 
@@ -150,6 +213,36 @@ describe('redirectsToParkedService', () => {
     const resp = {};
     assert.equal(redirectsToParkedService(resp, 'example.com'), false);
   });
+
+  it('handles invalid URL gracefully', () => {
+    const resp = { url: 'not-a-valid-url' };
+    assert.equal(redirectsToParkedService(resp, 'example.com'), false);
+  });
+
+  it('detects Sedo redirect with port', () => {
+    const resp = { url: 'https://sedo.com:8443/search/details/?domain=example.com' };
+    assert.ok(redirectsToParkedService(resp, 'example.com'));
+  });
+
+  it('detects subdomain parking service', () => {
+    const resp = { url: 'https://parking.sedo.com/page' };
+    assert.ok(redirectsToParkedService(resp, 'example.com'));
+  });
+
+  it('detects afternic without .com via includes pattern', () => {
+    const resp = { url: 'https://www.afternic.biz/domain/example.com' };
+    assert.ok(redirectsToParkedService(resp, 'example.com'));
+  });
+
+  it('handles uppercase hostname in response URL', () => {
+    const resp = { url: 'https://SEDO.COM/search/' };
+    assert.ok(redirectsToParkedService(resp, 'example.com'));
+  });
+
+  it('handles empty response URL string', () => {
+    const resp = { url: '' };
+    assert.equal(redirectsToParkedService(resp, 'example.com'), false);
+  });
 });
 
 // ── config integrity ──────────────────────────────────────────────────
@@ -171,6 +264,42 @@ describe('PARKED_TITLE_KEYWORDS integrity', () => {
   it('does not include empty strings', () => {
     PARKED_TITLE_KEYWORDS.forEach((kw, i) => {
       assert.ok(kw.trim().length > 0, `empty title keyword at index ${i}`);
+    });
+  });
+});
+
+describe('PARKED_TITLE_KEYWORDS lowercase integrity', () => {
+  it('all title keywords are lowercase', () => {
+    PARKED_TITLE_KEYWORDS.forEach((kw, i) => {
+      assert.equal(kw, kw.toLowerCase(), `title keyword at index ${i} is not lowercase: "${kw}"`);
+    });
+  });
+});
+
+describe('PARKED_DOMAIN_PATTERNS integrity', () => {
+  it('does not include empty strings', () => {
+    PARKED_DOMAIN_PATTERNS.forEach((pattern, i) => {
+      assert.ok(pattern.trim().length > 0, `empty domain pattern at index ${i}`);
+    });
+  });
+
+  it('all domain patterns are lowercase', () => {
+    PARKED_DOMAIN_PATTERNS.forEach((pattern, i) => {
+      assert.equal(pattern, pattern.toLowerCase(), `domain pattern at index ${i} is not lowercase: "${pattern}"`);
+    });
+  });
+});
+
+describe('SPA_ROOT_PATTERNS integrity', () => {
+  it('does not include empty strings', () => {
+    SPA_ROOT_PATTERNS.forEach((pattern, i) => {
+      assert.ok(pattern.trim().length > 0, `empty SPA root pattern at index ${i}`);
+    });
+  });
+
+  it('all SPA root patterns are lowercase', () => {
+    SPA_ROOT_PATTERNS.forEach((pattern, i) => {
+      assert.equal(pattern, pattern.toLowerCase(), `SPA root pattern at index ${i} is not lowercase: "${pattern}"`);
     });
   });
 });
