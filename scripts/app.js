@@ -701,6 +701,8 @@ function clearARF() {
   outputArea.appendChild(pre);
   document.getElementById('arf-validation-banner').classList.remove('visible');
   clearFieldErrors(['arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim']);
+  updateStepper('arf', '0');
+  updateFormProgress('arf');
   saveFormState();
 }
 
@@ -765,5 +767,7 @@ function clearBounce() {
   document.getElementById('bounce-output-section').style.display = 'none';
   document.getElementById('bounce-validation-banner').classList.remove('visible');
   clearFieldErrors(['bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-other-blocked-detail']);
+  updateStepper('bounce', '0');
+  updateFormProgress('bounce');
   saveFormState();
 }
