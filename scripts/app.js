@@ -102,7 +102,7 @@ function initDomainInputs() {
       if (sanitised !== pasted.trim()) showToast('Email stripped → ' + sanitised);
       state[prefix].whois = null;
       document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
-      if (prefix === 'arf') lookupDomain('arf');
+      lookupDomain(prefix);
     });
     input.addEventListener('blur', () => {
       const original = input.value;

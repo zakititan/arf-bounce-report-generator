@@ -39,7 +39,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 
 ### UX & Polish
 - **Email → domain sanitisation** — pasting or typing a full email address (`user@example.com`) in the domain field automatically strips the local-part to `example.com`; also strips `http(s)://`, trailing paths, and ports
-- **Auto-lookup on paste (ARF)** — pasting a domain or email into the ARF domain field automatically fires the WHOIS/Website/DKIM lookup without needing to click the Lookup button
+- **Auto-lookup on paste** — pasting a domain or email into either panel's domain field automatically fires the WHOIS/Website/DKIM lookup without needing to click the Lookup button
 - **Form state persistence** — all 14 field values are saved to `localStorage` on every change and restored on next visit
 - **Dark / Light theme** — respects system preference with a manual toggle; preference is persisted to `localStorage` with a smooth 250ms crossfade transition
 - **Required field validation** — all required fields are highlighted with inline error messages before generation is allowed
@@ -54,6 +54,10 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Sticky generate button** — the generate button row sticks to the bottom of the panel on scroll with a frosted-glass backdrop blur
 - **Mobile layout** — full-width lookup buttons and vertical stepper on narrow screens
 - **Vercel Analytics & Speed Insights** — page view tracking and Core Web Vitals monitoring
+
+### Testing
+- **105 unit tests across 4 files** — covers `sanitiseDomain` (38 edge cases), `checkRateLimit`/`classifyFetchError`/token helpers (25 test cases), website-check helpers (~38 test cases), and `withMiddleware` CORS/rate-limit middleware (8 test cases)
+- **Config integrity checks** — all keyword/pattern arrays are verified at test time for empty strings and lowercase consistency
 
 ### Security
 - **Login gate** — password-protected access via `login.html` + Vercel Edge middleware with HMAC-SHA256 signed cookies
@@ -92,8 +96,9 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 │   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, responsive)
 └── tests/
     ├── sanitiseDomain.test.js      # Unit tests for domain sanitisation logic
-    ├── api-handlers.test.js        # Integration tests for API handlers
-    └── website-check.test.js       # Tests for website classification logic
+    ├── api-handlers.test.js        # Tests for checkRateLimit, classifyFetchError, signToken/verifyToken
+    ├── website-check.test.js       # Tests for website classification helpers + config integrity
+    └── withMiddleware.test.js       # Tests for CORS, rate limiting, and method guard middleware
 ```
 
 ---
@@ -214,6 +219,8 @@ APP_ORIGIN=http://localhost:3000
 ## Changelog
 
 ### 2026-06-12
+- **Auto-lookup on paste (Bounce)** — pasting a domain or email into the Bounce domain field now also fires the WHOIS/Website/DKIM lookup, matching the ARF panel behaviour ([`4efa868`](https://github.com/zakititan/arf-bounce-report-generator/commit/4efa868))
+- **Test coverage expanded to 105 test cases** — added `withMiddleware.test.js` (8 CORS/rate-limit/method-guard tests), fixed rate-limit tests to match 2-arg function signature, added 13 `sanitiseDomain` edge cases, 5 classifyFetchError error types, 4 signToken/verifyToken edge cases, 16 website-check helper tests, and config integrity checks for `PARKED_TITLE_KEYWORDS`/`PARKED_DOMAIN_PATTERNS`/`SPA_ROOT_PATTERNS` ([`3b25306`](https://github.com/zakititan/arf-bounce-report-generator/commit/3b25306), [`bd46a6d`](https://github.com/zakititan/arf-bounce-report-generator/commit/bd46a6d))
 - **Rich clipboard copy with embedded images** — `copyOutputWithFeedback()` uses `navigator.clipboard.write()` with `ClipboardItem` (`text/plain` + `text/html`) when screenshots are present; HTML embeds `<img src="data:...">` tags for inline image rendering in email clients, Word, and Google Docs ([`70bd834`](https://github.com/zakititan/arf-bounce-report-generator/commit/70bd834))
 - **Assurance screenshot sections** — separate upload zones for ARF and Bounce assurance evidence; `assuranceScreenshots: []` in both panel states; `processFiles`, `renderPreviews`, `removeScreenshot`, `handleDrop` generalised to accept prefix + key; output includes `── Assurance Screenshots ──` divider with inline images ([`65c2813`](https://github.com/zakititan/arf-bounce-report-generator/commit/65c2813))
 - **Auto-lookup on paste (ARF)** — pasting a domain or email into the ARF domain field automatically fires the WHOIS/Website/DKIM lookup; the 1-second debounce prevents rapid re-triggers ([`a48ff2a`](https://github.com/zakititan/arf-bounce-report-generator/commit/a48ff2a))
