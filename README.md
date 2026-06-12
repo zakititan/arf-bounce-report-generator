@@ -210,6 +210,8 @@ APP_ORIGIN=http://localhost:3000
 ## Changelog
 
 ### 2026-06-12
+- **Fix: `godaddy` false positive in PARKED_KEYWORDS** — replaced bare `'godaddy'` with `'godaddy parking'` and `'godaddy default page'`; prevents legitimate sites that mention GoDaddy as a partner (e.g. titan.email) from being misclassified as parked
+- **Visual polish: skeleton shimmer contrast** — shimmer highlight now uses `color-mix(in oklch, var(--color-text) 8%, transparent)` so the sweeping highlight is visible in both light and dark themes (previously used `--color-surface-2` which had near-zero contrast against the skeleton background)
 - **Visual polish: skeleton shimmer** — pulsing placeholder bars replace "checking…" text during domain website/DKIM lookups
 - **Theme transition** — toggling dark/light mode now applies a smooth 250ms crossfade via `.theme-transitioning` class
 - **Reduced motion support** — `prefers-reduced-motion: reduce` disables all animations for accessibility
