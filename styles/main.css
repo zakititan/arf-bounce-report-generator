@@ -393,7 +393,7 @@ html.theme-transitioning, html.theme-transitioning * { transition: background 25
 
 /* Skeleton shimmer */
 .skeleton { background: var(--color-surface-offset); border-radius: var(--radius-sm); position: relative; overflow: hidden; }
-.skeleton::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in oklch, var(--color-surface-2) 60%, transparent), transparent); animation: skeletonShimmer 1.5s ease-in-out infinite; }
+.skeleton::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in oklch, var(--color-text) 8%, transparent), transparent); animation: skeletonShimmer 1.5s ease-in-out infinite; }
 .skeleton-sm { height: 20px; width: 80px; border-radius: var(--radius-full); }
 .skeleton-md { height: 16px; width: 120px; }
 .skeleton-lg { height: 16px; width: 180px; }
