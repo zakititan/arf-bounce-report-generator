@@ -10,6 +10,7 @@
  *           try/catch on generate, addEventListener replacing window.* inline handlers
  *           where feasible, debounced Lookup button, per-panel generate-button gating,
  *           lastActivePanel for keyboard shortcut, confirm before clear.
+ *           attachPersistListeners called once inside DOMContentLoaded (not twice).
  *  Perf:    10-screenshot cap with warning toast.
  */
 
@@ -51,6 +52,9 @@ document.addEventListener('DOMContentLoaded', () => {
   initDomainInputs();
   initEventDelegation();
   initDragDrop();
+  // attachPersistListeners called exactly once here — do NOT add another
+  // DOMContentLoaded listener for it elsewhere in this file.
+  attachPersistListeners();
 });
 
 // ── Keyboard shortcuts (Ctrl/Cmd + Enter) ─────────────────────────────
@@ -236,7 +240,6 @@ function restoreFormState() {
 function attachPersistListeners() {
   PERSIST_FIELDS.forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', saveFormState); });
 }
-document.addEventListener('DOMContentLoaded', attachPersistListeners);
 
 // ── Generate-button state (per-panel only) ────────────────────────────
 // Each panel's generate button is only gated by its own lookup being in
@@ -279,6 +282,21 @@ function extractDomain(value) {
   return atIdx !== -1 ? value.slice(atIdx + 1).toLowerCase().trim() : value.toLowerCase().trim();
 }
 
+/**
+ * Finds the column index most likely to contain an email or domain by
+ * scanning the CSV header row for common column names.
+ * Falls back to column index 2 (the historic default) if no match is found.
+ */
+function detectDomainColumnIndex(headerRow) {
+  const cols = parseCsvRow(headerRow);
+  const candidates = ['email', 'email address', 'e-mail', 'address', 'recipient', 'domain'];
+  for (const candidate of candidates) {
+    const idx = cols.findIndex(c => c.toLowerCase().trim() === candidate);
+    if (idx !== -1) return idx;
+  }
+  return 2; // legacy fallback
+}
+
 // ── CSV Bounce List ───────────────────────────────────────────────────
 function handleCsvDrop(e) {
   e.preventDefault();
@@ -300,7 +318,10 @@ function processCsv(file) {
     else { badge.textContent = '≥ 40 ⚠'; badge.className = 'csv-lt40-badge warn'; }
     document.getElementById('bounce-csv-result').classList.add('visible');
     if (lines.length >= 2) {
-      const col3Value = parseCsvRow(lines[1])[2] || '';
+      // Detect which column holds the email/domain by reading the header row,
+      // rather than blindly assuming column index 2.
+      const colIdx = detectDomainColumnIndex(lines[0]);
+      const col3Value = parseCsvRow(lines[1])[colIdx] || '';
       const detectedDomain = extractDomain(col3Value);
       const domainInput = document.getElementById('bounce-domain-input');
       if (detectedDomain && domainInput) {
