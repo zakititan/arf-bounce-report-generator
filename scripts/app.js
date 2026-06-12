@@ -123,16 +123,42 @@ function copyOutputWithFeedback(id) {
   const outputArea = el.closest('.output-area');
   const text = (outputArea && outputArea.dataset.copyText) || el.textContent;
   if (!text.trim()) return;
-  navigator.clipboard.writeText(text).then(() => {
-    showToast('Copied to clipboard!');
-    const btn = outputArea?.querySelector('.copy-btn-wrap button');
-    if (btn) {
-      const original = btn.textContent;
-      btn.textContent = 'Copied ✓';
-      btn.style.color = 'var(--color-success)';
-      setTimeout(() => { btn.textContent = original; btn.style.color = ''; }, 2000);
-    }
-  }).catch(() => showToast('Copy failed — please copy manually.'));
+
+  const doCopy = (writePromise) => {
+    writePromise.then(() => {
+      showToast('Copied to clipboard!');
+      const btn = outputArea?.querySelector('.copy-btn-wrap button');
+      if (btn) {
+        const original = btn.textContent;
+        btn.textContent = 'Copied ✓';
+        btn.style.color = 'var(--color-success)';
+        setTimeout(() => { btn.textContent = original; btn.style.color = ''; }, 2000);
+      }
+    }).catch(() => showToast('Copy failed — please copy manually.'));
+  };
+
+  // Check if the output area has rendered screenshots for rich clipboard
+  const images = outputArea?.querySelectorAll('.output-screenshots-inline img');
+  if (images && images.length > 0 && typeof ClipboardItem !== 'undefined') {
+    let html = '<pre style="font-family:DM Mono,Courier New,monospace;font-size:12px;line-height:1.9;white-space:pre-wrap;">';
+    html += text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    html += '</pre>';
+    html += '<div style="margin-top:16px">';
+    images.forEach((img, i) => {
+      html += '<div style="margin-bottom:12px">';
+      html += '<img src="' + img.src + '" alt="' + img.alt.replace(/"/g, '&quot;') + '" style="max-width:400px;height:auto;border-radius:6px;border:1px solid #d4d1ca;display:block;margin-bottom:4px">';
+      html += '<span style="font-family:DM Mono,Courier New,monospace;font-size:11px;color:#7a7974">' + (i + 1) + '. ' + img.alt.replace(/"/g, '&quot;') + '</span>';
+      html += '</div>';
+    });
+    html += '</div>';
+    const item = new ClipboardItem({
+      'text/plain': new Blob([text], { type: 'text/plain' }),
+      'text/html': new Blob([html], { type: 'text/html' }),
+    });
+    doCopy(navigator.clipboard.write([item]));
+  } else {
+    doCopy(navigator.clipboard.writeText(text));
+  }
 }
 
 // ── Event delegation (replaces inline onclick/onchange handlers) ──────
