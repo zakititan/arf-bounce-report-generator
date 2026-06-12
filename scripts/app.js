@@ -145,8 +145,10 @@ function copyOutputWithFeedback(id) {
   // Build rich clipboard with embedded screenshots
   const grids = outputArea?.querySelectorAll('.output-screenshots-inline');
   if (grids && grids.length > 0 && typeof ClipboardItem !== 'undefined') {
+    // Strip screenshot filename lists from HTML text (images with labels below replace them)
+    const textForHtml = text.split('\n── ')[0];
     let html = '<div style="font-family:DM Mono,Courier New,monospace;font-size:12px;line-height:1.9;">';
-    html += text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+    html += textForHtml.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
     html += '</div>';
     let imgCount = 0;
     grids.forEach(grid => {
