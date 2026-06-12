@@ -209,6 +209,9 @@ function initEventDelegation() {
       case 'lookup':
         if (panel) lookupDomain(panel);
         break;
+      case 'create-jira':
+        createTaeJira(panel);
+        break;
       case 'copy': {
         const copyTarget = target.getAttribute('data-target');
         if (copyTarget) copyOutputWithFeedback(copyTarget);
@@ -955,4 +958,24 @@ function clearBounce() {
   updateStepper('bounce', '0');
   updateFormProgress('bounce');
   saveFormState();
+}
+
+// ── JIRA integration ──────────────────────────────────────────────
+function createTaeJira(prefix) {
+  const outputSection = document.getElementById(prefix + '-output-section');
+  if (!outputSection || outputSection.style.display === 'none') {
+    showToast('Please generate the report first.', 'warning');
+    return;
+  }
+
+  copyOutputWithFeedback(prefix + '-output-text');
+
+  const domain = document.getElementById(prefix + '-domain-input')?.value || '';
+  const typeLabel = prefix === 'arf' ? 'ARF' : 'Bounce';
+  const summary = encodeURIComponent(typeLabel + ' unsuspension request: ' + domain);
+  const label = prefix === 'arf' ? 'ARF_unsuspension' : 'Bounce_unsuspension';
+  const jiraUrl = 'https://jira.directi.com/secure/CreateIssueDetails!init.jspa?pid=12900&issuetype=10902&priority=10000&labels=' + label + '&summary=' + summary;
+
+  window.open(jiraUrl, '_blank');
+  showToast('JIRA opened! Press Ctrl+V in the Description field to paste the report & screenshots.', 'success');
 }

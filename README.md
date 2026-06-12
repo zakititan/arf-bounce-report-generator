@@ -55,6 +55,13 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Mobile layout** — full-width lookup buttons and vertical stepper on narrow screens
 - **Vercel Analytics & Speed Insights** — page view tracking and Core Web Vitals monitoring
 
+### JIRA Integration
+- **Create TAE JIRA** — a "Create TAE JIRA" button appears next to the Copy button in both ARF and Bounce output sections
+- **Prefilled fields** — clicking the button opens JIRA's create issue page with Project (TAE), Issue Type (Task), Priority (P3), and Summary pre-filled from the report
+- **Dynamic labels** — ARF reports get the `ARF_unsuspension` label; Bounce reports get `Bounce_unsuspension`
+- **Rich clipboard paste** — the full report text and embedded screenshots are copied to the clipboard before opening JIRA, so pressing `Ctrl+V` in the Description field pastes everything inline
+- **Safety gate** — the button shows a warning if no report has been generated yet
+
 ### Testing
 - **105 unit tests across 4 files** — covers `sanitiseDomain` (38 edge cases), `checkRateLimit`/`classifyFetchError`/token helpers (25 test cases including expiry, missing claims, non-JSON payload), website-check helpers (~38 test cases), and `withMiddleware` CORS/rate-limit middleware (8 test cases)
 - **Config integrity checks** — all keyword/pattern arrays are verified at test time for empty strings and lowercase consistency
@@ -234,6 +241,9 @@ APP_ORIGIN=http://localhost:3000
 ## Changelog
 
 ### 2026-06-12
+- **JIRA integration: Create TAE JIRA button** — new button in both ARF and Bounce output sections; copies the full report + images to clipboard, then opens a pre-filled JIRA create-issue URL with project/issue type/priority/summary/labels ([`f75fdeb`](https://github.com/zakititan/arf-bounce-report-generator/commit/f75fdeb), [`79b6334`](https://github.com/zakititan/arf-bounce-report-generator/commit/79b6334))
+- **JIRA: pre-filled priority** — default priority set to P3 (ID `10000`) in the JIRA create-issue URL ([`3ef1c48`](https://github.com/zakititan/arf-bounce-report-generator/commit/3ef1c48))
+- **JIRA: dynamic labels** — ARF reports labelled `ARF_unsuspension`, Bounce reports labelled `Bounce_unsuspension` via the `labels` query parameter ([`79b6334`](https://github.com/zakititan/arf-bounce-report-generator/commit/79b6334))
 - **Security: session token expiry** — auth tokens now carry `{ sub: 'authenticated', iat: timestamp }` claims; both Node and Edge `verifyToken()` reject tokens older than 24 hours or with missing/invalid claims ([`09d3d33`](https://github.com/zakititan/arf-bounce-report-generator/commit/09d3d33))
 - **Security: `__Host-` cookie prefix** — `auth_session` renamed to `__Host-auth_session` in both `login.js` and `middleware.js`; browsers enforce `Path=/` + `Secure`, preventing subdomain cookie overwrite ([`09d3d33`](https://github.com/zakititan/arf-bounce-report-generator/commit/09d3d33))
 - **Security: rate-limit spoofing prevention** — IP extraction changed from `X-Forwarded-For` first address to last address, preventing attackers from rotating the first IP to bypass rate limits ([`09d3d33`](https://github.com/zakititan/arf-bounce-report-generator/commit/09d3d33))
