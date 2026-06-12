@@ -140,9 +140,9 @@ function copyOutputWithFeedback(id) {
   // Check if the output area has rendered screenshots for rich clipboard
   const images = outputArea?.querySelectorAll('.output-screenshots-inline img');
   if (images && images.length > 0 && typeof ClipboardItem !== 'undefined') {
-    let html = '<pre style="font-family:DM Mono,Courier New,monospace;font-size:12px;line-height:1.9;white-space:pre-wrap;">';
-    html += text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    html += '</pre>';
+    let html = '<div style="font-family:DM Mono,Courier New,monospace;font-size:12px;line-height:1.9;">';
+    html += text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+    html += '</div>';
     html += '<div style="margin-top:16px">';
     images.forEach((img, i) => {
       html += '<div style="margin-bottom:12px">';
