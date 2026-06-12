@@ -366,8 +366,8 @@ async function lookupDomain(prefix) {
   btn.disabled = true;
   btn.textContent = 'Looking up…';
   card.classList.remove('visible', 'error', 'open');
-  if (websiteEl) websiteEl.innerHTML = '<span class="website-badge checking">checking…</span>';
-  if (dkimEl) dkimEl.innerHTML = '<span class="dkim-badge checking">checking…</span>';
+  if (websiteEl) websiteEl.innerHTML = '<div class="skeleton skeleton-sm"></div>';
+  if (dkimEl) dkimEl.innerHTML = '<div class="skeleton skeleton-sm"></div>';
 
   try {
     const data = await fetchWhois(domain);
@@ -669,6 +669,8 @@ function generateARF() {
 
     outputSection.style.display = 'block';
     outputSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const genBtn = document.getElementById('arf-generate-btn');
+    if (genBtn) { genBtn.classList.add('btn-success-burst'); setTimeout(() => genBtn.classList.remove('btn-success-burst'), 600); }
     showToast('ARF report generated!');
   } catch (err) {
     showToast('Failed to generate report — please try again.');
@@ -740,6 +742,8 @@ function generateBounce() {
     section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     const ts = document.getElementById('bounce-output-timestamp');
     if (ts) ts.textContent = 'Generated: ' + getOutputTimestamp();
+    const genBtn = document.getElementById('bounce-generate-btn');
+    if (genBtn) { genBtn.classList.add('btn-success-burst'); setTimeout(() => genBtn.classList.remove('btn-success-burst'), 600); }
     showToast('Bounce report generated!');
   } catch (err) {
     showToast('Failed to generate report — please try again.');

@@ -26,9 +26,11 @@ export function initThemeToggle() {
   setThemeIcon(btn, theme);
   btn && btn.addEventListener('click', () => {
     theme = theme === 'dark' ? 'light' : 'dark';
+    root.classList.add('theme-transitioning');
     root.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
     setThemeIcon(btn, theme);
+    setTimeout(() => root.classList.remove('theme-transitioning'), 300);
   });
 }
 
