@@ -56,7 +56,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Vercel Analytics & Speed Insights** — page view tracking and Core Web Vitals monitoring
 
 ### Testing
-- **105 unit tests across 4 files** — covers `sanitiseDomain` (38 edge cases), `checkRateLimit`/`classifyFetchError`/token helpers (25 test cases), website-check helpers (~38 test cases), and `withMiddleware` CORS/rate-limit middleware (8 test cases)
+- **105 unit tests across 4 files** — covers `sanitiseDomain` (38 edge cases), `checkRateLimit`/`classifyFetchError`/token helpers (25 test cases including expiry, missing claims, non-JSON payload), website-check helpers (~38 test cases), and `withMiddleware` CORS/rate-limit middleware (8 test cases)
 - **Config integrity checks** — all keyword/pattern arrays are verified at test time for empty strings and lowercase consistency
 
 ### Security
@@ -66,7 +66,16 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Login rate limiting** — the `/api/login` endpoint uses the shared rate-limit store to prevent brute-force attacks
 - **CORS** — all API endpoints restrict `Origin` to `APP_ORIGIN` env var; `Vary: Origin` header is set correctly
 - **Rate limiting** — max 20 requests/min per IP on all API endpoints; rate-limit map prunes stale entries above 10,000 to prevent memory leaks
-- **Hostname validation** — domain input regex rejects IPv4/IPv6 addresses, localhost variants, consecutive dots, and hyphen-leading labels; `@` stripping prevents email-based bypass
+- **Session token expiry** — auth cookies carry a 24-hour expiry enforced during signature verification; leaked tokens are automatically rejected after 24h
+- **Hardened auth cookie** — `__Host-` cookie prefix enforces `Path=/` + `Secure` at the browser level, preventing subdomain cookie overwrite
+- **Rate-limit spoofing prevention** — IP extraction uses the last address in `X-Forwarded-For` (untrusted proxies append on the left), preventing attackers from rotating the first IP to bypass rate limits
+- **Hostname validation** — domain input regex rejects IPv4/IPv6 addresses, localhost variants, `.localhost`/`.local`/`.internal` TLDs, consecutive dots, and hyphen-leading labels; `@` stripping prevents email-based bypass
+- **CSP hardening** — Content-Security-Policy includes `base-uri 'self'`, `form-action 'none'`, and `object-src 'none'` to prevent injection via `<base>`, form-jacking, and plugin attacks
+- **HSTS** — `Strict-Transport-Security` header enforces HTTPS with `max-age=31536000; includeSubDomains; preload`
+- **Middleware URL matching** — public path check uses exact match or subpath prefix (`pathname === p || pathname.startsWith(p + '/')`) to prevent `/api/login-staging` from bypassing auth
+- **XSS prevention** — API response values (verdict, DKIM selectors) are set via `textContent` instead of `innerHTML` to prevent HTML injection
+- **Login redirect removed** — successful login always redirects to `/`; the `redirect` query parameter is no longer accepted, preventing open redirect and `javascript:` injection
+- **API error resilience** — all fetch calls are wrapped in a centralized `apiFetch()` helper that safely handles network errors and non-JSON responses instead of crashing
 
 ---
 
@@ -204,21 +213,39 @@ APP_ORIGIN=http://localhost:3000
 ## Security
 
 - **Auth cookie** is HMAC-SHA256 signed using `AUTH_SECRET` — forgery without the secret is not feasible
+- **Session token expiry** — auth tokens carry a `sub` and `iat` claim; verified tokens expire after 24 hours
+- **`__Host-` cookie prefix** — prevents subdomain cookie overwrite; also enforces `Path=/` and `Secure` at the browser level
 - **Edge middleware** re-verifies the cookie signature on every request using Web Crypto API
-- **`api/login.js`** uses Node.js `crypto.createHmac` (Node runtime); **`middleware.js`** uses `crypto.subtle` (Edge runtime) — both produce identical signatures
+- **`api/login.js`** uses Node.js `crypto.createHmac` (Node runtime); **`middleware.js`** uses `crypto.subtle` (Edge runtime) — both produce identical signatures with identical claim validation
 - **Constant-time comparison** in `api/login.js` prevents timing-based password inference
 - **Login rate limiting** prevents brute-force password guessing
+- **Rate-limit spoofing prevention** — IP extraction uses the last address in `X-Forwarded-For` (untrusted proxies append on the left)
 - **No default password** — `APP_PASSWORD` must be set as an environment variable; the server returns a 500 error if it's missing
 - **CORS** prevents API calls from unauthorised origins; `Vary: Origin` is set to avoid cache poisoning
 - **Rate limiting** mitigates brute-force and scraping; stale entries are pruned to prevent memory leaks
+- **CSP** includes `base-uri 'self'`, `form-action 'none'`, and `object-src 'none'` directives
+- **HSTS** enforces HTTPS with `max-age=31536000; includeSubDomains; preload`
+- **Middleware URL matching** uses exact path or subpath prefix to prevent `/api/login-staging` from bypassing auth
 - **`AUTH_SECRET`** and **`APP_PASSWORD`** are never committed to the repo — always set via environment variables
-- **Hostname validation** rejects IPv4/IPv6 addresses, localhost names (SSRF prevention), consecutive dots, hyphen-leading labels, and email local-parts
+- **Hostname validation** rejects IPv4/IPv6 addresses, localhost names, `.localhost`/`.local`/`.internal` TLDs (SSRF prevention), consecutive dots, hyphen-leading labels, and email local-parts
 
 ---
 
 ## Changelog
 
 ### 2026-06-12
+- **Security: session token expiry** — auth tokens now carry `{ sub: 'authenticated', iat: timestamp }` claims; both Node and Edge `verifyToken()` reject tokens older than 24 hours or with missing/invalid claims ([`09d3d33`](https://github.com/zakititan/arf-bounce-report-generator/commit/09d3d33))
+- **Security: `__Host-` cookie prefix** — `auth_session` renamed to `__Host-auth_session` in both `login.js` and `middleware.js`; browsers enforce `Path=/` + `Secure`, preventing subdomain cookie overwrite ([`09d3d33`](https://github.com/zakititan/arf-bounce-report-generator/commit/09d3d33))
+- **Security: rate-limit spoofing prevention** — IP extraction changed from `X-Forwarded-For` first address to last address, preventing attackers from rotating the first IP to bypass rate limits ([`09d3d33`](https://github.com/zakititan/arf-bounce-report-generator/commit/09d3d33))
+- **Security: SSRF `.localhost` bypass blocked** — `sanitiseDomain()` now rejects hostnames ending in `.localhost`, `.local`, or `.internal` to prevent SSRF via TLDs that resolve to loopback ([`09d3d33`](https://github.com/zakititan/arf-bounce-report-generator/commit/09d3d33))
+- **Security: CSP hardened** — added `base-uri 'self'`, `form-action 'none'`, and `object-src 'none'` directives to prevent injection via `<base>`, form-jacking, and plugins ([`09d3d33`](https://github.com/zakititan/arf-bounce-report-generator/commit/09d3d33))
+- **Security: HSTS header added** — `Strict-Transport-Security` with `max-age=31536000; includeSubDomains; preload` forces HTTPS ([`09d3d33`](https://github.com/zakititan/arf-bounce-report-generator/commit/09d3d33))
+- **Security: middleware URL matching fixed** — `/api/login-staging` no longer bypasses auth; public path check now uses exact match or subpath prefix ([`09d3d33`](https://github.com/zakititan/arf-bounce-report-generator/commit/09d3d33))
+- **Security: XSS via innerHTML fixed** — `checkWebsite()` and `checkDkim()` set API response text via `textContent` instead of interpolating into `innerHTML` ([`09d3d33`](https://github.com/zakititan/arf-bounce-report-generator/commit/09d3d33))
+- **Security: login redirect removed** — `window.location.href` no longer reads the `redirect` query parameter, preventing open redirect and `javascript:` injection ([`09d3d33`](https://github.com/zakititan/arf-bounce-report-generator/commit/09d3d33))
+- **Security: API error handling hardened** — centralized `apiFetch()` wrapper safely handles network errors, non-JSON responses, and non-2xx status codes instead of crashing with `SyntaxError` ([`09d3d33`](https://github.com/zakititan/arf-bounce-report-generator/commit/09d3d33))
+- **Fix: race condition in domain lookup** — `checkWebsite()` and `checkDkim()` are now awaited via `Promise.allSettled()` before clearing `lookupInFlight`, preventing stale results from overwriting a fresh lookup ([`09d3d33`](https://github.com/zakititan/arf-bounce-report-generator/commit/09d3d33))
+- **Fix: test env leak** — `after()` hook in `api-handlers.test.js` now correctly handles `ORIGINAL_SECRET === undefined` by deleting the env var instead of setting it to the string `'undefined'` ([`09d3d33`](https://github.com/zakititan/arf-bounce-report-generator/commit/09d3d33))
 - **Auto-lookup on paste (Bounce)** — pasting a domain or email into the Bounce domain field now also fires the WHOIS/Website/DKIM lookup, matching the ARF panel behaviour ([`4efa868`](https://github.com/zakititan/arf-bounce-report-generator/commit/4efa868))
 - **Test coverage expanded to 105 test cases** — added `withMiddleware.test.js` (8 CORS/rate-limit/method-guard tests), fixed rate-limit tests to match 2-arg function signature, added 13 `sanitiseDomain` edge cases, 5 classifyFetchError error types, 4 signToken/verifyToken edge cases, 16 website-check helper tests, and config integrity checks for `PARKED_TITLE_KEYWORDS`/`PARKED_DOMAIN_PATTERNS`/`SPA_ROOT_PATTERNS` ([`3b25306`](https://github.com/zakititan/arf-bounce-report-generator/commit/3b25306), [`bd46a6d`](https://github.com/zakititan/arf-bounce-report-generator/commit/bd46a6d))
 - **Rich clipboard copy with embedded images** — `copyOutputWithFeedback()` uses `navigator.clipboard.write()` with `ClipboardItem` (`text/plain` + `text/html`) when screenshots are present; HTML embeds `<img src="data:...">` tags for inline image rendering in email clients, Word, and Google Docs ([`70bd834`](https://github.com/zakititan/arf-bounce-report-generator/commit/70bd834))
