@@ -139,16 +139,21 @@ describe('signToken / verifyToken', () => {
   const ORIGINAL_SECRET = process.env.AUTH_SECRET;
 
   before(() => { process.env.AUTH_SECRET = 'test-secret-12345'; });
-  after(() => { process.env.AUTH_SECRET = ORIGINAL_SECRET; });
+  after(() => {
+    if (ORIGINAL_SECRET === undefined) delete process.env.AUTH_SECRET;
+    else process.env.AUTH_SECRET = ORIGINAL_SECRET;
+  });
 
   it('signs and verifies a token', () => {
-    const token = signToken('authenticated');
+    const payload = JSON.stringify({ sub: 'authenticated', iat: Date.now() });
+    const token = signToken(payload);
     assert.ok(token.includes('.'));
     assert.equal(verifyToken(token), true);
   });
 
   it('rejects a tampered token', () => {
-    const token = signToken('authenticated');
+    const payload = JSON.stringify({ sub: 'authenticated', iat: Date.now() });
+    const token = signToken(payload);
     const parts = token.split('.');
     const tampered = 'hacked.' + parts[1];
     assert.equal(verifyToken(tampered), false);
@@ -160,37 +165,52 @@ describe('signToken / verifyToken', () => {
     assert.equal(verifyToken(null), false);
   });
 
+  it('rejects token with non-JSON payload', () => {
+    const token = signToken('plain-text');
+    assert.equal(verifyToken(token), false, 'non-JSON payload rejected');
+  });
+
+  it('rejects token with missing sub field', () => {
+    const token = signToken(JSON.stringify({ iat: Date.now() }));
+    assert.equal(verifyToken(token), false, 'missing sub');
+  });
+
+  it('rejects token with wrong sub value', () => {
+    const token = signToken(JSON.stringify({ sub: 'admin', iat: Date.now() }));
+    assert.equal(verifyToken(token), false, 'wrong sub');
+  });
+
+  it('rejects expired token', () => {
+    const expiredIat = Date.now() - 25 * 60 * 60 * 1000;
+    const token = signToken(JSON.stringify({ sub: 'authenticated', iat: expiredIat }));
+    assert.equal(verifyToken(token), false, 'expired token');
+  });
+
   it('fails gracefully if AUTH_SECRET is missing', () => {
+    const saved = process.env.AUTH_SECRET;
     delete process.env.AUTH_SECRET;
-    assert.throws(() => signToken('test'), /AUTH_SECRET/);
+    const payload = JSON.stringify({ sub: 'authenticated', iat: Date.now() });
+    assert.throws(() => signToken(payload), /AUTH_SECRET/);
     assert.equal(verifyToken('anything.anything'), false);
-    process.env.AUTH_SECRET = 'test-secret-12345';
-  });
-
-  it('verifies token with dots in payload', () => {
-    const token = signToken('a.b.c');
-    assert.equal(verifyToken(token), true, 'payload with dots');
-  });
-
-  it('verifies token with empty payload', () => {
-    const token = signToken('');
-    assert.equal(verifyToken(token), true, 'empty payload');
+    process.env.AUTH_SECRET = saved;
   });
 
   it('rejects token with wrong-length signature', () => {
-    const token = signToken('test');
+    const payload = JSON.stringify({ sub: 'authenticated', iat: Date.now() });
+    const token = signToken(payload);
     const truncated = token.slice(0, -5);
     assert.equal(verifyToken(truncated), false, 'truncated signature');
   });
 
   it('rejects token with wrong-length signature (extra char)', () => {
-    const token = signToken('test');
+    const payload = JSON.stringify({ sub: 'authenticated', iat: Date.now() });
+    const token = signToken(payload);
     const padded = token + '0';
     assert.equal(verifyToken(padded), false, 'padded signature');
   });
 
   it('handles very long payload without crashing', () => {
-    const longPayload = 'x'.repeat(10_000);
+    const longPayload = JSON.stringify({ sub: 'authenticated', iat: Date.now(), extra: 'x'.repeat(10_000) });
     const token = signToken(longPayload);
     assert.equal(verifyToken(token), true, 'long payload round-trips');
   });

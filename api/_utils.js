@@ -29,6 +29,7 @@ export function sanitiseDomain(raw) {
 
   // Reject localhost variants
   if (LOCALHOST_NAMES.includes(v)) return null;
+  if (/\.(localhost|local|internal)$/.test(v)) return null;
 
   // Reject malformed hostnames: each label must start/end with alnum and
   // may contain hyphens; no consecutive dots; TLD must be at least 2 alpha chars.
@@ -66,7 +67,17 @@ export function verifyToken(token) {
     if (expected.length !== sig.length) return false;
     let diff = 0;
     for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ sig.charCodeAt(i);
-    return diff === 0;
+    if (diff !== 0) return false;
+
+    // Verify token payload contains valid session claims
+    let parsed;
+    try { parsed = JSON.parse(payload); } catch { return false; }
+    if (!parsed || parsed.sub !== 'authenticated' || typeof parsed.iat !== 'number') return false;
+    const age = Date.now() - parsed.iat;
+    const MAX_AGE_MS = 24 * 60 * 60 * 1000;
+    if (age > MAX_AGE_MS || age < 0) return false;
+
+    return true;
   } catch {
     return false;
   }
@@ -119,7 +130,7 @@ export function withMiddleware(rateLimitStore, handler) {
     if (req.method === 'OPTIONS') return res.status(204).end();
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
+    const ip = req.headers['x-forwarded-for']?.split(',').pop()?.trim() || req.socket?.remoteAddress || 'unknown';
     if (checkRateLimit(rateLimitStore, ip)) {
       return res.status(429).json({ error: 'Too many requests — please slow down.' });
     }
