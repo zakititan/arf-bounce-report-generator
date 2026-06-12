@@ -420,6 +420,7 @@ async function checkWebsite(prefix, domain) {
       const mapped = mapVerdictToSelect(verdict);
       websiteSelect.value = mapped;
       if (hintEl) hintEl.textContent = 'Auto-detected: ' + reason;
+      updateFormProgress(prefix);
     }
     updateStepper(prefix, '2');
     showToast('Website: ' + verdict);
@@ -439,6 +440,7 @@ async function checkDkim(prefix, domain) {
       if (dkimSelect && dkimSelect.value === '') {
         dkimSelect.value = 'Set';
         if (hintEl) hintEl.textContent = 'Auto-detected via selector: ' + selectors.join(', ');
+        updateFormProgress(prefix);
       }
       showToast('DKIM: Set (' + selectors.join(', ') + ')');
     } else {
@@ -446,6 +448,7 @@ async function checkDkim(prefix, domain) {
       if (dkimSelect && dkimSelect.value === '') {
         dkimSelect.value = 'Not Set';
         if (hintEl) hintEl.textContent = 'Auto-detected: no titan/neo DKIM record found';
+        updateFormProgress(prefix);
       }
       showToast('DKIM: Not Set');
     }
