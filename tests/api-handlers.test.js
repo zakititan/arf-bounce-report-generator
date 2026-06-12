@@ -35,7 +35,7 @@ describe('checkRateLimit', () => {
     assert.equal(checkRateLimit(store, '10.0.0.2'), false, 'different IP not blocked');
   });
 
-  it('prunes stale entries when store exceeds limit', () => {
+  it('handles mixed-age store entries gracefully', () => {
     const store = new Map();
     const t0 = Date.now();
     for (let i = 0; i < 5; i++) {

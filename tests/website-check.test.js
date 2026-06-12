@@ -56,9 +56,9 @@ describe('extractTitle', () => {
     assert.equal(extractTitle('<title></title>'), '');
   });
 
-  it('handles nested HTML inside title (truncates at inner tag)', () => {
-    // Known limitation: regex stops at first < inside title
-    assert.equal(extractTitle('<title>My <b>Bold</b> Site</title>'), 'My');
+  it('returns empty string for title with nested HTML (regex cannot cross inner tags)', () => {
+    // Known limitation: regex [^<]* stops at the first < inside title, so <b> breaks matching entirely
+    assert.equal(extractTitle('<title>My <b>Bold</b> Site</title>'), '');
   });
 
   it('handles multiline title', () => {

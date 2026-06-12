@@ -111,14 +111,14 @@ describe('withMiddleware', () => {
     const handler = async (req, res) => res.status(200).json({ ok: true });
     const wrapped = withMiddleware(store, handler);
 
-    // RATE_LIMIT_MAX = 20, so 22 calls from one IP + 1 more = 23rd blocked
+    // checkRateLimit uses count > RATE_LIMIT_MAX (strict), so 21st call is blocked
     const req = mockReq('GET', { 'x-forwarded-for': '1.2.3.4' });
-    for (let i = 0; i < 22; i++) {
+    for (let i = 0; i < 20; i++) {
       const r = mockRes();
       await wrapped(req, r);
       assert.equal(r._status(), 200, `request ${i + 1} should succeed`);
     }
-    // 23rd request — rate limited
+    // 21st request — rate limited
     const blocked = mockRes();
     await wrapped(req, blocked);
     assert.equal(blocked._status(), 429);
