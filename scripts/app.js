@@ -366,8 +366,8 @@ async function lookupDomain(prefix) {
   btn.disabled = true;
   btn.textContent = 'Looking up…';
   card.classList.remove('visible', 'error', 'open');
-  if (websiteEl) websiteEl.innerHTML = '<span class="website-badge checking">checking…</span>';
-  if (dkimEl) dkimEl.innerHTML = '<span class="dkim-badge checking">checking…</span>';
+  if (websiteEl) websiteEl.innerHTML = '<div class="skeleton skeleton-sm"></div>';
+  if (dkimEl) dkimEl.innerHTML = '<div class="skeleton skeleton-sm"></div>';
 
   try {
     const data = await fetchWhois(domain);
@@ -420,6 +420,7 @@ async function checkWebsite(prefix, domain) {
       const mapped = mapVerdictToSelect(verdict);
       websiteSelect.value = mapped;
       if (hintEl) hintEl.textContent = 'Auto-detected: ' + reason;
+      updateFormProgress(prefix);
     }
     updateStepper(prefix, '2');
     showToast('Website: ' + verdict);
@@ -439,6 +440,7 @@ async function checkDkim(prefix, domain) {
       if (dkimSelect && dkimSelect.value === '') {
         dkimSelect.value = 'Set';
         if (hintEl) hintEl.textContent = 'Auto-detected via selector: ' + selectors.join(', ');
+        updateFormProgress(prefix);
       }
       showToast('DKIM: Set (' + selectors.join(', ') + ')');
     } else {
@@ -446,6 +448,7 @@ async function checkDkim(prefix, domain) {
       if (dkimSelect && dkimSelect.value === '') {
         dkimSelect.value = 'Not Set';
         if (hintEl) hintEl.textContent = 'Auto-detected: no titan/neo DKIM record found';
+        updateFormProgress(prefix);
       }
       showToast('DKIM: Not Set');
     }
@@ -701,6 +704,8 @@ function clearARF() {
   outputArea.appendChild(pre);
   document.getElementById('arf-validation-banner').classList.remove('visible');
   clearFieldErrors(['arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim']);
+  updateStepper('arf', '0');
+  updateFormProgress('arf');
   saveFormState();
 }
 
@@ -765,5 +770,7 @@ function clearBounce() {
   document.getElementById('bounce-output-section').style.display = 'none';
   document.getElementById('bounce-validation-banner').classList.remove('visible');
   clearFieldErrors(['bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-other-blocked-detail']);
+  updateStepper('bounce', '0');
+  updateFormProgress('bounce');
   saveFormState();
 }
