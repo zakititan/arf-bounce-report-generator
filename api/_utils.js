@@ -30,9 +30,10 @@ export function sanitiseDomain(raw) {
   // Reject localhost variants
   if (LOCALHOST_NAMES.includes(v)) return null;
 
-  // Reject malformed hostnames (must contain at least one dot, valid chars only)
-  if (!/^[a-z0-9][a-z0-9\-\.]{1,252}[a-z0-9]$/.test(v)) return null;
-  if (v.split('.').length < 2) return null;
+  // Reject malformed hostnames: each label must start/end with alnum and
+  // may contain hyphens; no consecutive dots; TLD must be at least 2 alpha chars.
+  // This prevents constructions like 'a..b.com' or '-sub.domain.com'.
+  if (!/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/.test(v)) return null;
 
   return v;
 }
@@ -75,6 +76,9 @@ export function verifyToken(token) {
 /**
  * In-process sliding-window rate limiter.
  * store: a shared Map (pass globalRateLimitStore from config.js)
+ *
+ * Automatically prunes entries older than the current window to prevent
+ * unbounded memory growth on long-lived serverless containers.
  */
 export function checkRateLimit(store, ip) {
   const now = Date.now();
@@ -83,6 +87,13 @@ export function checkRateLimit(store, ip) {
   if (now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
     // New window
     store.set(ip, { count: 1, windowStart: now });
+    // Prune stale entries to prevent unbounded Map growth
+    if (store.size > 10_000) {
+      const cutoff = now - RATE_LIMIT_WINDOW_MS;
+      for (const [k, v] of store) {
+        if (v.windowStart < cutoff) store.delete(k);
+      }
+    }
     return false; // not limited
   }
 
@@ -94,15 +105,17 @@ export function checkRateLimit(store, ip) {
 // ── Middleware wrapper ────────────────────────────────────────────────────────
 /**
  * Wraps a Vercel API handler with:
- *  - CORS headers
+ *  - CORS headers (origin restricted to APP_ORIGIN env var)
  *  - Rate limiting (uses the provided store)
  *  - Method guard (GET only)
  */
 export function withMiddleware(rateLimitStore, handler) {
   return async function (req, res) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    const allowedOrigin = process.env.APP_ORIGIN || '';
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigin || '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (allowedOrigin) res.setHeader('Vary', 'Origin');
     if (req.method === 'OPTIONS') return res.status(204).end();
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 

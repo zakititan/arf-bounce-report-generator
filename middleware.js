@@ -2,6 +2,13 @@
 const COOKIE_NAME = 'auth_session';
 const PUBLIC_PATHS = ['/login', '/api/login'];
 
+/**
+ * NOTE: This function is intentionally duplicated from api/_utils.js.
+ * The two files run in different runtimes:
+ *   - middleware.js  → Vercel Edge Runtime (Web Crypto API / crypto.subtle)
+ *   - api/_utils.js  → Node.js runtime     (Node 'crypto' module)
+ * Do NOT unify them into a shared module — the imports are incompatible across runtimes.
+ */
 async function verifyToken(token) {
   if (!token || !token.includes('.')) return false;
   const lastDot = token.lastIndexOf('.');

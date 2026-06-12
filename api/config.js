@@ -7,7 +7,10 @@
 export const RATE_LIMIT_MAX      = 20;      // requests per window per IP
 export const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
 
-// Shared rate-limit store across all API handlers (single Map, not per-endpoint)
+// Shared rate-limit store across all API handlers (single Map, not per-endpoint).
+// NOTE: This is an in-process store — it resets on each serverless cold start and
+// does NOT enforce limits across multiple concurrent instances. For strict global
+// rate limiting, replace this with Vercel KV (Redis) or a similar edge store.
 export const globalRateLimitStore = new Map();
 
 // ── Timeouts (ms) ────────────────────────────────────────────────────────────
@@ -18,7 +21,8 @@ export const TIMEOUT_HEALTH_MS  =  5_000; // health-check probes
 
 // ── DKIM ─────────────────────────────────────────────────────────────────────
 export const DKIM_FAMILIES      = ['titan', 'neo'];
-export const DKIM_INDEXED_RANGE = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+// Use Array.from so the range is easy to extend without missing a number
+export const DKIM_INDEXED_RANGE = Array.from({ length: 9 }, (_, i) => i + 1);
 
 // All selectors: titan, titan1…titan9, neo, neo1…neo9
 export const DKIM_SELECTORS = DKIM_FAMILIES.flatMap(family => [

@@ -31,10 +31,12 @@ export async function fetchWhois(domain) {
 
 export async function fetchWebsiteCheck(domain) {
   const res = await fetch('/api/website-check?domain=' + encodeURIComponent(domain));
-  return res.json(); // always 200; verdict + reason are in the body
+  if (!res.ok) throw new Error(`Website check failed: HTTP ${res.status}`);
+  return res.json();
 }
 
 export async function fetchDkimCheck(domain) {
   const res = await fetch('/api/dkim-check?domain=' + encodeURIComponent(domain));
+  if (!res.ok) throw new Error(`DKIM check failed: HTTP ${res.status}`);
   return res.json();
 }

@@ -11,6 +11,9 @@ import {
   globalRateLimitStore,
 } from './config.js';
 
+// TextDecoder at module scope — avoids re-instantiation on every request.
+const decoder = new TextDecoder();
+
 // ── Helpers ───────────────────────────────────────────────────────────
 
 function extractTitle(html) {
@@ -108,7 +111,6 @@ export default withMiddleware(globalRateLimitStore, async function handler(req, 
   const domain = sanitiseDomain(req.query.domain);
   if (!domain) return res.status(400).json({ error: 'Invalid or missing domain parameter' });
 
-  const decoder = new TextDecoder();
   const urls = [`https://${domain}`, `http://${domain}`];
 
   for (const url of urls) {
@@ -148,12 +150,13 @@ export default withMiddleware(globalRateLimitStore, async function handler(req, 
         bytesRead += value.byteLength;
       }
       reader.cancel();
+      // Flush any remaining bytes buffered by the streaming TextDecoder
+      bodyText += decoder.decode();
 
       if (!bodyText.trim()) {
         return res.status(200).json({ verdict: 'No website', status, reason: 'Empty response body' });
       }
 
-      const bodyLower  = bodyText.toLowerCase();
       const visibleText = bodyText.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
       const bodyLength = visibleText.length;
 
@@ -176,8 +179,8 @@ export default withMiddleware(globalRateLimitStore, async function handler(req, 
         });
       }
 
-      // Check parked keywords
-      if (bodyMatchesParked(bodyLower)) {
+      // Check parked keywords (bodyMatchesParked handles lowercasing internally)
+      if (bodyMatchesParked(bodyText)) {
         return res.status(200).json({
           verdict: 'No website',
           status,
