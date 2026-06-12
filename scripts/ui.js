@@ -131,12 +131,22 @@ export function updateFormProgress(prefix) {
 }
 
 // ── Domain age color ──────────────────────────────────────────────
+function parseAgeToDays(text) {
+  const years = text.match(/(\d+)\s*years?/i);
+  const months = text.match(/(\d+)\s*months?/i);
+  const days = text.match(/(\d+)\s*days?/i);
+  if (years) return parseInt(years[1], 10) * 365;
+  if (months) return parseInt(months[1], 10) * 30;
+  if (days) return parseInt(days[1], 10);
+  const plain = text.match(/(\d+)/);
+  return plain ? parseInt(plain[1], 10) : null;
+}
+
 export function applyDomainAgeColor(prefix) {
   const el = document.getElementById(prefix + '-result-age');
   if (!el || !el.textContent || el.textContent === '—') return;
-  const match = el.textContent.match(/(\d+)/);
-  if (!match) return;
-  const days = parseInt(match[1], 10);
+  const days = parseAgeToDays(el.textContent);
+  if (days === null) return;
   el.classList.remove('age-recent', 'age-moderate', 'age-established');
   if (days < 30) el.classList.add('age-recent');
   else if (days < 180) el.classList.add('age-moderate');
