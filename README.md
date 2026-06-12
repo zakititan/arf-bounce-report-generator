@@ -6,27 +6,43 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 
 ## Features
 
-- **ARF Report generation** — captures domain type, complaint count, email content type, screenshots, and assurances
-- **Bounce Report generation** — handles CSV bounce list upload, bounce count, domain checks, and assurances
-- **Domain Lookup** — auto-fetches WHOIS creation date, domain age, website validity, and DKIM status
-- **Website Check** — classifies domain as Legit / Fake / No website via serverless API
+### Report Generation
+- **ARF Report** — captures domain type, complaint count, email content type, screenshots, and assurances
+- **Bounce Report** — handles CSV bounce list upload, bounce count, domain checks, and assurances
+- **Inline screenshots** — attached images are rendered directly inside the ARF output section and included as labelled filenames in the clipboard copy
+- **One-click copy** — copies the full formatted report (including screenshot labels) to clipboard with a "Copied ✓" visual confirmation
+- **Keyboard shortcut** — `Ctrl`/`Cmd` + `Enter` generates the report for whichever panel is currently active
+- **Confirm before clear** — clearing either panel requires confirmation to prevent accidental data loss
+
+### Domain Lookup
+- **Auto WHOIS lookup** — fetches domain creation date and age via [whoisjson.com](https://whoisjson.com)
+- **Website Check** — classifies the domain as *Valid Website* or *No website* via a serverless function
 - **DKIM Check** — detects common DKIM selectors (titan, neo, google, etc.) via DNS lookup
-- **CSV parsing** — drag-and-drop bounce list upload with automatic row count and `< 40` threshold badge
-- **Auto-trigger Lookup from CSV** — domain is auto-detected from the CSV and Lookup fires automatically
-- **Email → Domain sanitisation** — pasting or typing a full email address in the domain field automatically strips the local-part (e.g. `user@example.com` → `example.com`)
-- **Screenshot attachments** — drag-and-drop image upload (max 10) with inline previews in the generated report
-- **One-click copy** — copies the formatted report text to clipboard with a "Copied ✓" visual confirmation
-- **Keyboard shortcut** — `Ctrl`/`Cmd` + `Enter` generates the report from whichever panel is active
-- **Form state persistence** — all field values are saved to `localStorage` and restored on next visit
-- **Dark / Light theme** — respects system preference with a manual toggle
-- **Login gate** — password-protected access via `login.html` + Vercel Edge middleware with HMAC-signed cookies
-- **CORS protection** — all API endpoints restricted to `APP_URL` origin
-- **IP rate limiting** — 20 requests/min per IP on all API endpoints
-- **Lookup debounce** — 1-second debounce prevents API spam from rapid button clicks or auto-triggers
-- **Stale cache invalidation** — changing the domain input immediately clears the cached WHOIS result
-- **Required field validation** — Generate button blocked until all required fields are filled
-- **Lookup-aware Generate button** — Generate is disabled while a domain lookup is in-flight
+- **Lookup debounce** — 1-second debounce prevents API spam from rapid button clicks or CSV auto-triggers
+- **Stale cache invalidation** — editing the domain input immediately clears the cached WHOIS result and hides the result card
+- **Per-panel generate gating** — the Generate button is disabled only while *that panel’s own* lookup is in-flight; the other panel remains unaffected
+
+### CSV (Bounce Panel)
+- **Drag-and-drop or file picker** upload of `.csv` bounce lists
+- **Automatic row count** with a `< 40` / `≥ 40` threshold badge
+- **Auto-detect domain from CSV** — domain is read from the 2nd column (index 1) of the first data row, falling back to the 3rd column (index 2); lookup fires automatically
+- Header row is always excluded from the bounce count
+
+### UX & Polish
+- **Email → domain sanitisation** — pasting or typing a full email address (`user@example.com`) in the domain field automatically strips the local-part to `example.com`; also strips `http(s)://`, trailing paths, and ports
+- **Form state persistence** — all 14 field values are saved to `localStorage` on every change and restored on next visit
+- **Dark / Light theme** — respects system preference with a manual toggle; preference is persisted to `localStorage`
+- **Required field validation** — all required fields are highlighted with inline error messages before generation is allowed
+- **Error resilience** — generate functions are wrapped in `try/catch` so unexpected errors surface as a user-facing toast instead of silently failing
+- **10-screenshot cap** — excess files are skipped with a descriptive toast
 - **Vercel Analytics & Speed Insights** — page view tracking and Core Web Vitals monitoring
+
+### Security
+- **Login gate** — password-protected access via `login.html` + Vercel Edge middleware with HMAC-SHA256 signed cookies
+- **Constant-time password comparison** — login handler uses an XOR loop to prevent timing attacks
+- **CORS** — all API endpoints restrict `Origin` to `APP_ORIGIN` env var; `Vary: Origin` header is set correctly
+- **Rate limiting** — max 20 requests/min per IP on all API endpoints; rate-limit map prunes stale entries above 10,000 to prevent memory leaks
+- **Hostname validation** — domain input regex rejects consecutive dots and hyphen-leading labels
 
 ---
 
@@ -41,17 +57,17 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ├── package.json                    # Node deps (used for local dev / tests)
 ├── .gitignore
 ├── api/
-│   ├── _utils.js                   # Shared helpers: sanitiseDomain, isRateLimited, signToken, verifyToken
-│   ├── config.js                   # Centralised API config (allowed origins, rate-limit settings, etc.)
+│   ├── _utils.js                   # Shared helpers: sanitiseDomain, isRateLimited (with map pruning), signToken, verifyToken, CORS headers
+│   ├── config.js                   # Centralised API config (allowed origins, rate-limit settings, DKIM selectors via Array.from)
 │   ├── whois.js                    # WHOIS lookup serverless function
-│   ├── website-check.js            # Website reachability & classification
+│   ├── website-check.js            # Website reachability & classification (TextDecoder at module scope)
 │   ├── dkim-check.js               # DNS DKIM selector check
 │   ├── health.js                   # Health-check endpoint
-│   └── login.js                    # Login handler — validates password, sets signed auth cookie
+│   └── login.js                    # Login handler — constant-time password check, sets signed auth cookie
 ├── scripts/
-│   ├── app.js                      # Core app logic (ARF + Bounce generate, domain lookup, CSV, state)
-│   ├── api.js                      # Frontend API helpers (fetchWhois, fetchWebsiteCheck, fetchDkimCheck)
-│   └── ui.js                       # UI helpers (showToast, copyOutput, drag events, validation display)
+│   ├── app.js                      # Core app logic (ARF + Bounce generate, domain lookup, CSV, unified state)
+│   ├── api.js                      # Frontend API helpers (fetchWhois, fetchWebsiteCheck, fetchDkimCheck — throws on non-2xx)
+│   └── ui.js                       # UI helpers (showToast, theme toggle with localStorage, drag events, validation display)
 ├── styles/
 │   └── main.css                    # All styles (light/dark theme, layout, components)
 └── tests/
@@ -65,13 +81,16 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 | Endpoint | Method | Description |
 |---|---|---|
 | `/api/whois?domain=` | GET | Returns domain creation date and age |
-| `/api/website-check?domain=` | GET | Returns `verdict`: Legit / Fake / No website |
-| `/api/dkim-check?domain=` | GET | Returns DKIM status and selectors found |
+| `/api/website-check?domain=` | GET | Returns `verdict`: Valid Website / No website + `reason` |
+| `/api/dkim-check?domain=` | GET | Returns DKIM `status` and `selectors_found` array |
 | `/api/login` | POST | Validates password and sets HMAC-signed auth cookie |
+| `/api/health` | GET | Health-check — returns `{ ok: true }` |
 
 All API endpoints enforce:
-- **CORS** — `Origin` must match `APP_URL` env var
-- **Rate limiting** — max 20 requests/min per IP (in-memory, per instance)
+- **CORS** — `Origin` must match `APP_ORIGIN` env var; `Vary: Origin` is set
+- **Rate limiting** — max 20 requests/min per IP (in-memory, per serverless instance)
+
+> **Note on rate limiting:** Because Vercel spins up multiple serverless instances, rate-limit state is per-process, not global. For strict enforcement across all instances, replace the in-memory map in `api/_utils.js` with [Vercel KV](https://vercel.com/docs/storage/vercel-kv).
 
 ---
 
@@ -84,7 +103,7 @@ Set these in the **Vercel Dashboard → Settings → Environment Variables**:
 | `APP_PASSWORD` | ✅ | Password used to access the tool via `login.html` |
 | `AUTH_SECRET` | ✅ | Random secret used to HMAC-sign the auth session cookie |
 | `WHOISJSON_API_KEY` | ✅ | API key for [whoisjson.com](https://whoisjson.com) WHOIS lookups |
-| `APP_URL` | ✅ | Your deployment URL (e.g. `https://your-app.vercel.app`) — used for CORS |
+| `APP_ORIGIN` | ✅ | Your deployment URL (e.g. `https://your-app.vercel.app`) — used for CORS |
 
 > **Generating `AUTH_SECRET`:** Run `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` or use [generate-secret.vercel.app](https://generate-secret.vercel.app/32).
 
@@ -94,14 +113,14 @@ Set these in the **Vercel Dashboard → Settings → Environment Variables**:
 
 ## Deployment
 
-This project is deployed on **Vercel** with no build step — it's served as static HTML with serverless API functions.
+This project is deployed on **Vercel** with no build step — it’s served as static HTML with serverless API functions.
 
 ### Deploy your own
 
 1. Fork or clone this repo
 2. Import into [Vercel](https://vercel.com)
 3. Set all four **Environment Variables** listed above
-4. Enable **Vercel Analytics** in your project's Analytics tab
+4. Enable **Vercel Analytics** in your project’s Analytics tab
 5. Deploy — no build command or output directory needed
 
 ---
@@ -123,7 +142,7 @@ Create a `.env.local` file in the project root:
 APP_PASSWORD=yourpassword
 AUTH_SECRET=your-random-hex-secret
 WHOISJSON_API_KEY=your-api-key
-APP_URL=http://localhost:3000
+APP_ORIGIN=http://localhost:3000
 ```
 
 > **Note:** Domain lookup, website check, and DKIM check will not work if you open `index.html` directly in a browser — they require the serverless API functions to be running via `vercel dev`.
@@ -134,16 +153,16 @@ APP_URL=http://localhost:3000
 
 ### ARF Report
 1. Select domain type and fill in complaint details
-2. Upload screenshot(s) of the email content (max 10)
+2. Upload screenshot(s) of the email content (max 10) via drag-and-drop or file picker
 3. Enter the sender domain and click **Lookup** to auto-fill WHOIS, website, and DKIM fields
    - You can paste a full email address — the local-part is stripped automatically
 4. Select active assurances
-5. Click **Generate ARF Report** (or press `Ctrl`/`Cmd` + `Enter`) → copy the output
+5. Click **Generate ARF Report** (or press `Ctrl`/`Cmd` + `Enter`) → screenshots appear inline; click **Copy** to copy the full report
 
 ### Bounce Report
 1. Select previous unblock status
 2. Upload the bounce list CSV (header row is automatically excluded from the count)
-   - Domain is auto-detected from the CSV and Lookup runs immediately
+   - Domain is auto-detected from the 2nd or 3rd CSV column and Lookup runs immediately
 3. Fill in remaining domain details
 4. Select active assurances
 5. Click **Generate Bounce Report** (or press `Ctrl`/`Cmd` + `Enter`) → copy the output
@@ -157,13 +176,31 @@ APP_URL=http://localhost:3000
 - **Auth cookie** is HMAC-SHA256 signed using `AUTH_SECRET` — forgery without the secret is not feasible
 - **Edge middleware** re-verifies the cookie signature on every request using Web Crypto API
 - **`api/login.js`** uses Node.js `crypto.createHmac` (Node runtime); **`middleware.js`** uses `crypto.subtle` (Edge runtime) — both produce identical signatures
-- **CORS** prevents API calls from unauthorized origins
-- **Rate limiting** mitigates brute-force and scraping attempts
+- **Constant-time comparison** in `api/login.js` prevents timing-based password inference
+- **CORS** prevents API calls from unauthorised origins; `Vary: Origin` is set to avoid cache poisoning
+- **Rate limiting** mitigates brute-force and scraping; stale entries are pruned to prevent memory leaks
 - **`AUTH_SECRET`** and **`APP_PASSWORD`** are never committed to the repo — always set via environment variables
 
 ---
 
 ## Changelog
+
+### 2026-06-12
+- **Security: constant-time password comparison** — `api/login.js` now uses an XOR loop (`safeEqual()`) to prevent timing attacks
+- **Security: CORS wildcard removed** — `Access-Control-Allow-Origin` now reads from `APP_ORIGIN` env var; `Vary: Origin` added to all API responses
+- **Security: rate-limit memory leak fixed** — `api/_utils.js` prunes the IP map when it exceeds 10,000 entries
+- **Security: hostname regex tightened** — domain validation now rejects consecutive dots and hyphen-leading labels
+- **Fix: duplicate `attachPersistListeners`** — removed a second `DOMContentLoaded` listener that was doubling up `change` event handlers
+- **Fix: `fetchWebsiteCheck` / `fetchDkimCheck` error handling** — frontend API helpers now throw on non-2xx HTTP responses instead of silently returning partial data
+- **Fix: `TextDecoder` in `website-check.js`** — moved to module scope (avoid re-instantiation per request) and stream is now flushed after `reader.cancel()`
+- **Fix: dead variable removed** — unused `bodyLower` variable removed from `website-check.js`
+- **Fix: DKIM map/filter refactor** — `forEach`+`push` replaced with `map`+`filter` in `dkim-check.js`
+- **Fix: `DKIM_INDEXED_RANGE` uses `Array.from`** — cleaner array construction in `api/config.js`
+- **Theme persistence** — light/dark preference now saved to `localStorage` and restored on page load
+- **CSV domain detection** — domain is read from the 2nd column (index 1) of the first data row, falling back to the 3rd column (index 2)
+- **Middleware comment** — added explanation for intentional `verifyToken` duplication across Edge and Node runtimes
+- **Rate-limit caveat documented** — `api/config.js` now notes that per-process rate limiting does not cover multiple serverless instances
+- **Env var renamed** — `APP_URL` renamed to `APP_ORIGIN` for clarity; update this in your Vercel dashboard
 
 ### 2026-06-11
 - **Email → domain sanitisation** — domain inputs now strip email local-parts on paste, blur, and before every Lookup call; also strips `http(s)://`, trailing paths, ports ([`4e43623`](https://github.com/zakititan/arf-bounce-report-generator/commit/4e436230420ef1ff0670e60a91f069570127b529))
