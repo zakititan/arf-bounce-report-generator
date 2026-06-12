@@ -51,7 +51,7 @@ export const PARKED_TITLE_KEYWORDS = [
 export const PARKED_KEYWORDS = [
   'parked', 'for sale', 'buy this domain', 'domain for sale', 'domain is parked',
   'under construction', 'coming soon', 'this domain', 'sedoparking',
-  'hugedomains', 'dan.com', 'godaddy', 'namecheap parking', 'afternic',
+  'hugedomains', 'dan.com', 'godaddy parking', 'godaddy default page', 'namecheap parking', 'afternic',
   'brandbucket', 'this page is intentionally left blank', 'default web page',
   'placeholder page', 'welcome to nginx', 'welcome to apache',
   'it works!', 'test page for', 'apache2 ubuntu default',

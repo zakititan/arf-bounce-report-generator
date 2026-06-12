@@ -210,23 +210,26 @@ APP_ORIGIN=http://localhost:3000
 ## Changelog
 
 ### 2026-06-12
-- **Visual polish: skeleton shimmer** — pulsing placeholder bars replace "checking…" text during domain website/DKIM lookups
-- **Theme transition** — toggling dark/light mode now applies a smooth 250ms crossfade via `.theme-transitioning` class
-- **Reduced motion support** — `prefers-reduced-motion: reduce` disables all animations for accessibility
-- **Stepper reset on clear** — clicking Clear now resets the progress stepper to step 1 (numbered dots + connectors return to idle state)
-- **Progress bar reset on clear** — form progress bar resets to 0% when a panel is cleared
-- **Progress bar on auto-fill** — form progress updates when website/DKIM selects are auto-populated from a CSV-triggered domain lookup
-- **Dark mode polish** — background changed to near-black (`#0c0c0b`); inverted text on coloured buttons (`#11110f`)
-- **Domain age color parsing** — `parseAgeToDays()` correctly handles "years", "months", and "days" text from the WHOIS API
-- **Sticky generate button** — panel action buttons stick to the bottom of the panel on scroll with `backdrop-filter: blur(12px)`
-- **Progress stepper UI** — larger numbered dots (28px), pulse animation on active step, checkmark (`✓`) animation on completion, shine effect on completed connectors
-- **Form progress bar** — thin animated bar under each panel header fills as required fields are completed
-- **Collapsible result card** — domain lookup results show a summary line; click to expand/collapse creation date, age, website, and DKIM details
-- **Assurance subgroups** — buttons group into "Email Hygiene" and "Technical" subsections with labelled headers
-- **Output enhancements** — report type pill (coloured ARF/Bounce badge), generation timestamp, and a bottom Copy to Clipboard button
-- **Screenshot empty state** — when no screenshots are attached, shows a centred icon + "No screenshots attached" + live `0 / 10` counter
-- **Toast type differentiation** — `showToast()` accepts a `type` parameter; CSS styles distinguish success/error/warning/info toasts
-- **Mobile layout** — lookup buttons go full-width, stepper becomes vertical, single-column form fields on screens under 600px
+- **Fix: `godaddy` false positive in PARKED_KEYWORDS** — replaced bare `'godaddy'` with `'godaddy parking'` and `'godaddy default page'`; prevents legitimate sites that mention GoDaddy as a partner (e.g. titan.email) from being misclassified as parked ([`ca06f1a`](https://github.com/zakititan/arf-bounce-report-generator/commit/ca06f1a))
+- **Fix: skeleton shimmer contrast** — shimmer highlight now uses `color-mix(in oklch, var(--color-text) 8%, transparent)` so the sweeping highlight is visible in both light and dark themes ([`6b90b08`](https://github.com/zakititan/arf-bounce-report-generator/commit/6b90b08))
+- **Fix: progress bar updates on auto-fill** — form progress correctly updates when website/DKIM selects are auto-populated from CSV-triggered domain lookup ([`13b9752`](https://github.com/zakititan/arf-bounce-report-generator/commit/13b9752))
+- **Fix: stepper reset on clear** — clicking Clear now resets the progress stepper to step 1; forward-only guard bypassed when `step = '0'` ([`84bf84f`](https://github.com/zakititan/arf-bounce-report-generator/commit/84bf84f), [`5dcfe5b`](https://github.com/zakititan/arf-bounce-report-generator/commit/5dcfe5b))
+- **Fix: progress bar reset on clear** — form progress bar resets to 0% when a panel is cleared ([`84bf84f`](https://github.com/zakititan/arf-bounce-report-generator/commit/84bf84f))
+- **Fix: dark mode button text** — inverted text on coloured buttons uses near-black (`#11110f`) for readability ([`3072ee4`](https://github.com/zakititan/arf-bounce-report-generator/commit/3072ee4))
+- **Fix: domain age color parsing** — `parseAgeToDays()` correctly handles "years", "months", and "days" text from the WHOIS API ([`cde84d1`](https://github.com/zakititan/arf-bounce-report-generator/commit/cde84d1))
+- **Fix: sticky generate button** — panel action buttons use `position: sticky; bottom: 0` with `overflow: clip` and `backdrop-filter: blur(12px)` ([`8ca3286`](https://github.com/zakititan/arf-bounce-report-generator/commit/8ca3286))
+- **Skeleton shimmer** — pulsing placeholder bars replace "checking…" text during domain website/DKIM lookups ([`2610811`](https://github.com/zakititan/arf-bounce-report-generator/commit/2610811))
+- **Theme transition** — toggling dark/light mode applies a smooth 250ms crossfade via `.theme-transitioning` class ([`2610811`](https://github.com/zakititan/arf-bounce-report-generator/commit/2610811))
+- **Reduced motion support** — `prefers-reduced-motion: reduce` disables all animation and transition durations for accessibility ([`2610811`](https://github.com/zakititan/arf-bounce-report-generator/commit/2610811))
+- **Dark mode polish** — background changed to near-black (`#0c0c0b`); adjusted palette for improved contrast ([`6ccc8a2`](https://github.com/zakititan/arf-bounce-report-generator/commit/6ccc8a2))
+- **Progress stepper UI** — larger numbered dots (28px), pulse animation on active step, checkmark (`✓`) animation on completion, shine effect on completed connectors ([`31b4652`](https://github.com/zakititan/arf-bounce-report-generator/commit/31b4652), [`904047f`](https://github.com/zakititan/arf-bounce-report-generator/commit/904047f))
+- **Collapsible result card** — domain lookup results show a summary line; click to expand/collapse creation date, age, website, and DKIM details ([`9930271`](https://github.com/zakititan/arf-bounce-report-generator/commit/9930271))
+- **Form progress bar** — thin animated bar under each panel header fills as required fields are completed ([`904047f`](https://github.com/zakititan/arf-bounce-report-generator/commit/904047f))
+- **Assurance subgroups** — buttons group into "Email Hygiene" and "Technical" subsections with labelled headers ([`904047f`](https://github.com/zakititan/arf-bounce-report-generator/commit/904047f))
+- **Output enhancements** — report type pill (coloured ARF/Bounce badge), generation timestamp, and a bottom Copy to Clipboard button ([`904047f`](https://github.com/zakititan/arf-bounce-report-generator/commit/904047f))
+- **Screenshot empty state** — when no screenshots are attached, shows centred icon + "No screenshots attached" + live `0 / 10` counter ([`904047f`](https://github.com/zakititan/arf-bounce-report-generator/commit/904047f))
+- **Toast type differentiation** — `showToast()` accepts a `type` parameter; CSS styles distinguish success/error/warning/info toasts ([`904047f`](https://github.com/zakititan/arf-bounce-report-generator/commit/904047f))
+- **Mobile layout** — lookup buttons go full-width, stepper becomes vertical, single-column form fields on screens under 600px ([`904047f`](https://github.com/zakititan/arf-bounce-report-generator/commit/904047f))
 
 ### 2026-06-11
 - **Security: constant-time password comparison** — `api/login.js` now uses an XOR loop (`safeEqual()`) to prevent timing attacks ([`8657c1e`](https://github.com/zakititan/arf-bounce-report-generator/commit/8657c1e))
