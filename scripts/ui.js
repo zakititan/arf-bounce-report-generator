@@ -162,10 +162,15 @@ export function toggleResultCard(prefix) {
 }
 
 // ── Screenshot empty state ────────────────────────────────────────
-export function renderScreenshotEmptyState(prefix) {
-  const previews = document.getElementById(prefix + '-previews');
+export function renderScreenshotEmptyState(containerId, stateKey) {
+  const previews = document.getElementById(containerId);
   if (!previews) return;
-  const count = prefix === 'arf' ? (window.__state?.arf?.screenshots?.length || 0) : 0;
+  let count = 0;
+  if (stateKey) {
+    const parts = stateKey.split('.');
+    const val = window.__state?.[parts[0]]?.[parts[1]];
+    if (Array.isArray(val)) count = val.length;
+  }
   previews.innerHTML = '<div class="screenshot-empty"><div class="screenshot-empty-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div><span class="screenshot-empty-text">No screenshots attached</span><span class="screenshot-empty-count">' + count + ' / 10</span></div>';
 }
 

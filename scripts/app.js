@@ -34,12 +34,14 @@ const LS_KEY = 'arf_bounce_form_state';
 const state = {
   arf: {
     screenshots: [],
+    assuranceScreenshots: [],
     whois: null,
     lookupInFlight: false,
     lookupLastFired: 0,
   },
   bounce: {
     csvCount: null,
+    assuranceScreenshots: [],
     whois: null,
     lookupInFlight: false,
     lookupLastFired: 0,
@@ -56,11 +58,15 @@ document.addEventListener('DOMContentLoaded', () => {
   initDomainInputs();
   initEventDelegation();
   initDragDrop();
+  initPasteSupport();
   // attachPersistListeners called exactly once here — do NOT add another
   // DOMContentListener for it elsewhere in this file.
   attachPersistListeners();
   updateFormProgress('arf');
   updateFormProgress('bounce');
+  renderPreviews('arf', 'screenshots');
+  renderPreviews('arf', 'assuranceScreenshots');
+  renderPreviews('bounce', 'assuranceScreenshots');
 });
 
 // ── Keyboard shortcuts (Ctrl/Cmd + Enter) ─────────────────────────────
@@ -96,6 +102,7 @@ function initDomainInputs() {
       if (sanitised !== pasted.trim()) showToast('Email stripped → ' + sanitised);
       state[prefix].whois = null;
       document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
+      if (prefix === 'arf') lookupDomain('arf');
     });
     input.addEventListener('blur', () => {
       const original = input.value;
@@ -123,16 +130,54 @@ function copyOutputWithFeedback(id) {
   const outputArea = el.closest('.output-area');
   const text = (outputArea && outputArea.dataset.copyText) || el.textContent;
   if (!text.trim()) return;
-  navigator.clipboard.writeText(text).then(() => {
-    showToast('Copied to clipboard!');
-    const btn = outputArea?.querySelector('.copy-btn-wrap button');
-    if (btn) {
-      const original = btn.textContent;
-      btn.textContent = 'Copied ✓';
-      btn.style.color = 'var(--color-success)';
-      setTimeout(() => { btn.textContent = original; btn.style.color = ''; }, 2000);
-    }
-  }).catch(() => showToast('Copy failed — please copy manually.'));
+
+  const doCopy = (writePromise) => {
+    writePromise.then(() => {
+      showToast('Copied to clipboard!');
+      const btn = outputArea?.querySelector('.copy-btn-wrap button');
+      if (btn) {
+        const original = btn.textContent;
+        btn.textContent = 'Copied ✓';
+        btn.style.color = 'var(--color-success)';
+        setTimeout(() => { btn.textContent = original; btn.style.color = ''; }, 2000);
+      }
+    }).catch(() => showToast('Copy failed — please copy manually.'));
+  };
+
+  // Build rich clipboard with embedded screenshots
+  const grids = outputArea?.querySelectorAll('.output-screenshots-inline');
+  if (grids && grids.length > 0 && typeof ClipboardItem !== 'undefined') {
+    // Strip screenshot filename lists from HTML text (images with labels below replace them)
+    const textForHtml = text.split('\n── ')[0];
+    let html = '<div style="font-family:DM Mono,Courier New,monospace;font-size:12px;line-height:1.9;">';
+    html += textForHtml.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+    html += '</div>';
+    let imgCount = 0;
+    grids.forEach(grid => {
+      const divider = grid.previousElementSibling;
+      if (divider && divider.classList.contains('output-inline-divider')) {
+        html += '<div style="font-family:DM Mono,Courier New,monospace;font-size:11px;color:#7a7974;margin-top:12px;letter-spacing:0.05em;">';
+        html += divider.textContent.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        html += '</div>';
+      }
+      html += '<div style="margin-top:8px">';
+      grid.querySelectorAll('img').forEach(img => {
+        imgCount++;
+        html += '<div style="margin-bottom:12px">';
+        html += '<img src="' + img.src + '" alt="' + img.alt.replace(/"/g, '&quot;') + '" style="max-width:400px;height:auto;border-radius:6px;border:1px solid #d4d1ca;display:block;margin-bottom:4px">';
+        html += '<span style="font-family:DM Mono,Courier New,monospace;font-size:11px;color:#7a7974">' + imgCount + '. ' + img.alt.replace(/"/g, '&quot;') + '</span>';
+        html += '</div>';
+      });
+      html += '</div>';
+    });
+    const item = new ClipboardItem({
+      'text/plain': new Blob([text], { type: 'text/plain' }),
+      'text/html': new Blob([html], { type: 'text/html' }),
+    });
+    doCopy(navigator.clipboard.write([item]));
+  } else {
+    doCopy(navigator.clipboard.writeText(text));
+  }
 }
 
 // ── Event delegation (replaces inline onclick/onchange handlers) ──────
@@ -186,7 +231,7 @@ function initEventDelegation() {
         break;
       case 'remove-screenshot': {
         const idx = parseInt(target.getAttribute('data-index'), 10);
-        if (!isNaN(idx)) removeScreenshot(idx);
+        if (!isNaN(idx)) removeScreenshot(idx, target.getAttribute('data-panel'), target.getAttribute('data-key'));
         break;
       }
     }
@@ -202,17 +247,31 @@ function initEventDelegation() {
   });
 
   // File inputs need special handling (change events on file inputs)
-  document.getElementById('arf-screenshot-input')?.addEventListener('change', (e) => handleFileSelect(e, 'arf'));
+  document.getElementById('arf-screenshot-input')?.addEventListener('change', (e) => handleFileSelect(e, 'arf', 'screenshots'));
+  document.getElementById('arf-assurance-screenshot-input')?.addEventListener('change', (e) => handleFileSelect(e, 'arf', 'assuranceScreenshots'));
+  document.getElementById('bounce-assurance-screenshot-input')?.addEventListener('change', (e) => handleFileSelect(e, 'bounce', 'assuranceScreenshots'));
   document.getElementById('bounce-csv-input')?.addEventListener('change', (e) => handleCsvSelect(e));
 }
 
 // ── Drag-and-drop init ───────────────────────────────────────────────
 function initDragDrop() {
-  const arfZone = document.getElementById('arf-upload-zone');
-  if (arfZone) {
-    arfZone.addEventListener('dragover', (e) => handleDragOver(e, 'arf-upload-zone'));
-    arfZone.addEventListener('dragleave', (e) => handleDragLeave(e, 'arf-upload-zone'));
-    arfZone.addEventListener('drop', (e) => handleDrop(e, 'arf'));
+  const emailZone = document.getElementById('arf-upload-zone');
+  if (emailZone) {
+    emailZone.addEventListener('dragover', (e) => handleDragOver(e, 'arf-upload-zone'));
+    emailZone.addEventListener('dragleave', (e) => handleDragLeave(e, 'arf-upload-zone'));
+    emailZone.addEventListener('drop', (e) => handleDrop(e, 'arf', 'screenshots'));
+  }
+  const arfAssuranceZone = document.getElementById('arf-assurance-upload-zone');
+  if (arfAssuranceZone) {
+    arfAssuranceZone.addEventListener('dragover', (e) => handleDragOver(e, 'arf-assurance-upload-zone'));
+    arfAssuranceZone.addEventListener('dragleave', (e) => handleDragLeave(e, 'arf-assurance-upload-zone'));
+    arfAssuranceZone.addEventListener('drop', (e) => handleDrop(e, 'arf', 'assuranceScreenshots'));
+  }
+  const bounceAssuranceZone = document.getElementById('bounce-assurance-upload-zone');
+  if (bounceAssuranceZone) {
+    bounceAssuranceZone.addEventListener('dragover', (e) => handleDragOver(e, 'bounce-assurance-upload-zone'));
+    bounceAssuranceZone.addEventListener('dragleave', (e) => handleDragLeave(e, 'bounce-assurance-upload-zone'));
+    bounceAssuranceZone.addEventListener('drop', (e) => handleDrop(e, 'bounce', 'assuranceScreenshots'));
   }
   const csvZone = document.getElementById('bounce-csv-zone');
   if (csvZone) {
@@ -220,6 +279,33 @@ function initDragDrop() {
     csvZone.addEventListener('dragleave', handleCsvDragLeave);
     csvZone.addEventListener('drop', handleCsvDrop);
   }
+}
+
+// ── Paste images from clipboard ───────────────────────────────────────
+let _pasteZone = null; // { prefix, key } of zone under mouse
+
+function initPasteSupport() {
+  const zones = [
+    { id: 'arf-upload-zone',            prefix: 'arf',   key: 'screenshots' },
+    { id: 'arf-assurance-upload-zone',  prefix: 'arf',   key: 'assuranceScreenshots' },
+    { id: 'bounce-assurance-upload-zone', prefix: 'bounce', key: 'assuranceScreenshots' },
+  ];
+  zones.forEach(({ id, prefix, key }) => {
+    const zone = document.getElementById(id);
+    if (!zone) return;
+    zone.addEventListener('mouseenter', () => { _pasteZone = { prefix, key }; });
+    zone.addEventListener('mouseleave', () => { if (_pasteZone?.prefix === prefix && _pasteZone?.key === key) _pasteZone = null; });
+  });
+  document.addEventListener('paste', (e) => {
+    if (!_pasteZone) return;
+    const images = Array.from(e.clipboardData.items)
+      .filter(item => item.type.startsWith('image/'))
+      .map(item => item.getAsFile())
+      .filter(Boolean);
+    if (images.length === 0) return;
+    e.preventDefault();
+    processFiles(images, _pasteZone.prefix, _pasteZone.key);
+  });
 }
 
 // ── localStorage persistence ──────────────────────────────────────────
@@ -457,33 +543,36 @@ async function checkDkim(prefix, domain) {
 }
 
 // ── Screenshots (capped at MAX_SCREENSHOTS) ───────────────────────────
-function handleDrop(e, prefix) {
+function handleDrop(e, prefix, key) {
   e.preventDefault();
-  document.getElementById(prefix + '-upload-zone').classList.remove('dragover');
-  processFiles(Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/')), prefix);
+  const zoneId = prefix + (key === 'assuranceScreenshots' ? '-assurance' : '') + '-upload-zone';
+  document.getElementById(zoneId).classList.remove('dragover');
+  processFiles(Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/')), prefix, key);
 }
-function handleFileSelect(e, prefix) { processFiles(Array.from(e.target.files), prefix); e.target.value = ''; }
-function processFiles(files, prefix) {
-  if (prefix !== 'arf') return;
-  const screenshots = state.arf.screenshots;
-  const available = MAX_SCREENSHOTS - screenshots.length;
+function handleFileSelect(e, prefix, key) { processFiles(Array.from(e.target.files), prefix, key); e.target.value = ''; }
+function processFiles(files, prefix, key) {
+  const target = state[prefix][key];
+  const available = MAX_SCREENSHOTS - target.length;
   if (available <= 0) { showToast('Maximum ' + MAX_SCREENSHOTS + ' screenshots allowed.'); return; }
   const toProcess = files.slice(0, available);
   if (files.length > available) showToast('Only ' + available + ' more screenshot(s) allowed (max ' + MAX_SCREENSHOTS + '). ' + (files.length - available) + ' file(s) skipped.');
   toProcess.forEach(file => {
     const reader = new FileReader();
-    reader.onload = ev => { screenshots.push({ dataUrl: ev.target.result, name: file.name }); renderPreviews(); };
+    reader.onload = ev => { target.push({ dataUrl: ev.target.result, name: file.name }); renderPreviews(prefix, key); };
     reader.readAsDataURL(file);
   });
 }
-function renderPreviews() {
-  const container = document.getElementById('arf-previews');
+function renderPreviews(prefix, key) {
+  const containerId = prefix + (key === 'assuranceScreenshots' ? '-assurance' : '') + '-previews';
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const target = state[prefix][key];
   container.innerHTML = '';
-  if (state.arf.screenshots.length === 0) {
-    renderScreenshotEmptyState('arf');
+  if (target.length === 0) {
+    renderScreenshotEmptyState(containerId, prefix + '.' + key);
     return;
   }
-  state.arf.screenshots.forEach((s, i) => {
+  target.forEach((s, i) => {
     const thumb = document.createElement('div');
     thumb.className = 'screenshot-thumb';
     const img = document.createElement('img');
@@ -497,6 +586,8 @@ function renderPreviews() {
     const removeBtn = document.createElement('button');
     removeBtn.className = 'remove-btn';
     removeBtn.setAttribute('data-action', 'remove-screenshot');
+    removeBtn.setAttribute('data-panel', prefix);
+    removeBtn.setAttribute('data-key', key);
     removeBtn.setAttribute('data-index', String(i));
     removeBtn.title = 'Remove';
     removeBtn.setAttribute('aria-label', 'Remove screenshot');
@@ -504,14 +595,14 @@ function renderPreviews() {
     thumb.appendChild(removeBtn);
     container.appendChild(thumb);
   });
-  if (state.arf.screenshots.length > 0) {
+  if (target.length > 0) {
     const c = document.createElement('span');
     c.className = 'screenshot-count';
-    c.textContent = state.arf.screenshots.length + ' / ' + MAX_SCREENSHOTS + ' screenshot' + (state.arf.screenshots.length > 1 ? 's' : '') + ' attached';
+    c.textContent = target.length + ' / ' + MAX_SCREENSHOTS + ' screenshot' + (target.length > 1 ? 's' : '') + ' attached';
     container.appendChild(c);
   }
 }
-function removeScreenshot(idx) { state.arf.screenshots.splice(idx, 1); renderPreviews(); }
+function removeScreenshot(idx, prefix, key) { state[prefix][key].splice(idx, 1); renderPreviews(prefix, key); }
 
 // ── Conditional fields ────────────────────────────────────────────────
 function toggleOtherBlockedField(val) {
@@ -602,6 +693,7 @@ function generateARF() {
     const assurances = getActiveAssurances('arf');
     const whois = state.arf.whois;
     const hasScreenshots = state.arf.screenshots.length > 0;
+    const hasAssuranceSs = state.arf.assuranceScreenshots.length > 0;
 
     const lines = [
       '#ARF',
@@ -623,6 +715,11 @@ function generateARF() {
       copyLines.push('');
       copyLines.push('── Screenshots ──');
       state.arf.screenshots.forEach((s, i) => copyLines.push((i + 1) + '. ' + s.name));
+    }
+    if (hasAssuranceSs) {
+      copyLines.push('');
+      copyLines.push('── Assurance Screenshots ──');
+      state.arf.assuranceScreenshots.forEach((s, i) => copyLines.push((i + 1) + '. ' + s.name));
     }
     const fullCopyText = copyLines.join('\n\n');
 
@@ -670,6 +767,32 @@ function generateARF() {
       outputArea.appendChild(grid);
     }
 
+    if (hasAssuranceSs) {
+      const divider = document.createElement('div');
+      divider.className = 'output-inline-divider';
+      divider.textContent = '── Assurance Screenshots ──';
+      outputArea.appendChild(divider);
+
+      const grid = document.createElement('div');
+      grid.className = 'output-screenshots-inline';
+      state.arf.assuranceScreenshots.forEach((s, i) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'output-screenshot-item';
+        const img = document.createElement('img');
+        img.src = s.dataUrl;
+        img.alt = s.name;
+        img.title = s.name;
+        img.loading = 'lazy';
+        const label = document.createElement('span');
+        label.className = 'output-screenshot-label';
+        label.textContent = (i + 1) + '. ' + s.name;
+        wrapper.appendChild(img);
+        wrapper.appendChild(label);
+        grid.appendChild(wrapper);
+      });
+      outputArea.appendChild(grid);
+    }
+
     outputSection.style.display = 'block';
     outputSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     showToast('ARF report generated!');
@@ -686,7 +809,9 @@ function clearARF() {
   ['arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim','arf-domain-input']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   state.arf.screenshots.length = 0;
-  renderPreviews();
+  state.arf.assuranceScreenshots.length = 0;
+  renderPreviews('arf', 'screenshots');
+  renderPreviews('arf', 'assuranceScreenshots');
   clearAssurances('arf');
   state.arf.whois = null;
   document.getElementById('arf-domain-result').classList.remove('visible', 'error');
@@ -722,6 +847,7 @@ function generateBounce() {
     const countDisplay = count !== null ? ' (' + count + ')' : '';
     const assurances = getActiveAssurances('bounce');
     const whois = state.bounce.whois;
+    const hasAssuranceSs = state.bounce.assuranceScreenshots.length > 0;
     const lines = [
       '#Bounce',
       'Previous unblock request for the same account : ' + (v('bounce-prev-unblock') || '-'),
@@ -736,15 +862,61 @@ function generateBounce() {
       'DKIM: ' + (v('bounce-dkim') || '-'),
       'Assurances : ' + (assurances.length > 0 ? assurances.join(', ') : '-')
     );
-    const fullText = lines.join('\n\n');
-    const outputEl = document.getElementById('bounce-output-text');
-    outputEl.textContent = fullText;
-    outputEl.closest('.output-area').dataset.copyText = fullText;
-    const section = document.getElementById('bounce-output-section');
-    section.style.display = 'block';
-    section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    const copyLines = [...lines];
+    if (hasAssuranceSs) {
+      copyLines.push('');
+      copyLines.push('── Assurance Screenshots ──');
+      state.bounce.assuranceScreenshots.forEach((s, i) => copyLines.push((i + 1) + '. ' + s.name));
+    }
+    const fullCopyText = copyLines.join('\n\n');
+
+    const outputSection = document.getElementById('bounce-output-section');
+    const outputArea = outputSection.querySelector('.output-area');
+
+    const copyBtn = outputArea.querySelector('.copy-btn-wrap');
+    outputArea.innerHTML = '';
+    if (copyBtn) outputArea.appendChild(copyBtn);
+
+    outputArea.dataset.copyText = fullCopyText;
+
     const ts = document.getElementById('bounce-output-timestamp');
     if (ts) ts.textContent = 'Generated: ' + getOutputTimestamp();
+
+    const pre = document.createElement('pre');
+    pre.id = 'bounce-output-text';
+    pre.className = 'output-text';
+    pre.textContent = lines.join('\n');
+    outputArea.appendChild(pre);
+
+    if (hasAssuranceSs) {
+      const divider = document.createElement('div');
+      divider.className = 'output-inline-divider';
+      divider.textContent = '── Assurance Screenshots ──';
+      outputArea.appendChild(divider);
+
+      const grid = document.createElement('div');
+      grid.className = 'output-screenshots-inline';
+      state.bounce.assuranceScreenshots.forEach((s, i) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'output-screenshot-item';
+        const img = document.createElement('img');
+        img.src = s.dataUrl;
+        img.alt = s.name;
+        img.title = s.name;
+        img.loading = 'lazy';
+        const label = document.createElement('span');
+        label.className = 'output-screenshot-label';
+        label.textContent = (i + 1) + '. ' + s.name;
+        wrapper.appendChild(img);
+        wrapper.appendChild(label);
+        grid.appendChild(wrapper);
+      });
+      outputArea.appendChild(grid);
+    }
+
+    outputSection.style.display = 'block';
+    outputSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     showToast('Bounce report generated!');
   } catch (err) {
     showToast('Failed to generate report — please try again.');
@@ -759,6 +931,8 @@ function clearBounce() {
   ['bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-domain-input']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   clearCsv();
+  state.bounce.assuranceScreenshots.length = 0;
+  renderPreviews('bounce', 'assuranceScreenshots');
   toggleOtherBlockedField('');
   clearAssurances('bounce');
   state.bounce.whois = null;

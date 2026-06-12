@@ -10,7 +10,9 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **ARF Report** — captures domain type, complaint count, email content type, screenshots, and assurances
 - **Bounce Report** — handles CSV bounce list upload, bounce count, domain checks, and assurances
 - **Inline screenshots** — attached images are rendered directly inside the ARF output section and included as labelled filenames in the clipboard copy
+- **Assurance screenshots** — separate screenshot upload zones for ARF and Bounce assurance evidence, rendered inline in the output alongside email screenshots
 - **One-click copy** — copies the full formatted report (including screenshot labels) to clipboard with a "Copied ✓" visual confirmation
+- **Rich clipboard with images** — when screenshots are attached, `Ctrl+C` writes both `text/plain` and `text/html` with embedded `<img>` tags so pasting into email clients, Word, or Google Docs renders images inline
 - **Bottom copy button** — an additional Copy to Clipboard button at the end of the output area for convenience
 - **Report type pill + timestamp** — each generated report shows a coloured report type badge (ARF/Bounce) and a "Generated:" timestamp
 - **Keyboard shortcut** — `Ctrl`/`Cmd` + `Enter` generates the report for whichever panel is currently active
@@ -27,6 +29,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Domain age color coding** — age display is colour-coded: red for <30 days, amber for 30–180 days, green for 180+ days
 - **Collapsible result card** — domain lookup results show a summary line by default; click to expand/collapse details
 - **Skeleton shimmer** — pulsing placeholder bars replace "checking…" text while website/DKIM results load
+- **Paste screenshots on hover** — hover over any upload zone and press `Ctrl+V` to paste clipboard images directly into that zone; no click-to-focus required
 
 ### CSV (Bounce Panel)
 - **Drag-and-drop or file picker** upload of `.csv` bounce lists
@@ -36,6 +39,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 
 ### UX & Polish
 - **Email → domain sanitisation** — pasting or typing a full email address (`user@example.com`) in the domain field automatically strips the local-part to `example.com`; also strips `http(s)://`, trailing paths, and ports
+- **Auto-lookup on paste (ARF)** — pasting a domain or email into the ARF domain field automatically fires the WHOIS/Website/DKIM lookup without needing to click the Lookup button
 - **Form state persistence** — all 14 field values are saved to `localStorage` on every change and restored on next visit
 - **Dark / Light theme** — respects system preference with a manual toggle; preference is persisted to `localStorage` with a smooth 250ms crossfade transition
 - **Required field validation** — all required fields are highlighted with inline error messages before generation is allowed
@@ -210,6 +214,12 @@ APP_ORIGIN=http://localhost:3000
 ## Changelog
 
 ### 2026-06-12
+- **Rich clipboard copy with embedded images** — `copyOutputWithFeedback()` uses `navigator.clipboard.write()` with `ClipboardItem` (`text/plain` + `text/html`) when screenshots are present; HTML embeds `<img src="data:...">` tags for inline image rendering in email clients, Word, and Google Docs ([`70bd834`](https://github.com/zakititan/arf-bounce-report-generator/commit/70bd834))
+- **Assurance screenshot sections** — separate upload zones for ARF and Bounce assurance evidence; `assuranceScreenshots: []` in both panel states; `processFiles`, `renderPreviews`, `removeScreenshot`, `handleDrop` generalised to accept prefix + key; output includes `── Assurance Screenshots ──` divider with inline images ([`65c2813`](https://github.com/zakititan/arf-bounce-report-generator/commit/65c2813))
+- **Auto-lookup on paste (ARF)** — pasting a domain or email into the ARF domain field automatically fires the WHOIS/Website/DKIM lookup; the 1-second debounce prevents rapid re-triggers ([`a48ff2a`](https://github.com/zakititan/arf-bounce-report-generator/commit/a48ff2a))
+- **Paste images on hover** — `initPasteSupport()` uses document-level paste listener + `mouseenter`/`mouseleave` tracking per upload zone; `_pasteZone` variable routes `Ctrl+V` to the hovered zone without requiring a click to focus ([`480cb86`](https://github.com/zakititan/arf-bounce-report-generator/commit/480cb86), [`cc94992`](https://github.com/zakititan/arf-bounce-report-generator/commit/cc94992))
+- **Fix: HTML clipboard uses `<br>` for line spacing** — newlines converted to `<br>` tags instead of relying on `white-space: pre-wrap` for universal paste-target compatibility ([`3544c94`](https://github.com/zakititan/arf-bounce-report-generator/commit/3544c94))
+- **Fix: screenshot filename list stripped from HTML clipboard text** — `text.split('\n── ')[0]` removes duplicate filename info from the HTML portion since images with labels below already carry that information; `text/plain` keeps the full text ([`f04f9bf`](https://github.com/zakititan/arf-bounce-report-generator/commit/f04f9bf))
 - **Fix: `godaddy` false positive in PARKED_KEYWORDS** — replaced bare `'godaddy'` with `'godaddy parking'` and `'godaddy default page'`; prevents legitimate sites that mention GoDaddy as a partner (e.g. titan.email) from being misclassified as parked ([`ca06f1a`](https://github.com/zakititan/arf-bounce-report-generator/commit/ca06f1a))
 - **Fix: skeleton shimmer contrast** — shimmer highlight now uses `color-mix(in oklch, var(--color-text) 8%, transparent)` so the sweeping highlight is visible in both light and dark themes ([`6b90b08`](https://github.com/zakititan/arf-bounce-report-generator/commit/6b90b08))
 - **Fix: progress bar updates on auto-fill** — form progress correctly updates when website/DKIM selects are auto-populated from CSV-triggered domain lookup ([`13b9752`](https://github.com/zakititan/arf-bounce-report-generator/commit/13b9752))
