@@ -281,6 +281,8 @@ function initDragDrop() {
 }
 
 // ── Paste images from clipboard ───────────────────────────────────────
+let _pasteZone = null; // { prefix, key } of zone under mouse
+
 function initPasteSupport() {
   const zones = [
     { id: 'arf-upload-zone',            prefix: 'arf',   key: 'screenshots' },
@@ -290,16 +292,18 @@ function initPasteSupport() {
   zones.forEach(({ id, prefix, key }) => {
     const zone = document.getElementById(id);
     if (!zone) return;
-    zone.tabIndex = 0;
-    zone.addEventListener('paste', (e) => {
-      const images = Array.from(e.clipboardData.items)
-        .filter(item => item.type.startsWith('image/'))
-        .map(item => item.getAsFile())
-        .filter(Boolean);
-      if (images.length === 0) return;
-      e.preventDefault();
-      processFiles(images, prefix, key);
-    });
+    zone.addEventListener('mouseenter', () => { _pasteZone = { prefix, key }; });
+    zone.addEventListener('mouseleave', () => { if (_pasteZone?.prefix === prefix && _pasteZone?.key === key) _pasteZone = null; });
+  });
+  document.addEventListener('paste', (e) => {
+    if (!_pasteZone) return;
+    const images = Array.from(e.clipboardData.items)
+      .filter(item => item.type.startsWith('image/'))
+      .map(item => item.getAsFile())
+      .filter(Boolean);
+    if (images.length === 0) return;
+    e.preventDefault();
+    processFiles(images, _pasteZone.prefix, _pasteZone.key);
   });
 }
 
