@@ -669,8 +669,6 @@ function generateARF() {
 
     outputSection.style.display = 'block';
     outputSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    const genBtn = document.getElementById('arf-generate-btn');
-    if (genBtn) { genBtn.classList.add('btn-success-burst'); setTimeout(() => genBtn.classList.remove('btn-success-burst'), 600); }
     showToast('ARF report generated!');
   } catch (err) {
     showToast('Failed to generate report — please try again.');
@@ -742,8 +740,6 @@ function generateBounce() {
     section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     const ts = document.getElementById('bounce-output-timestamp');
     if (ts) ts.textContent = 'Generated: ' + getOutputTimestamp();
-    const genBtn = document.getElementById('bounce-generate-btn');
-    if (genBtn) { genBtn.classList.add('btn-success-burst'); setTimeout(() => genBtn.classList.remove('btn-success-burst'), 600); }
     showToast('Bounce report generated!');
   } catch (err) {
     showToast('Failed to generate report — please try again.');
