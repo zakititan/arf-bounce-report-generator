@@ -5,11 +5,12 @@
 
 // ── Toast ─────────────────────────────────────────────────────────────
 // role=status + aria-live=polite ensures screen readers announce toasts.
-export function showToast(msg) {
+export function showToast(msg, type) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.setAttribute('role', 'status');
   t.setAttribute('aria-live', 'polite');
+  t.setAttribute('data-type', type || 'info');
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2500);
 }
@@ -83,4 +84,95 @@ export function handleCsvDragOver(e) {
 }
 export function handleCsvDragLeave() {
   document.getElementById('bounce-csv-zone').classList.remove('dragover');
+}
+
+// ── Progress stepper ──────────────────────────────────────────────
+export function updateStepper(prefix, step) {
+  const steps = document.querySelectorAll('#' + prefix + '-stepper .stepper-step');
+  const stepNum = step === 'done' ? Infinity : parseInt(step, 10);
+  let nextActive = false;
+  const currentMaxDone = Array.from(steps).reduce((max, s) => {
+    return s.classList.contains('done') ? Math.max(max, parseInt(s.getAttribute('data-step'), 10)) : max;
+  }, 0);
+  const effectiveStep = Math.max(stepNum, currentMaxDone);
+  steps.forEach(s => {
+    const sStep = parseInt(s.getAttribute('data-step'), 10);
+    if (sStep <= effectiveStep) {
+      s.classList.add('done');
+      s.classList.remove('active');
+    } else if (!nextActive) {
+      s.classList.remove('done');
+      s.classList.add('active');
+      nextActive = true;
+    } else {
+      s.classList.remove('done', 'active');
+    }
+  });
+
+  const connectors = document.querySelectorAll('#' + prefix + '-stepper .stepper-connector');
+  connectors.forEach(c => {
+    const before = parseInt(c.getAttribute('data-before'), 10);
+    if (before <= effectiveStep) c.classList.add('done');
+    else c.classList.remove('done');
+  });
+}
+
+// ── Form progress bar ─────────────────────────────────────────────
+export function updateFormProgress(prefix) {
+  const bar = document.getElementById(prefix + '-form-progress-fill');
+  if (!bar) return;
+  const fields = bar.getAttribute('data-fields') ? bar.getAttribute('data-fields').split(',') : [];
+  const filled = fields.filter(id => {
+    const el = document.getElementById(id);
+    return el && el.value && el.value.trim() !== '' && el.value !== 'Select...';
+  }).length;
+  const pct = fields.length ? Math.round((filled / fields.length) * 100) : 0;
+  bar.style.width = pct + '%';
+}
+
+// ── Domain age color ──────────────────────────────────────────────
+function parseAgeToDays(text) {
+  const years = text.match(/(\d+)\s*years?/i);
+  const months = text.match(/(\d+)\s*months?/i);
+  const days = text.match(/(\d+)\s*days?/i);
+  if (years) return parseInt(years[1], 10) * 365;
+  if (months) return parseInt(months[1], 10) * 30;
+  if (days) return parseInt(days[1], 10);
+  const plain = text.match(/(\d+)/);
+  return plain ? parseInt(plain[1], 10) : null;
+}
+
+export function applyDomainAgeColor(prefix) {
+  const el = document.getElementById(prefix + '-result-age');
+  if (!el || !el.textContent || el.textContent === '—') return;
+  const days = parseAgeToDays(el.textContent);
+  if (days === null) return;
+  el.classList.remove('age-recent', 'age-moderate', 'age-established');
+  if (days < 30) el.classList.add('age-recent');
+  else if (days < 180) el.classList.add('age-moderate');
+  else el.classList.add('age-established');
+}
+
+// ── Collapsible result card toggle ────────────────────────────────
+export function toggleResultCard(prefix) {
+  const card = document.getElementById(prefix + '-domain-result');
+  if (card) card.classList.toggle('open');
+}
+
+// ── Screenshot empty state ────────────────────────────────────────
+export function renderScreenshotEmptyState(prefix) {
+  const previews = document.getElementById(prefix + '-previews');
+  if (!previews) return;
+  const count = prefix === 'arf' ? (window.__state?.arf?.screenshots?.length || 0) : 0;
+  previews.innerHTML = '<div class="screenshot-empty"><div class="screenshot-empty-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div><span class="screenshot-empty-text">No screenshots attached</span><span class="screenshot-empty-count">' + count + ' / 10</span></div>';
+}
+
+// ── Generate timestamp for output ─────────────────────────────────
+export function getOutputTimestamp() {
+  const now = new Date();
+  return now.toLocaleString('en-US', {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false
+  });
 }

@@ -19,7 +19,10 @@ import {
   showToast, initThemeToggle,
   clearFieldErrors, showValidationErrors,
   handleDragOver, handleDragLeave,
-  handleCsvDragOver, handleCsvDragLeave
+  handleCsvDragOver, handleCsvDragLeave,
+  updateStepper, updateFormProgress,
+  applyDomainAgeColor, toggleResultCard,
+  renderScreenshotEmptyState, getOutputTimestamp
 } from './ui.js';
 
 // ── Constants ─────────────────────────────────────────────────────────
@@ -42,6 +45,7 @@ const state = {
     lookupLastFired: 0,
   },
 };
+window.__state = state;
 let lastActivePanel = null; // tracks which panel the user last interacted with (for Ctrl/Cmd+Enter)
 
 // ── Init ──────────────────────────────────────────────────────────────
@@ -53,8 +57,10 @@ document.addEventListener('DOMContentLoaded', () => {
   initEventDelegation();
   initDragDrop();
   // attachPersistListeners called exactly once here — do NOT add another
-  // DOMContentLoaded listener for it elsewhere in this file.
+  // DOMContentListener for it elsewhere in this file.
   attachPersistListeners();
+  updateFormProgress('arf');
+  updateFormProgress('bounce');
 });
 
 // ── Keyboard shortcuts (Ctrl/Cmd + Enter) ─────────────────────────────
@@ -175,6 +181,9 @@ function initEventDelegation() {
       case 'toggle-suboption':
         toggleContactFormSuboption(target);
         break;
+      case 'toggle-result-card':
+        toggleResultCard(target.closest('.result-card').id.replace('-domain-result', ''));
+        break;
       case 'remove-screenshot': {
         const idx = parseInt(target.getAttribute('data-index'), 10);
         if (!isNaN(idx)) removeScreenshot(idx);
@@ -238,7 +247,13 @@ function restoreFormState() {
 }
 
 function attachPersistListeners() {
-  PERSIST_FIELDS.forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', saveFormState); });
+  PERSIST_FIELDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('change', () => { saveFormState(); updateFormProgress('arf'); updateFormProgress('bounce'); });
+      el.addEventListener('input', () => { updateFormProgress('arf'); updateFormProgress('bounce'); });
+    }
+  });
 }
 
 // ── Generate-button state (per-panel only) ────────────────────────────
@@ -350,7 +365,7 @@ async function lookupDomain(prefix) {
   setGenerateBtnState(prefix);
   btn.disabled = true;
   btn.textContent = 'Looking up…';
-  card.classList.remove('visible', 'error');
+  card.classList.remove('visible', 'error', 'open');
   if (websiteEl) websiteEl.innerHTML = '<span class="website-badge checking">checking…</span>';
   if (dkimEl) dkimEl.innerHTML = '<span class="dkim-badge checking">checking…</span>';
 
@@ -360,13 +375,20 @@ async function lookupDomain(prefix) {
     createdEl.textContent = data.creation_date;
     ageEl.textContent = data.domain_age || '—';
     card.classList.remove('error');
-    card.classList.add('visible');
+    card.classList.add('visible', 'open');
+    const summaryEl = document.getElementById(prefix + '-result-summary');
+    if (summaryEl) summaryEl.textContent = data.domain_age ? data.creation_date + ' — ' + data.domain_age : data.creation_date;
+    updateStepper(prefix, '1');
+    applyDomainAgeColor(prefix);
     showToast('Domain info fetched! Checking website & DKIM…');
   } catch (err) {
     state[prefix].whois = null;
     createdEl.textContent = err.message || 'Lookup failed';
     ageEl.textContent = '—';
-    card.classList.add('visible', 'error');
+    card.classList.add('visible', 'error', 'open');
+    const summaryEl = document.getElementById(prefix + '-result-summary');
+    if (summaryEl) summaryEl.textContent = err.message || 'Lookup failed';
+    updateStepper(prefix, '1');
     showToast('WHOIS lookup failed — still checking website & DKIM…');
   } finally {
     // Always run website & DKIM checks regardless of WHOIS outcome
@@ -399,8 +421,9 @@ async function checkWebsite(prefix, domain) {
       websiteSelect.value = mapped;
       if (hintEl) hintEl.textContent = 'Auto-detected: ' + reason;
     }
+    updateStepper(prefix, '2');
     showToast('Website: ' + verdict);
-  } catch { if (websiteEl) websiteEl.innerHTML = '<span class="website-badge nosite">Check failed</span>'; }
+  } catch { if (websiteEl) websiteEl.innerHTML = '<span class="website-badge nosite">Check failed</span>'; updateStepper(prefix, '2'); }
 }
 
 async function checkDkim(prefix, domain) {
@@ -426,7 +449,8 @@ async function checkDkim(prefix, domain) {
       }
       showToast('DKIM: Not Set');
     }
-  } catch { if (dkimEl) dkimEl.innerHTML = '<span class="dkim-badge notset">Check failed</span>'; }
+    updateStepper(prefix, '3');
+  } catch { if (dkimEl) dkimEl.innerHTML = '<span class="dkim-badge notset">Check failed</span>'; updateStepper(prefix, '3'); }
 }
 
 // ── Screenshots (capped at MAX_SCREENSHOTS) ───────────────────────────
@@ -452,6 +476,10 @@ function processFiles(files, prefix) {
 function renderPreviews() {
   const container = document.getElementById('arf-previews');
   container.innerHTML = '';
+  if (state.arf.screenshots.length === 0) {
+    renderScreenshotEmptyState('arf');
+    return;
+  }
   state.arf.screenshots.forEach((s, i) => {
     const thumb = document.createElement('div');
     thumb.className = 'screenshot-thumb';
@@ -512,7 +540,7 @@ function getActiveContactFormSuboptions() {
 }
 function getActiveAssurances(prefix) {
   const vals = [];
-  document.querySelectorAll('#' + prefix + '-assurance-btns .assurance-btn.active').forEach(b => {
+  document.querySelectorAll('[id^="' + prefix + '-assurance-btns-"] .assurance-btn.active, [id="' + prefix + '-assurance-btns"] .assurance-btn.active').forEach(b => {
     const dataVal = b.getAttribute('data-value');
     if (dataVal === 'Other') { const t = document.getElementById(prefix + '-other-text').value.trim(); vals.push(t || 'Other'); }
     else if (dataVal === 'Contact Form' && prefix === 'bounce') { const subs = getActiveContactFormSuboptions(); vals.push(subs.length > 0 ? 'Contact Form (' + subs.join(', ') + ')' : 'Contact Form'); }
@@ -521,7 +549,7 @@ function getActiveAssurances(prefix) {
   return vals;
 }
 function clearAssurances(prefix) {
-  document.querySelectorAll('#' + prefix + '-assurance-btns .assurance-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('[id^="' + prefix + '-assurance-btns-"] .assurance-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(prefix + '-other-field').classList.remove('visible');
   const ot = document.getElementById(prefix + '-other-text'); if (ot) ot.value = '';
   if (prefix === 'bounce') {
@@ -603,6 +631,9 @@ function generateARF() {
     if (copyBtn) outputArea.appendChild(copyBtn);
 
     outputArea.dataset.copyText = fullCopyText;
+
+    const ts = document.getElementById('arf-output-timestamp');
+    if (ts) ts.textContent = 'Generated: ' + getOutputTimestamp();
 
     const pre = document.createElement('pre');
     pre.id = 'arf-output-text';
@@ -707,6 +738,8 @@ function generateBounce() {
     const section = document.getElementById('bounce-output-section');
     section.style.display = 'block';
     section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const ts = document.getElementById('bounce-output-timestamp');
+    if (ts) ts.textContent = 'Generated: ' + getOutputTimestamp();
     showToast('Bounce report generated!');
   } catch (err) {
     showToast('Failed to generate report — please try again.');

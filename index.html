@@ -39,12 +39,22 @@
   <main class="main-content" role="main">
 
     <!-- ARF PANEL -->
-    <section class="panel" aria-labelledby="arf-title">
+    <section class="panel" id="arf-panel" aria-labelledby="arf-title">
       <div class="panel-header">
         <span class="panel-badge badge-arf">#ARF</span>
         <h2 class="panel-title" id="arf-title">ARF Complaint Report</h2>
       </div>
+      <div class="form-progress-wrap">
+        <div class="form-progress-bar"><div class="form-progress-fill" id="arf-form-progress-fill" data-fields="arf-domain-type,arf-complaints,arf-prev-unblock,arf-blocked-lt2,arf-email-type,arf-website,arf-dkim"></div></div>
+      </div>
       <div class="panel-body">
+        <div class="progress-stepper" id="arf-stepper">
+          <div class="stepper-step active" data-step="1"><div class="stepper-dot">1</div><span class="stepper-label">WHOIS</span></div>
+          <div class="stepper-connector" data-before="1"></div>
+          <div class="stepper-step" data-step="2"><div class="stepper-dot">2</div><span class="stepper-label">Website</span></div>
+          <div class="stepper-connector" data-before="2"></div>
+          <div class="stepper-step" data-step="3"><div class="stepper-dot">3</div><span class="stepper-label">DKIM</span></div>
+        </div>
         <div class="field-row">
           <div class="field">
             <label for="arf-domain-type">Domain Type<span class="req">*</span></label>
@@ -89,11 +99,18 @@
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Lookup
             </button>
           </div>
-          <div class="domain-result-card" id="arf-domain-result">
-            <div class="domain-result-row"><span class="domain-result-label">Created On</span><span class="domain-result-value" id="arf-result-created">—</span></div>
-            <div class="domain-result-row"><span class="domain-result-label">Domain Age</span><span class="domain-result-value" id="arf-result-age">—</span></div>
-            <div class="domain-result-row"><span class="domain-result-label">Website</span><span class="domain-result-value" id="arf-result-website"><span class="website-badge checking">checking…</span></span></div>
-            <div class="domain-result-row"><span class="domain-result-label">DKIM</span><span class="domain-result-value" id="arf-result-dkim"><span class="dkim-badge checking">checking…</span></span></div>
+          <div class="domain-result-card result-card" id="arf-domain-result">
+            <div class="result-card-summary" data-action="toggle-result-card" data-panel="arf">
+              <span class="result-card-summary-label">Domain Lookup Results</span>
+              <span class="result-card-summary-value" id="arf-result-summary">—</span>
+              <svg class="result-card-toggle" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+            <div class="result-card-detail">
+              <div class="domain-result-row"><span class="domain-result-label">Created On</span><span class="domain-result-value" id="arf-result-created">—</span></div>
+              <div class="domain-result-row"><span class="domain-result-label">Domain Age</span><span class="domain-result-value" id="arf-result-age">—</span></div>
+              <div class="domain-result-row"><span class="domain-result-label">Website</span><span class="domain-result-value" id="arf-result-website"><span class="website-badge checking">checking…</span></span></div>
+              <div class="domain-result-row"><span class="domain-result-label">DKIM</span><span class="domain-result-value" id="arf-result-dkim"><span class="dkim-badge checking">checking…</span></span></div>
+            </div>
           </div>
         </div>
         <div class="field">
@@ -108,9 +125,13 @@
         </div>
         <div class="assurance-group">
           <span class="assurance-group-label">Assurances</span>
-          <div class="assurance-btn-group" id="arf-assurance-btns">
+          <span class="assurance-subgroup-label">Email Hygiene</span>
+          <div class="assurance-btn-group" id="arf-assurance-btns-email">
             <button type="button" class="assurance-btn" data-value="Mailchimp" data-action="toggle-assurance" data-panel="arf"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Mailchimp</button>
             <button type="button" class="assurance-btn" data-value="Sendgrid" data-action="toggle-assurance" data-panel="arf"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Sendgrid</button>
+          </div>
+          <span class="assurance-subgroup-label">Technical</span>
+          <div class="assurance-btn-group" id="arf-assurance-btns-tech">
             <button type="button" class="assurance-btn" data-value="Password Reset" data-action="toggle-assurance" data-panel="arf"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Password Reset</button>
             <button type="button" class="assurance-btn" data-value="IP shared" data-action="toggle-assurance" data-panel="arf"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>IP shared</button>
             <button type="button" class="assurance-btn" data-value="Virus scan shared" data-action="toggle-assurance" data-panel="arf"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Virus scan shared</button>
@@ -130,7 +151,7 @@
           <ul class="validation-banner-list" id="arf-validation-list"></ul>
         </div>
       </div>
-      <div class="panel-actions">
+      <div class="panel-actions sticky">
         <button class="btn btn-primary btn-full" id="arf-generate-btn" data-action="generate" data-panel="arf">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Generate ARF Report
         </button>
@@ -139,21 +160,34 @@
       <div class="panel-body" id="arf-output-section" style="display:none;">
         <hr>
         <div class="output-header">Generated Report</div>
+        <span class="output-report-type arf" id="arf-report-type">ARF Report</span>
+        <span class="output-timestamp" id="arf-output-timestamp"></span>
         <div class="output-area">
           <div class="copy-btn-wrap"><button class="btn btn-secondary" data-action="copy" data-target="arf-output-text">Copy</button></div>
           <pre id="arf-output-text" class="output-text"></pre>
           <div id="arf-output-images"></div>
         </div>
+        <button class="btn btn-secondary btn-copy-bottom" data-action="copy" data-target="arf-output-text">Copy to Clipboard</button>
       </div>
     </section>
 
     <!-- BOUNCE PANEL -->
-    <section class="panel" aria-labelledby="bounce-title">
+    <section class="panel" id="bounce-panel" aria-labelledby="bounce-title">
       <div class="panel-header">
         <span class="panel-badge badge-bounce">#Bounce</span>
         <h2 class="panel-title" id="bounce-title">Bounce Report</h2>
       </div>
+      <div class="form-progress-wrap">
+        <div class="form-progress-bar"><div class="form-progress-fill" id="bounce-form-progress-fill" data-fields="bounce-prev-unblock,bounce-other-blocked,bounce-website,bounce-dkim"></div></div>
+      </div>
       <div class="panel-body">
+        <div class="progress-stepper" id="bounce-stepper">
+          <div class="stepper-step active" data-step="1"><div class="stepper-dot">1</div><span class="stepper-label">WHOIS</span></div>
+          <div class="stepper-connector" data-before="1"></div>
+          <div class="stepper-step" data-step="2"><div class="stepper-dot">2</div><span class="stepper-label">Website</span></div>
+          <div class="stepper-connector" data-before="2"></div>
+          <div class="stepper-step" data-step="3"><div class="stepper-dot">3</div><span class="stepper-label">DKIM</span></div>
+        </div>
         <div class="field">
           <label for="bounce-prev-unblock">Previous Unblock Request?<span class="req">*</span></label>
           <select id="bounce-prev-unblock"><option value="">Select...</option><option value="Yes">Yes</option><option value="No">No</option></select>
@@ -205,11 +239,18 @@
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Lookup
             </button>
           </div>
-          <div class="domain-result-card" id="bounce-domain-result">
-            <div class="domain-result-row"><span class="domain-result-label">Created On</span><span class="domain-result-value" id="bounce-result-created">—</span></div>
-            <div class="domain-result-row"><span class="domain-result-label">Domain Age</span><span class="domain-result-value" id="bounce-result-age">—</span></div>
-            <div class="domain-result-row"><span class="domain-result-label">Website</span><span class="domain-result-value" id="bounce-result-website"><span class="website-badge checking">checking…</span></span></div>
-            <div class="domain-result-row"><span class="domain-result-label">DKIM</span><span class="domain-result-value" id="bounce-result-dkim"><span class="dkim-badge checking">checking…</span></span></div>
+          <div class="domain-result-card result-card" id="bounce-domain-result">
+            <div class="result-card-summary" data-action="toggle-result-card" data-panel="bounce">
+              <span class="result-card-summary-label">Domain Lookup Results</span>
+              <span class="result-card-summary-value" id="bounce-result-summary">—</span>
+              <svg class="result-card-toggle" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+            <div class="result-card-detail">
+              <div class="domain-result-row"><span class="domain-result-label">Created On</span><span class="domain-result-value" id="bounce-result-created">—</span></div>
+              <div class="domain-result-row"><span class="domain-result-label">Domain Age</span><span class="domain-result-value" id="bounce-result-age">—</span></div>
+              <div class="domain-result-row"><span class="domain-result-label">Website</span><span class="domain-result-value" id="bounce-result-website"><span class="website-badge checking">checking…</span></span></div>
+              <div class="domain-result-row"><span class="domain-result-label">DKIM</span><span class="domain-result-value" id="bounce-result-dkim"><span class="dkim-badge checking">checking…</span></span></div>
+            </div>
           </div>
         </div>
         <div class="field">
@@ -219,11 +260,15 @@
         </div>
         <div class="assurance-group">
           <span class="assurance-group-label">Assurances</span>
-          <div class="assurance-btn-group" id="bounce-assurance-btns">
+          <span class="assurance-subgroup-label">Email Hygiene</span>
+          <div class="assurance-btn-group" id="bounce-assurance-btns-email">
             <button type="button" class="assurance-btn" data-value="Neverbounce" data-action="toggle-assurance" data-panel="bounce"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Neverbounce</button>
             <button type="button" class="assurance-btn" data-value="Zerobounce" data-action="toggle-assurance" data-panel="bounce"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Zerobounce</button>
             <button type="button" class="assurance-btn" data-value="Mailchimp" data-action="toggle-assurance" data-panel="bounce"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Mailchimp</button>
             <button type="button" class="assurance-btn" data-value="Sendgrid" data-action="toggle-assurance" data-panel="bounce"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Sendgrid</button>
+          </div>
+          <span class="assurance-subgroup-label">Technical</span>
+          <div class="assurance-btn-group" id="bounce-assurance-btns-tech">
             <button type="button" class="assurance-btn" data-value="Password reset" data-action="toggle-assurance" data-panel="bounce"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Password reset</button>
             <button type="button" class="assurance-btn" data-value="IP shared" data-action="toggle-assurance" data-panel="bounce"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>IP shared</button>
             <button type="button" class="assurance-btn" data-value="Virus scan shared" data-action="toggle-assurance" data-panel="bounce"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Virus scan shared</button>
@@ -250,7 +295,7 @@
           <ul class="validation-banner-list" id="bounce-validation-list"></ul>
         </div>
       </div>
-      <div class="panel-actions">
+      <div class="panel-actions sticky">
         <button class="btn btn-primary btn-full" id="bounce-generate-btn" data-action="generate" data-panel="bounce">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Generate Bounce Report
         </button>
@@ -259,10 +304,13 @@
       <div class="panel-body" id="bounce-output-section" style="display:none;">
         <hr>
         <div class="output-header">Generated Report</div>
+        <span class="output-report-type bounce" id="bounce-report-type">Bounce Report</span>
+        <span class="output-timestamp" id="bounce-output-timestamp"></span>
         <div class="output-area">
           <div class="copy-btn-wrap"><button class="btn btn-secondary" data-action="copy" data-target="bounce-output-text">Copy</button></div>
           <pre id="bounce-output-text" class="output-text"></pre>
         </div>
+        <button class="btn btn-secondary btn-copy-bottom" data-action="copy" data-target="bounce-output-text">Copy to Clipboard</button>
       </div>
     </section>
 
