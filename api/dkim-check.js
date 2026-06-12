@@ -11,12 +11,9 @@ export default withMiddleware(globalRateLimitStore, async function handler(req, 
     DKIM_SELECTORS.map(selector => lookupDkim(selector, domain))
   );
 
-  const matched = [];
-  results.forEach((r, i) => {
-    if (r.status === 'fulfilled' && r.value) {
-      matched.push({ selector: DKIM_SELECTORS[i], record: r.value });
-    }
-  });
+  const matched = results
+    .map((r, i) => (r.status === 'fulfilled' && r.value ? { selector: DKIM_SELECTORS[i], record: r.value } : null))
+    .filter(Boolean);
 
   if (matched.length > 0) {
     return res.status(200).json({

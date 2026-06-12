@@ -10,6 +10,7 @@
  *           try/catch on generate, addEventListener replacing window.* inline handlers
  *           where feasible, debounced Lookup button, per-panel generate-button gating,
  *           lastActivePanel for keyboard shortcut, confirm before clear.
+ *           attachPersistListeners called once inside DOMContentLoaded (not twice).
  *  Perf:    10-screenshot cap with warning toast.
  */
 
@@ -51,6 +52,9 @@ document.addEventListener('DOMContentLoaded', () => {
   initDomainInputs();
   initEventDelegation();
   initDragDrop();
+  // attachPersistListeners called exactly once here — do NOT add another
+  // DOMContentLoaded listener for it elsewhere in this file.
+  attachPersistListeners();
 });
 
 // ── Keyboard shortcuts (Ctrl/Cmd + Enter) ─────────────────────────────
@@ -236,7 +240,6 @@ function restoreFormState() {
 function attachPersistListeners() {
   PERSIST_FIELDS.forEach(id => { const el = document.getElementById(id); if (el) el.addEventListener('change', saveFormState); });
 }
-document.addEventListener('DOMContentLoaded', attachPersistListeners);
 
 // ── Generate-button state (per-panel only) ────────────────────────────
 // Each panel's generate button is only gated by its own lookup being in
@@ -300,8 +303,12 @@ function processCsv(file) {
     else { badge.textContent = '≥ 40 ⚠'; badge.className = 'csv-lt40-badge warn'; }
     document.getElementById('bounce-csv-result').classList.add('visible');
     if (lines.length >= 2) {
-      const col3Value = parseCsvRow(lines[1])[2] || '';
-      const detectedDomain = extractDomain(col3Value);
+      // Domain is taken from the 2nd column (index 1) if it yields a valid
+      // domain/email, otherwise falls back to the 3rd column (index 2).
+      const cols = parseCsvRow(lines[1]);
+      const col2Value = cols[1] || '';
+      const col3Value = cols[2] || '';
+      const detectedDomain = extractDomain(col2Value) || extractDomain(col3Value);
       const domainInput = document.getElementById('bounce-domain-input');
       if (detectedDomain && domainInput) {
         domainInput.value = detectedDomain;

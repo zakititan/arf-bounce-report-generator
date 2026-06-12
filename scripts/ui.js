@@ -18,12 +18,15 @@ export function showToast(msg) {
 export function initThemeToggle() {
   const btn = document.querySelector('[data-theme-toggle]');
   const root = document.documentElement;
-  let theme = matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light';
+  // Restore persisted preference, fall back to OS preference
+  let theme = localStorage.getItem('theme') ||
+    (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
   root.setAttribute('data-theme', theme);
   setThemeIcon(btn, theme);
   btn && btn.addEventListener('click', () => {
     theme = theme === 'dark' ? 'light' : 'dark';
     root.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
     setThemeIcon(btn, theme);
   });
 }

@@ -5,6 +5,18 @@ const PASSWORD = process.env.APP_PASSWORD;
 const COOKIE_NAME = 'auth_session';
 const MAX_AGE = 60 * 60 * 8; // 8 hours
 
+/**
+ * Constant-time string comparison to prevent timing attacks.
+ * Returns true only if a === b in both length and content.
+ */
+function safeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 export default function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
@@ -24,7 +36,7 @@ export default function handler(req, res) {
 
   const { password } = req.body || {};
 
-  if (!password || password !== PASSWORD) {
+  if (!password || !safeEqual(password, PASSWORD)) {
     res.status(401).json({ error: 'Incorrect password' });
     return;
   }
