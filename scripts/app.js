@@ -282,21 +282,6 @@ function extractDomain(value) {
   return atIdx !== -1 ? value.slice(atIdx + 1).toLowerCase().trim() : value.toLowerCase().trim();
 }
 
-/**
- * Finds the column index most likely to contain an email or domain by
- * scanning the CSV header row for common column names.
- * Falls back to column index 2 (the historic default) if no match is found.
- */
-function detectDomainColumnIndex(headerRow) {
-  const cols = parseCsvRow(headerRow);
-  const candidates = ['email', 'email address', 'e-mail', 'address', 'recipient', 'domain'];
-  for (const candidate of candidates) {
-    const idx = cols.findIndex(c => c.toLowerCase().trim() === candidate);
-    if (idx !== -1) return idx;
-  }
-  return 2; // legacy fallback
-}
-
 // ── CSV Bounce List ───────────────────────────────────────────────────
 function handleCsvDrop(e) {
   e.preventDefault();
@@ -318,11 +303,12 @@ function processCsv(file) {
     else { badge.textContent = '≥ 40 ⚠'; badge.className = 'csv-lt40-badge warn'; }
     document.getElementById('bounce-csv-result').classList.add('visible');
     if (lines.length >= 2) {
-      // Detect which column holds the email/domain by reading the header row,
-      // rather than blindly assuming column index 2.
-      const colIdx = detectDomainColumnIndex(lines[0]);
-      const col3Value = parseCsvRow(lines[1])[colIdx] || '';
-      const detectedDomain = extractDomain(col3Value);
+      // Domain is taken from the 2nd column (index 1) if it yields a valid
+      // domain/email, otherwise falls back to the 3rd column (index 2).
+      const cols = parseCsvRow(lines[1]);
+      const col2Value = cols[1] || '';
+      const col3Value = cols[2] || '';
+      const detectedDomain = extractDomain(col2Value) || extractDomain(col3Value);
       const domainInput = document.getElementById('bounce-domain-input');
       if (detectedDomain && domainInput) {
         domainInput.value = detectedDomain;
