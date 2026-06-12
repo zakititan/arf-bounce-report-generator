@@ -11,38 +11,54 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Bounce Report** — handles CSV bounce list upload, bounce count, domain checks, and assurances
 - **Inline screenshots** — attached images are rendered directly inside the ARF output section and included as labelled filenames in the clipboard copy
 - **One-click copy** — copies the full formatted report (including screenshot labels) to clipboard with a "Copied ✓" visual confirmation
+- **Bottom copy button** — an additional Copy to Clipboard button at the end of the output area for convenience
+- **Report type pill + timestamp** — each generated report shows a coloured report type badge (ARF/Bounce) and a "Generated:" timestamp
 - **Keyboard shortcut** — `Ctrl`/`Cmd` + `Enter` generates the report for whichever panel is currently active
 - **Confirm before clear** — clearing either panel requires confirmation to prevent accidental data loss
 
 ### Domain Lookup
 - **Auto WHOIS lookup** — fetches domain creation date and age via [whoisjson.com](https://whoisjson.com)
-- **Website Check** — classifies the domain as *Valid Website* or *No website* via a serverless function
+- **Website Check** — classifies the domain as *Valid Website* or *No website* via a serverless function; supports SPA shell detection for JS-heavy sites
 - **DKIM Check** — detects common DKIM selectors (titan, neo, google, etc.) via DNS lookup
 - **Lookup debounce** — 1-second debounce prevents API spam from rapid button clicks or CSV auto-triggers
 - **Stale cache invalidation** — editing the domain input immediately clears the cached WHOIS result and hides the result card
-- **Per-panel generate gating** — the Generate button is disabled only while *that panel’s own* lookup is in-flight; the other panel remains unaffected
+- **Per-panel generate gating** — the Generate button is disabled only while *that panel's own* lookup is in-flight; the other panel remains unaffected
+- **Progress stepper** — numbered steps (1/2/3) with pulse animation, checkmark on completion, and shine effect on connectors
+- **Domain age color coding** — age display is colour-coded: red for <30 days, amber for 30–180 days, green for 180+ days
+- **Collapsible result card** — domain lookup results show a summary line by default; click to expand/collapse details
+- **Skeleton shimmer** — pulsing placeholder bars replace "checking…" text while website/DKIM results load
 
 ### CSV (Bounce Panel)
 - **Drag-and-drop or file picker** upload of `.csv` bounce lists
 - **Automatic row count** with a `< 40` / `≥ 40` threshold badge
-- **Auto-detect domain from CSV** — domain is read from the 2nd column (index 1) of the first data row, falling back to the 3rd column (index 2); lookup fires automatically
+- **Auto-detect domain from CSV** — domain is read from the 2nd column (index 1) of the first data row, falling back to the 3rd column (index 2); lookup fires automatically
 - Header row is always excluded from the bounce count
 
 ### UX & Polish
 - **Email → domain sanitisation** — pasting or typing a full email address (`user@example.com`) in the domain field automatically strips the local-part to `example.com`; also strips `http(s)://`, trailing paths, and ports
 - **Form state persistence** — all 14 field values are saved to `localStorage` on every change and restored on next visit
-- **Dark / Light theme** — respects system preference with a manual toggle; preference is persisted to `localStorage`
+- **Dark / Light theme** — respects system preference with a manual toggle; preference is persisted to `localStorage` with a smooth 250ms crossfade transition
 - **Required field validation** — all required fields are highlighted with inline error messages before generation is allowed
 - **Error resilience** — generate functions are wrapped in `try/catch` so unexpected errors surface as a user-facing toast instead of silently failing
 - **10-screenshot cap** — excess files are skipped with a descriptive toast
+- **Toast type differentiation** — toasts carry a `data-type` attribute (success, error, warning, info) for coloured styling
+- **Form completion progress bar** — a thin progress bar under each panel header fills as required fields are completed
+- **Assurance button subgroups** — assurance buttons are grouped into Email Hygiene and Technical sections with labelled headers
+- **Stepper/Progress reset on clear** — clicking Clear resets the stepper to step 1 and the progress bar to 0%
+- **Progress bar updates on auto-fill** — form progress updates when website/DKIM fields are auto-populated from a CSV-triggered lookup
+- **Reduced motion support** — respects `prefers-reduced-motion: reduce` by disabling all animations
+- **Sticky generate button** — the generate button row sticks to the bottom of the panel on scroll with a frosted-glass backdrop blur
+- **Mobile layout** — full-width lookup buttons and vertical stepper on narrow screens
 - **Vercel Analytics & Speed Insights** — page view tracking and Core Web Vitals monitoring
 
 ### Security
 - **Login gate** — password-protected access via `login.html` + Vercel Edge middleware with HMAC-SHA256 signed cookies
-- **Constant-time password comparison** — login handler uses an XOR loop to prevent timing attacks
+- **No default password** — `APP_PASSWORD` environment variable must be set; no fallback `'changeme'` default
+- **Constant-time password comparison** — login handler uses an XOR loop (`safeEqual()`) to prevent timing attacks
+- **Login rate limiting** — the `/api/login` endpoint uses the shared rate-limit store to prevent brute-force attacks
 - **CORS** — all API endpoints restrict `Origin` to `APP_ORIGIN` env var; `Vary: Origin` header is set correctly
 - **Rate limiting** — max 20 requests/min per IP on all API endpoints; rate-limit map prunes stale entries above 10,000 to prevent memory leaks
-- **Hostname validation** — domain input regex rejects consecutive dots and hyphen-leading labels
+- **Hostname validation** — domain input regex rejects IPv4/IPv6 addresses, localhost variants, consecutive dots, and hyphen-leading labels; `@` stripping prevents email-based bypass
 
 ---
 
@@ -57,21 +73,23 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ├── package.json                    # Node deps (used for local dev / tests)
 ├── .gitignore
 ├── api/
-│   ├── _utils.js                   # Shared helpers: sanitiseDomain, isRateLimited (with map pruning), signToken, verifyToken, CORS headers
-│   ├── config.js                   # Centralised API config (allowed origins, rate-limit settings, DKIM selectors via Array.from)
+│   ├── _utils.js                   # Shared helpers: sanitiseDomain, checkRateLimit (with map pruning), signToken, verifyToken, CORS headers, classifyFetchError
+│   ├── config.js                   # Centralised API config (rate limits, DKIM selectors, website-check patterns, parked keywords)
 │   ├── whois.js                    # WHOIS lookup serverless function
-│   ├── website-check.js            # Website reachability & classification (TextDecoder at module scope)
+│   ├── website-check.js            # Website reachability & classification (SPA detection, parked/placeholder detection, redirect analysis)
 │   ├── dkim-check.js               # DNS DKIM selector check
-│   ├── health.js                   # Health-check endpoint
-│   └── login.js                    # Login handler — constant-time password check, sets signed auth cookie
+│   ├── health.js                   # Health-check endpoint (probes WhoisJSON + Google DNS)
+│   └── login.js                    # Login handler — constant-time password check, rate limited, sets signed auth cookie
 ├── scripts/
-│   ├── app.js                      # Core app logic (ARF + Bounce generate, domain lookup, CSV, unified state)
+│   ├── app.js                      # Core app logic (ARF + Bounce generate, domain lookup, CSV, unified state, event delegation)
 │   ├── api.js                      # Frontend API helpers (fetchWhois, fetchWebsiteCheck, fetchDkimCheck — throws on non-2xx)
-│   └── ui.js                       # UI helpers (showToast, theme toggle with localStorage, drag events, validation display)
+│   └── ui.js                       # UI helpers (showToast with types, theme toggle with transition, stepper, form progress, age colors, validation display, drag-and-drop)
 ├── styles/
-│   └── main.css                    # All styles (light/dark theme, layout, components)
+│   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, responsive)
 └── tests/
-    └── sanitiseDomain.test.js      # Unit tests for domain sanitisation logic
+    ├── sanitiseDomain.test.js      # Unit tests for domain sanitisation logic
+    ├── api-handlers.test.js        # Integration tests for API handlers
+    └── website-check.test.js       # Tests for website classification logic
 ```
 
 ---
@@ -84,7 +102,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 | `/api/website-check?domain=` | GET | Returns `verdict`: Valid Website / No website + `reason` |
 | `/api/dkim-check?domain=` | GET | Returns DKIM `status` and `selectors_found` array |
 | `/api/login` | POST | Validates password and sets HMAC-signed auth cookie |
-| `/api/health` | GET | Health-check — returns `{ ok: true }` |
+| `/api/health` | GET | Health-check — probes WhoisJSON and Google DNS, returns `{ status: "ok"|"degraded" }` |
 
 All API endpoints enforce:
 - **CORS** — `Origin` must match `APP_ORIGIN` env var; `Vary: Origin` is set
@@ -113,14 +131,14 @@ Set these in the **Vercel Dashboard → Settings → Environment Variables**:
 
 ## Deployment
 
-This project is deployed on **Vercel** with no build step — it’s served as static HTML with serverless API functions.
+This project is deployed on **Vercel** with no build step — it's served as static HTML with serverless API functions.
 
 ### Deploy your own
 
 1. Fork or clone this repo
 2. Import into [Vercel](https://vercel.com)
 3. Set all four **Environment Variables** listed above
-4. Enable **Vercel Analytics** in your project’s Analytics tab
+4. Enable **Vercel Analytics** in your project's Analytics tab
 5. Deploy — no build command or output directory needed
 
 ---
@@ -156,14 +174,17 @@ APP_ORIGIN=http://localhost:3000
 2. Upload screenshot(s) of the email content (max 10) via drag-and-drop or file picker
 3. Enter the sender domain and click **Lookup** to auto-fill WHOIS, website, and DKIM fields
    - You can paste a full email address — the local-part is stripped automatically
-4. Select active assurances
-5. Click **Generate ARF Report** (or press `Ctrl`/`Cmd` + `Enter`) → screenshots appear inline; click **Copy** to copy the full report
+   - The progress stepper (1 → 2 → 3) tracks WHOIS, Website, and DKIM completion
+   - Domain age is colour-coded (red <30d, amber 30–180d, green 180d+)
+4. Select active assurances (organised into Email Hygiene and Technical subgroups)
+5. Click **Generate ARF Report** (or press `Ctrl`/`Cmd` + `Enter`) → screenshots appear inline; click **Copy** or the bottom **Copy to Clipboard** button to copy the full report
 
 ### Bounce Report
 1. Select previous unblock status
 2. Upload the bounce list CSV (header row is automatically excluded from the count)
    - Domain is auto-detected from the 2nd or 3rd CSV column and Lookup runs immediately
-3. Fill in remaining domain details
+   - A `< 40` / `>= 40` badge shows the row count threshold
+3. Fill in remaining domain details (website and DKIM are auto-populated from the lookup)
 4. Select active assurances
 5. Click **Generate Bounce Report** (or press `Ctrl`/`Cmd` + `Enter`) → copy the output
 
@@ -177,32 +198,64 @@ APP_ORIGIN=http://localhost:3000
 - **Edge middleware** re-verifies the cookie signature on every request using Web Crypto API
 - **`api/login.js`** uses Node.js `crypto.createHmac` (Node runtime); **`middleware.js`** uses `crypto.subtle` (Edge runtime) — both produce identical signatures
 - **Constant-time comparison** in `api/login.js` prevents timing-based password inference
+- **Login rate limiting** prevents brute-force password guessing
+- **No default password** — `APP_PASSWORD` must be set as an environment variable; the server returns a 500 error if it's missing
 - **CORS** prevents API calls from unauthorised origins; `Vary: Origin` is set to avoid cache poisoning
 - **Rate limiting** mitigates brute-force and scraping; stale entries are pruned to prevent memory leaks
 - **`AUTH_SECRET`** and **`APP_PASSWORD`** are never committed to the repo — always set via environment variables
+- **Hostname validation** rejects IPv4/IPv6 addresses, localhost names (SSRF prevention), consecutive dots, hyphen-leading labels, and email local-parts
 
 ---
 
 ## Changelog
 
 ### 2026-06-12
-- **Security: constant-time password comparison** — `api/login.js` now uses an XOR loop (`safeEqual()`) to prevent timing attacks
-- **Security: CORS wildcard removed** — `Access-Control-Allow-Origin` now reads from `APP_ORIGIN` env var; `Vary: Origin` added to all API responses
-- **Security: rate-limit memory leak fixed** — `api/_utils.js` prunes the IP map when it exceeds 10,000 entries
-- **Security: hostname regex tightened** — domain validation now rejects consecutive dots and hyphen-leading labels
-- **Fix: duplicate `attachPersistListeners`** — removed a second `DOMContentLoaded` listener that was doubling up `change` event handlers
-- **Fix: `fetchWebsiteCheck` / `fetchDkimCheck` error handling** — frontend API helpers now throw on non-2xx HTTP responses instead of silently returning partial data
-- **Fix: `TextDecoder` in `website-check.js`** — moved to module scope (avoid re-instantiation per request) and stream is now flushed after `reader.cancel()`
-- **Fix: dead variable removed** — unused `bodyLower` variable removed from `website-check.js`
-- **Fix: DKIM map/filter refactor** — `forEach`+`push` replaced with `map`+`filter` in `dkim-check.js`
-- **Fix: `DKIM_INDEXED_RANGE` uses `Array.from`** — cleaner array construction in `api/config.js`
-- **Theme persistence** — light/dark preference now saved to `localStorage` and restored on page load
-- **CSV domain detection** — domain is read from the 2nd column (index 1) of the first data row, falling back to the 3rd column (index 2)
-- **Middleware comment** — added explanation for intentional `verifyToken` duplication across Edge and Node runtimes
-- **Rate-limit caveat documented** — `api/config.js` now notes that per-process rate limiting does not cover multiple serverless instances
-- **Env var renamed** — `APP_URL` renamed to `APP_ORIGIN` for clarity; update this in your Vercel dashboard
+- **Visual polish: skeleton shimmer** — pulsing placeholder bars replace "checking…" text during domain website/DKIM lookups
+- **Theme transition** — toggling dark/light mode now applies a smooth 250ms crossfade via `.theme-transitioning` class
+- **Reduced motion support** — `prefers-reduced-motion: reduce` disables all animations for accessibility
+- **Stepper reset on clear** — clicking Clear now resets the progress stepper to step 1 (numbered dots + connectors return to idle state)
+- **Progress bar reset on clear** — form progress bar resets to 0% when a panel is cleared
+- **Progress bar on auto-fill** — form progress updates when website/DKIM selects are auto-populated from a CSV-triggered domain lookup
+- **Dark mode polish** — background changed to near-black (`#0c0c0b`); inverted text on coloured buttons (`#11110f`)
+- **Domain age color parsing** — `parseAgeToDays()` correctly handles "years", "months", and "days" text from the WHOIS API
+- **Sticky generate button** — panel action buttons stick to the bottom of the panel on scroll with `backdrop-filter: blur(12px)`
+- **Progress stepper UI** — larger numbered dots (28px), pulse animation on active step, checkmark (`✓`) animation on completion, shine effect on completed connectors
+- **Form progress bar** — thin animated bar under each panel header fills as required fields are completed
+- **Collapsible result card** — domain lookup results show a summary line; click to expand/collapse creation date, age, website, and DKIM details
+- **Assurance subgroups** — buttons group into "Email Hygiene" and "Technical" subsections with labelled headers
+- **Output enhancements** — report type pill (coloured ARF/Bounce badge), generation timestamp, and a bottom Copy to Clipboard button
+- **Screenshot empty state** — when no screenshots are attached, shows a centred icon + "No screenshots attached" + live `0 / 10` counter
+- **Toast type differentiation** — `showToast()` accepts a `type` parameter; CSS styles distinguish success/error/warning/info toasts
+- **Mobile layout** — lookup buttons go full-width, stepper becomes vertical, single-column form fields on screens under 600px
 
 ### 2026-06-11
+- **Security: constant-time password comparison** — `api/login.js` now uses an XOR loop (`safeEqual()`) to prevent timing attacks ([`8657c1e`](https://github.com/zakititan/arf-bounce-report-generator/commit/8657c1e))
+- **Security: CORS wildcard removed** — `Access-Control-Allow-Origin` now reads from `APP_ORIGIN` env var; `Vary: Origin` added to all API responses ([`8657c1e`](https://github.com/zakititan/arf-bounce-report-generator/commit/8657c1e))
+- **Security: rate-limit memory leak fixed** — `api/_utils.js` prunes the IP map when it exceeds 10,000 entries ([`8657c1e`](https://github.com/zakititan/arf-bounce-report-generator/commit/8657c1e))
+- **Security: hostname regex tightened** — domain validation now rejects IPv4/IPv6, localhost, consecutive dots, and hyphen-leading labels ([`8657c1e`](https://github.com/zakititan/arf-bounce-report-generator/commit/8657c1e))
+- **Security: login rate limiting + no default password** — `/api/login` uses `checkRateLimit` with `globalRateLimitStore`; `APP_PASSWORD` env var is required ([`3d20dd0`](https://github.com/zakititan/arf-bounce-report-generator/commit/3d20dd0))
+- **Fix: `classifyFetchError` status restored** — `whois.js` was receiving `undefined` instead of `504`/`502`; field added back to return object ([`3d20dd0`](https://github.com/zakititan/arf-bounce-report-generator/commit/3d20dd0))
+- **Fix: false positive reduction in parked detection** — removed overly generic keywords (`"powered by"`, `"buy now"`, etc.) from `PARKED_KEYWORDS` and `PARKED_TITLE_KEYWORDS` ([`3d20dd0`](https://github.com/zakititan/arf-bounce-report-generator/commit/3d20dd0))
+- **Fix: `extractMetaRobots` handles reversed attribute order** — now matches `<meta content="noindex" name="robots">` in addition to the standard order ([`3d20dd0`](https://github.com/zakititan/arf-bounce-report-generator/commit/3d20dd0))
+- **Fix: `isImageOnlyPage` accepts `bodyLength` instead of raw HTML** — eliminates redundant tag-stripping ([`3d20dd0`](https://github.com/zakititan/arf-bounce-report-generator/commit/3d20dd0))
+- **Fix: XSS in `renderPreviews()`** — changed from `innerHTML` concat to safe DOM API (`createElement`, `img.alt = s.name`) ([`3d20dd0`](https://github.com/zakititan/arf-bounce-report-generator/commit/3d20dd0))
+- **Fix: inline styles moved to CSS** — `style=` attributes removed from `<pre>` and copy buttons; `.copy-btn-wrap .btn` CSS class added ([`3d20dd0`](https://github.com/zakititan/arf-bounce-report-generator/commit/3d20dd0))
+- **Fix: duplicate `attachPersistListeners`** — removed a second `DOMContentLoaded` listener that was doubling up `change` event handlers ([`cf8fabe`](https://github.com/zakititan/arf-bounce-report-generator/commit/cf8fabe))
+- **Fix: `fetchWebsiteCheck` / `fetchDkimCheck` error handling** — frontend API helpers now throw on non-2xx HTTP responses instead of silently returning partial data ([`8657c1e`](https://github.com/zakititan/arf-bounce-report-generator/commit/8657c1e))
+- **Fix: `TextDecoder` in `website-check.js`** — moved to module scope (avoid re-instantiation per request); stream flushed after `reader.cancel()` ([`8657c1e`](https://github.com/zakititan/arf-bounce-report-generator/commit/8657c1e))
+- **Fix: dead variable removed** — unused `bodyLower` variable removed from `website-check.js` ([`8657c1e`](https://github.com/zakititan/arf-bounce-report-generator/commit/8657c1e))
+- **Fix: DKIM map/filter refactor** — `forEach`+`push` replaced with `map`+`filter` in `dkim-check.js` ([`8657c1e`](https://github.com/zakititan/arf-bounce-report-generator/commit/8657c1e))
+- **Fix: `DKIM_INDEXED_RANGE` uses `Array.from`** — cleaner array construction in `api/config.js` ([`8657c1e`](https://github.com/zakititan/arf-bounce-report-generator/commit/8657c1e))
+- **Theme persistence** — light/dark preference now saved to `localStorage` and restored on page load ([`8657c1e`](https://github.com/zakititan/arf-bounce-report-generator/commit/8657c1e))
+- **CSV domain detection** — domain read from 2nd column (index 1) falling back to 3rd column (index 2); header row excluded ([`8657c1e`](https://github.com/zakititan/arf-bounce-report-generator/commit/8657c1e))
+- **Middleware comment** — added explanation for intentional `verifyToken` duplication across Edge and Node runtimes ([`8657c1e`](https://github.com/zakititan/arf-bounce-report-generator/commit/8657c1e))
+- **Rate-limit caveat documented** — `api/config.js` now notes that per-process rate limiting does not cover multiple serverless instances ([`8657c1e`](https://github.com/zakititan/arf-bounce-report-generator/commit/8657c1e))
+- **Env var renamed** — `APP_URL` renamed to `APP_ORIGIN` for clarity; update this in your Vercel dashboard ([`8657c1e`](https://github.com/zakititan/arf-bounce-report-generator/commit/8657c1e))
+- **Website verdict simplified** — dropped Fake/Legit/Parked/Placeholder; only "Valid Website" or "No website" ([`961cb52`](https://github.com/zakititan/arf-bounce-report-generator/commit/961cb52))
+- **SPA shell detection** — pages with JS bundles + root mount element (`#root`, `#app`, etc.) + clean title classified as Valid Website despite low visible text ([`258102c`](https://github.com/zakititan/arf-bounce-report-generator/commit/258102c))
+- **Mailchimp/Sendgrid added to Bounce panel** — assurance buttons mirror ARF panel ([`84639fc`](https://github.com/zakititan/arf-bounce-report-generator/commit/84639fc))
+
+### 2026-06-10
 - **Email → domain sanitisation** — domain inputs now strip email local-parts on paste, blur, and before every Lookup call; also strips `http(s)://`, trailing paths, ports ([`4e43623`](https://github.com/zakititan/arf-bounce-report-generator/commit/4e436230420ef1ff0670e60a91f069570127b529))
 - **Auto-trigger Lookup from CSV** — after domain auto-detection from a CSV upload, Lookup fires automatically instead of requiring a manual click ([`2ae864f`](https://github.com/zakititan/arf-bounce-report-generator/commit/2ae864fa09326fbb53dd3d57442117adb0ff10ab))
 - **Form state persistence** — all 14 form fields saved to `localStorage` on change and restored on `DOMContentLoaded` ([`2ae864f`](https://github.com/zakititan/arf-bounce-report-generator/commit/2ae864fa09326fbb53dd3d57442117adb0ff10ab))
@@ -214,6 +267,9 @@ APP_ORIGIN=http://localhost:3000
 - **10-screenshot cap** — excess files are skipped with a descriptive toast ([`2ae864f`](https://github.com/zakititan/arf-bounce-report-generator/commit/2ae864fa09326fbb53dd3d57442117adb0ff10ab))
 - **Lookup debounce** — 1-second debounce prevents API spam from rapid clicks or auto-triggers ([`2ae864f`](https://github.com/zakititan/arf-bounce-report-generator/commit/2ae864fa09326fbb53dd3d57442117adb0ff10ab))
 - **Screenshot remove button** — replaced bare `x` text with an SVG cross icon ([`2ae864f`](https://github.com/zakititan/arf-bounce-report-generator/commit/2ae864fa09326fbb53dd3d57442117adb0ff10ab))
+- **Inline screenshots in output** — attached images render directly in the generated ARF report section with labelled filenames ([`f855511`](https://github.com/zakititan/arf-bounce-report-generator/commit/f855511))
+- **Website & DKIM checks on WHOIS failure** — domain website/DKIM checks run even when WHOIS lookup fails ([`2838e22`](https://github.com/zakititan/arf-bounce-report-generator/commit/2838e22))
+- **Domain lookup removed as required field** — website and DKIM selects are manually selectable without a lookup ([`43b2f3c`](https://github.com/zakititan/arf-bounce-report-generator/commit/43b2f3c))
 
 ---
 
