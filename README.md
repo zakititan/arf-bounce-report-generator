@@ -11,6 +11,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Bounce Report** — handles CSV bounce list upload, bounce count, domain checks, and assurances
 - **Inline screenshots** — attached images are rendered directly inside the ARF output section and included as labelled filenames in the clipboard copy
 - **Assurance screenshots** — separate screenshot upload zones for ARF and Bounce assurance evidence, rendered inline in the output alongside email screenshots
+- **Paste screenshots on hover** — hover over any upload zone and press `Ctrl+V` to paste clipboard images directly into that zone; no click-to-focus required
 - **One-click copy** — copies the full formatted report (including screenshot labels) to clipboard with a "Copied ✓" visual confirmation
 - **Rich clipboard with images** — when screenshots are attached, `Ctrl+C` writes both `text/plain` and `text/html` with embedded `<img>` tags so pasting into email clients, Word, or Google Docs renders images inline
 - **Bottom copy button** — an additional Copy to Clipboard button at the end of the output area for convenience
@@ -29,7 +30,6 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Domain age color coding** — age display is colour-coded: red for <30 days, amber for 30–180 days, green for 180+ days
 - **Collapsible result card** — domain lookup results show a summary line by default; click to expand/collapse details
 - **Skeleton shimmer** — pulsing placeholder bars replace "checking…" text while website/DKIM results load
-- **Paste screenshots on hover** — hover over any upload zone and press `Ctrl+V` to paste clipboard images directly into that zone; no click-to-focus required
 
 ### CSV (Bounce Panel)
 - **Drag-and-drop or file picker** upload of `.csv` bounce lists
