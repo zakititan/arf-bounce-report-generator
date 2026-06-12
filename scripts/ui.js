@@ -96,7 +96,7 @@ export function updateStepper(prefix, step) {
   const currentMaxDone = Array.from(steps).reduce((max, s) => {
     return s.classList.contains('done') ? Math.max(max, parseInt(s.getAttribute('data-step'), 10)) : max;
   }, 0);
-  const effectiveStep = Math.max(stepNum, currentMaxDone);
+  const effectiveStep = stepNum === 0 ? 0 : Math.max(stepNum, currentMaxDone);
   steps.forEach(s => {
     const sStep = parseInt(s.getAttribute('data-step'), 10);
     if (sStep <= effectiveStep) {
