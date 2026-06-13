@@ -13,7 +13,7 @@ export default withMiddleware(async function handler(req, res) {
   );
 
   const matchedFamily = baseResults
-    .map((r, i) => (r.status === 'fulfilled' && r.value ? { family: DKIM_FAMILIES[i], record: r.value } : null))
+    .map((r, i) => (r.status === 'fulfilled' && r.value ? { selector: DKIM_FAMILIES[i], record: r.value } : null))
     .filter(Boolean);
 
   if (matchedFamily.length === 0) {
@@ -22,12 +22,11 @@ export default withMiddleware(async function handler(req, res) {
 
   // Phase 2: check numbered variants for the first matched family only
   const best = matchedFamily[0];
-  const numberedSelectors = DKIM_INDEXED_RANGE.map(n => `${best.family}${n}`);
+  const numberedSelectors = DKIM_INDEXED_RANGE.map(n => `${best.selector}${n}`);
   const numberedResults = await Promise.allSettled(
     numberedSelectors.map(selector => lookupDkim(selector, domain))
   );
 
-  const allSelectors = [best.family, ...numberedSelectors];
   const matched = [best, ...numberedResults
     .map((r, i) => (r.status === 'fulfilled' && r.value ? { selector: numberedSelectors[i], record: r.value } : null))
     .filter(Boolean)];
