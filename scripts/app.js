@@ -160,7 +160,8 @@ function initDomainInputs() {
   function updateMailboardsHref() {
     const account = accountInput.value.trim();
     if (account) {
-      mailboardsLink.href = 'https://mailboards.ops.titan.email/home?domain=' + encodeURIComponent(account) + '&env=prod';
+      const param = account.includes('@') ? 'email' : 'domain';
+      mailboardsLink.href = 'https://mailboards.ops.titan.email/home?' + param + '=' + encodeURIComponent(account) + '&env=prod';
     } else {
       mailboardsLink.href = 'https://mailboards.ops.titan.email/home?env=prod';
     }
