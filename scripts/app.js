@@ -491,6 +491,7 @@ function processCsv(file) {
           }).filter(v => v !== '');
           const allSame = col2Values.length > 0 && col2Values.every(v => v === col2Values[0]);
           accountInput.value = allSame ? col2Values[0] : detectedDomain;
+          accountInput.dispatchEvent(new Event('input', { bubbles: true }));
         }
         showToast('Domain auto-detected: ' + detectedDomain + ' — running lookup…');
         lookupDomain('bounce');
