@@ -7,30 +7,18 @@ export default withMiddleware(async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid or missing domain parameter' });
   }
 
-  // Phase 1: check only base selectors (titan, neo)
-  const baseResults = await Promise.allSettled(
-    DKIM_FAMILIES.map(selector => lookupDkim(selector, domain))
+  const allSelectors = DKIM_FAMILIES.flatMap(family => [
+    family,
+    ...DKIM_INDEXED_RANGE.map(n => `${family}${n}`),
+  ]);
+
+  const results = await Promise.allSettled(
+    allSelectors.map(selector => lookupDkim(selector, domain))
   );
 
-  const matchedFamily = baseResults
-    .map((r, i) => (r.status === 'fulfilled' && r.value ? { family: DKIM_FAMILIES[i], record: r.value } : null))
+  const matched = results
+    .map((r, i) => (r.status === 'fulfilled' && r.value ? { selector: allSelectors[i], record: r.value } : null))
     .filter(Boolean);
-
-  if (matchedFamily.length === 0) {
-    return res.status(200).json({ status: 'Not Set', selectors_found: [], detail: null });
-  }
-
-  // Phase 2: check numbered variants for the first matched family only
-  const best = matchedFamily[0];
-  const numberedSelectors = DKIM_INDEXED_RANGE.map(n => `${best.family}${n}`);
-  const numberedResults = await Promise.allSettled(
-    numberedSelectors.map(selector => lookupDkim(selector, domain))
-  );
-
-  const allSelectors = [best.family, ...numberedSelectors];
-  const matched = [best, ...numberedResults
-    .map((r, i) => (r.status === 'fulfilled' && r.value ? { selector: numberedSelectors[i], record: r.value } : null))
-    .filter(Boolean)];
 
   return res.status(200).json({
     status: 'Set',
