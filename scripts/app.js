@@ -484,7 +484,14 @@ function processCsv(file) {
       if (detectedDomain && domainInput) {
         domainInput.value = detectedDomain;
         const accountInput = document.getElementById('bounce-account');
-        if (accountInput && !accountInput.value.trim()) accountInput.value = detectedDomain;
+        if (accountInput && !accountInput.value.trim()) {
+          const col2Values = lines.slice(1).map(line => {
+            const c = parseCsvRow(line);
+            return (c[1] || '').trim();
+          }).filter(v => v !== '');
+          const allSame = col2Values.length > 0 && col2Values.every(v => v === col2Values[0]);
+          accountInput.value = allSame ? col2Values[0] : detectedDomain;
+        }
         showToast('Domain auto-detected: ' + detectedDomain + ' — running lookup…');
         lookupDomain('bounce');
       } else showToast(dataRows + ' bounce rows counted from ' + file.name);
