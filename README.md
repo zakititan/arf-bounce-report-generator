@@ -7,13 +7,13 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ## Features
 
 ### Report Generation
-- **ARF Report** — captures domain type, complaint count, email content type, screenshots, and assurances
+- **ARF Report** — captures complaint count, email content type, screenshots, and assurances
 - **Bounce Report** — handles CSV bounce list upload, bounce count, domain checks, and assurances
 - **Inline screenshots** — attached images are rendered directly inside the ARF output section and included as labelled filenames in the clipboard copy
 - **Assurance screenshots** — separate screenshot upload zones for ARF and Bounce assurance evidence, rendered inline in the output alongside email screenshots
 - **Paste screenshots on hover** — hover over any upload zone and press `Ctrl+V` to paste clipboard images directly into that zone; no click-to-focus required
 - **One-click copy** — copies the full formatted report (including screenshot labels) to clipboard with a "Copied ✓" visual confirmation
-- **Rich clipboard with images** — when screenshots are attached, `Ctrl+C` writes both `text/plain` and `text/html` with embedded `<img>` tags so pasting into email clients, Word, or Google Docs renders images inline
+- **Rich clipboard with images** — copies both `text/plain` and `text/html` to the clipboard; the HTML version uses monospace font (`DM Mono`) so pasting into email clients, Word, or Google Docs renders the report in monospace; when screenshots are attached, embedded `<img>` tags are included
 - **Bottom copy button** — an additional Copy to Clipboard button at the end of the output area for convenience
 - **Report type pill + timestamp** — each generated report shows a coloured report type badge (ARF/Bounce) and a "Generated:" timestamp
 - **Keyboard shortcut** — `Ctrl`/`Cmd` + `Enter` generates the report for whichever panel is currently active
@@ -41,7 +41,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ### UX & Polish
 - **Email → domain sanitisation** — pasting or typing a full email address (`user@example.com`) in the domain field automatically strips the local-part to `example.com`; also strips `http(s)://`, trailing paths, and ports
 - **Auto-lookup on paste** — pasting a domain or email into either panel's domain field automatically fires the WHOIS/Website/DKIM lookup without needing to click the Lookup button
-- **Form state persistence** — all 16 field values are saved to `localStorage` on every change and restored on next visit
+- **Form state persistence** — all 15 field values are saved to `localStorage` on every change and restored on next visit
 - **Dark / Light theme** — respects system preference with a manual toggle; preference is persisted to `localStorage` with a smooth 250ms crossfade transition
 - **Required field validation** — all required fields are highlighted with inline error messages before generation is allowed
 - **Error resilience** — generate functions are wrapped in `try/catch` so unexpected errors surface as a user-facing toast instead of silently failing
@@ -71,7 +71,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Safety gate** — the button shows a warning if no report has been generated yet
 
 ### Mailboards Integration
-- **Mailboards button** — a "Mailboards" link sits below the Account field in both ARF and Bounce panels, linking to [mailboards.ops.titan.email](https://mailboards.ops.titan.email)
+- **Check on Mailboards** — a "Check on Mailboards" link sits below the Account field in both ARF and Bounce panels, linking to [mailboards.ops.titan.email](https://mailboards.ops.titan.email)
 - **Smart parameter selection** — if the Account field contains an email address (`@` present), the URL uses `?email=`; otherwise it uses `?domain=`; falls back to bare `?env=prod` when the Account field is empty
 - **Dynamic href updates** — the link URL updates in real-time as the Account field is typed or pasted into; no report generation required
 
@@ -219,7 +219,7 @@ APP_ORIGIN=http://localhost:3000
 ## Usage
 
 ### ARF Report
-1. Select domain type and fill in complaint details
+1. Fill in complaint details
 2. Upload screenshot(s) of the email content (max 10) via drag-and-drop or file picker
 3. Enter the sender domain and click **Lookup** to auto-fill WHOIS, website, and DKIM fields
    - You can paste a full email address — the local-part is stripped automatically
