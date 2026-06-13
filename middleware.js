@@ -35,7 +35,10 @@ async function verifyToken(token) {
     try { parsed = JSON.parse(payload); } catch { return false; }
     if (!parsed || parsed.sub !== 'authenticated' || typeof parsed.iat !== 'number') return false;
     const age = Date.now() - parsed.iat;
-    const MAX_AGE_MS = 8 * 60 * 60 * 1000;
+    // IMPORTANT: This value MUST match SESSION_MAX_AGE_MS in api/config.js.
+    // middleware.js runs in the Vercel Edge Runtime and cannot import Node modules,
+    // so this constant is intentionally duplicated here. Update both files together.
+    const MAX_AGE_MS = 8 * 60 * 60 * 1000; // 8 hours
     if (age > MAX_AGE_MS || age < 0) return false;
 
     return true;
