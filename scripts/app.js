@@ -134,7 +134,7 @@ function initDomainInputs() {
     const sanitised = sanitiseDomainInput(pasted);
     accountInput.value = pasted; // preserve full email in account field
     const domainInput = document.getElementById(prefix + '-domain-input');
-    if (domainInput) domainInput.value = sanitised;
+    if (domainInput && !domainInput.value.trim()) domainInput.value = sanitised;
     state[prefix].whois = null;
     document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
     lookupDomain(prefix); // debounced
@@ -144,7 +144,7 @@ function initDomainInputs() {
   accountInput.addEventListener('input', () => {
     const sanitised = sanitiseDomainInput(accountInput.value);
     const domainInput = document.getElementById(prefix + '-domain-input');
-    if (domainInput) domainInput.value = sanitised;
+    if (domainInput && !domainInput.value.trim()) domainInput.value = sanitised;
     state[prefix].whois = null;
     document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
     lookupDomain(prefix); // debounced — safe to call on every keystroke
@@ -484,6 +484,8 @@ function processCsv(file) {
       const domainInput = document.getElementById('bounce-domain-input');
       if (detectedDomain && domainInput) {
         domainInput.value = detectedDomain;
+        const accountInput = document.getElementById('bounce-account');
+        if (accountInput && !accountInput.value.trim()) accountInput.value = detectedDomain;
         showToast('Domain auto-detected: ' + detectedDomain + ' — running lookup…');
         lookupDomain('bounce');
       } else showToast(dataRows + ' bounce rows counted from ' + file.name);
