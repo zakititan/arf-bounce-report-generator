@@ -76,7 +76,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Dynamic href updates** — the link URL updates in real-time as the Account field is typed or pasted into; no report generation required
 
 ### Abuse Desk Quick Link
-- **Check ARF count** — a "Check" button sits next to the ARF Complaints field, linking to the Abuse Desk history page (`abusedesk.ops.titan.email/history.html`) with the Account name as the `entity` parameter and `region=us-east-1`
+- **Check ARF count** — a "Check on AD" button sits in a 50/50 split row alongside the ARF Complaints field, linking to the Abuse Desk history page (`abusedesk.ops.titan.email/history.html`) with the Account name as the `entity` parameter and `region=us-east-1`
 - **Dynamic href** — the link URL updates in real-time as the Account field is typed or pasted into
 
 ### Testing
