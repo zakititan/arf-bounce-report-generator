@@ -44,7 +44,10 @@ async function checkDnsAPI() {
     );
     if (!res.ok)
       return { ok: false, reason: 'upstream_error', message: `Unexpected response: HTTP ${res.status}.` };
-    const data = await res.json();
+    let data;
+    try { data = await res.json(); } catch {
+      return { ok: false, reason: 'parse_error', message: 'DNS API returned non-JSON response.' };
+    }
     if (data.Status !== 0)
       return { ok: false, reason: 'dns_error', message: `DNS status code ${data.Status}.` };
     return { ok: true, message: 'Reachable.' };

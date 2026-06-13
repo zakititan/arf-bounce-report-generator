@@ -58,7 +58,12 @@ export function showValidationErrors(prefix, errors) {
     list.innerHTML = '';
     return false;
   }
-  list.innerHTML = errors.map(e => '<li>' + e.label + '</li>').join('');
+  list.innerHTML = '';
+  errors.forEach(e => {
+    const li = document.createElement('li');
+    li.textContent = e.label;
+    list.appendChild(li);
+  });
   banner.classList.add('visible');
   errors.forEach(e => {
     if (e.id) {
@@ -137,9 +142,11 @@ function parseAgeToDays(text) {
   const years = text.match(/(\d+)\s*years?/i);
   const months = text.match(/(\d+)\s*months?/i);
   const days = text.match(/(\d+)\s*days?/i);
-  if (years) return parseInt(years[1], 10) * 365;
-  if (months) return parseInt(months[1], 10) * 30;
-  if (days) return parseInt(days[1], 10);
+  let total = 0;
+  if (years) total += parseInt(years[1], 10) * 365;
+  if (months) total += parseInt(months[1], 10) * 30;
+  if (days) total += parseInt(days[1], 10);
+  if (total > 0) return total;
   const plain = text.match(/(\d+)/);
   return plain ? parseInt(plain[1], 10) : null;
 }
@@ -171,7 +178,8 @@ export function renderScreenshotEmptyState(containerId, stateKey) {
     const val = window.__state?.[parts[0]]?.[parts[1]];
     if (Array.isArray(val)) count = val.length;
   }
-  previews.innerHTML = '<div class="screenshot-empty"><div class="screenshot-empty-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div><span class="screenshot-empty-text">No screenshots attached</span><span class="screenshot-empty-count">' + count + ' / 10</span></div>';
+  const max = 10;
+  previews.innerHTML = '<div class="screenshot-empty"><div class="screenshot-empty-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div><span class="screenshot-empty-text">No screenshots attached</span><span class="screenshot-empty-count">' + count + ' / ' + max + '</span></div>';
 }
 
 // ── Generate timestamp for output ─────────────────────────────────
