@@ -143,6 +143,8 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .domain-lookup-wrap > label { font-size: var(--text-sm); font-weight: 500; color: var(--color-text-muted); }
 .domain-lookup-row { display: flex; gap: var(--space-2); align-items: stretch; }
 .domain-lookup-row input { flex: 1; }
+.field-input-row { display: flex; gap: var(--space-2); align-items: stretch; }
+.field-input-row input { flex: 1; }
 .btn-lookup {
   display: inline-flex; align-items: center; gap: var(--space-1);
   padding: var(--space-2) var(--space-4); border-radius: var(--radius-md);
@@ -567,6 +569,7 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
   .field-row { grid-template-columns: 1fr; }
   .topbar { padding: var(--space-3) var(--space-4); }
   .domain-lookup-row { flex-direction: column; }
+  .field-input-row { flex-direction: column; }
   .btn-lookup { width: 100%; justify-content: center; }
   .progress-stepper { flex-direction: column; align-items: stretch; gap: 0; padding: var(--space-3); }
   .stepper-step { gap: var(--space-2); }

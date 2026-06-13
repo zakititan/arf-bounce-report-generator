@@ -151,6 +151,24 @@ function initDomainInputs() {
   });
 });
 
+// ── Check ARF count link updater ───────────────────────────────────
+(function() {
+  const accountInput = document.getElementById('arf-account');
+  const arfCountLink = document.querySelector('#arf-panel .btn-abusedesk');
+  if (!accountInput || !arfCountLink) return;
+
+  function updateArfCountHref() {
+    const account = accountInput.value.trim();
+    arfCountLink.href = account
+      ? 'https://abusedesk.ops.titan.email/history.html?entity=' + encodeURIComponent(account) + '&region=us-east-1'
+      : 'https://abusedesk.ops.titan.email/history.html?entity=&region=us-east-1';
+  }
+
+  accountInput.addEventListener('input', updateArfCountHref);
+  accountInput.addEventListener('paste', () => setTimeout(updateArfCountHref, 0));
+  updateArfCountHref();
+})();
+
 // ── Copy with visual button feedback ──────────────────────────────────
 function copyOutputWithFeedback(id) {
   const el = document.getElementById(id);
