@@ -5,6 +5,7 @@
 
 // ── Toast ─────────────────────────────────────────────────────────────
 // role=status + aria-live=polite ensures screen readers announce toasts.
+let _toastTimer = null;
 export function showToast(msg, type) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -12,7 +13,8 @@ export function showToast(msg, type) {
   t.setAttribute('aria-live', 'polite');
   t.setAttribute('data-type', type || 'info');
   t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2500);
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
 }
 
 // ── Theme toggle ──────────────────────────────────────────────────────
@@ -76,21 +78,29 @@ export function showValidationErrors(prefix, errors) {
 }
 
 // ── Drag-and-drop helpers (screenshot zones) ──────────────────────────
+const _dropZoneCache = new Map();
+function _getDropZone(zoneId) {
+  let el = _dropZoneCache.get(zoneId);
+  if (!el) { el = document.getElementById(zoneId); if (el) _dropZoneCache.set(zoneId, el); }
+  return el;
+}
 export function handleDragOver(e, zoneId) {
   e.preventDefault();
-  document.getElementById(zoneId).classList.add('dragover');
+  _getDropZone(zoneId)?.classList.add('dragover');
 }
 export function handleDragLeave(e, zoneId) {
-  document.getElementById(zoneId).classList.remove('dragover');
+  _getDropZone(zoneId)?.classList.remove('dragover');
 }
 
 // ── Drag-and-drop helpers (CSV zone) ──────────────────────────────────
+let _csvZone = null;
+function _getCsvZone() { if (!_csvZone) _csvZone = document.getElementById('bounce-csv-zone'); return _csvZone; }
 export function handleCsvDragOver(e) {
   e.preventDefault();
-  document.getElementById('bounce-csv-zone').classList.add('dragover');
+  _getCsvZone()?.classList.add('dragover');
 }
 export function handleCsvDragLeave() {
-  document.getElementById('bounce-csv-zone').classList.remove('dragover');
+  _getCsvZone()?.classList.remove('dragover');
 }
 
 // ── Progress stepper ──────────────────────────────────────────────
@@ -169,15 +179,9 @@ export function toggleResultCard(prefix) {
 }
 
 // ── Screenshot empty state ────────────────────────────────────────
-export function renderScreenshotEmptyState(containerId, stateKey) {
+export function renderScreenshotEmptyState(containerId, count) {
   const previews = document.getElementById(containerId);
   if (!previews) return;
-  let count = 0;
-  if (stateKey) {
-    const parts = stateKey.split('.');
-    const val = window.__state?.[parts[0]]?.[parts[1]];
-    if (Array.isArray(val)) count = val.length;
-  }
   const max = 10;
   previews.innerHTML = '<div class="screenshot-empty"><div class="screenshot-empty-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div><span class="screenshot-empty-text">No screenshots attached</span><span class="screenshot-empty-count">' + count + ' / ' + max + '</span></div>';
 }

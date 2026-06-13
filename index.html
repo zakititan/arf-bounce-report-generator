@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ARF &amp; Bounce Report Generator</title>
+<script>
+  (function() {
+    var t = localStorage.getItem('theme');
+    if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  })();
+</script>
 <!-- Vercel Analytics -->
 <script defer src="/_vercel/insights/script.js"></script>
 <!-- Vercel Speed Insights -->
@@ -17,7 +25,7 @@
 <body>
 <div class="app-shell">
 
-  <header class="topbar" role="banner">
+  <header class="topbar">
     <div class="logo">
       <svg class="logo-icon" viewBox="0 0 32 32" fill="none" aria-label="Report Gen Logo">
         <rect width="32" height="32" rx="8" fill="var(--color-primary)" opacity="0.15"/>
@@ -58,14 +66,14 @@
         <div class="field">
           <label for="arf-account">Account<span class="req">*</span></label>
           <input type="text" id="arf-account" aria-required="true" placeholder="e.g. user@example.com or example.com">
-          <a class="btn btn-secondary btn-mailboards" href="https://mailboards.ops.titan.email/home?env=prod" target="_blank" rel="noopener noreferrer">Check on Mailboards</a>
+          <a class="btn btn-secondary btn-tool-link btn-mailboards" href="https://mailboards.ops.titan.email/home?env=prod" target="_blank" rel="noopener noreferrer">Check on Mailboards</a>
         </div>
         <div class="field-row">
           <div class="field">
             <label for="arf-complaints">No. of ARF Complaints<span class="req">*</span></label>
             <input type="number" id="arf-complaints" aria-required="true" placeholder="0" min="0">
           </div>
-          <a class="btn btn-secondary btn-abusedesk" href="https://abusedesk.ops.titan.email/history.html?entity=&region=us-east-1" target="_blank" rel="noopener noreferrer">Check on AD</a>
+          <a class="btn btn-secondary btn-tool-link btn-abusedesk" href="https://abusedesk.ops.titan.email/history.html?entity=&region=us-east-1" target="_blank" rel="noopener noreferrer">Check on AD</a>
         </div>
         <div class="field-row">
           <div class="field">
@@ -82,7 +90,7 @@
           <select id="arf-email-type" aria-required="true"><option value="">Select...</option><option value="Abuse">Abuse</option><option value="Spam">Spam</option><option value="Normal Business Communication">Normal Business Communication</option></select>
         </div>
         <div class="screenshot-field">
-          <label>Screenshot / EML Details</label>
+          <label for="arf-screenshot-input">Screenshot / EML Details</label>
           <div class="upload-zone" id="arf-upload-zone">
             <input type="file" id="arf-screenshot-input" accept="image/*" multiple aria-label="Upload screenshots">
             <svg class="upload-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
@@ -129,23 +137,23 @@
           <span class="assurance-group-label">Assurances</span>
           <span class="assurance-subgroup-label">Email Hygiene</span>
           <div class="assurance-btn-group" id="arf-assurance-btns-email">
-            <button type="button" class="assurance-btn" data-value="Mailchimp" data-action="toggle-assurance" data-panel="arf"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Mailchimp</button>
-            <button type="button" class="assurance-btn" data-value="Sendgrid" data-action="toggle-assurance" data-panel="arf"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Sendgrid</button>
+            <button type="button" class="assurance-btn" data-value="Mailchimp" data-action="toggle-assurance" data-panel="arf" aria-pressed="false"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Mailchimp</button>
+            <button type="button" class="assurance-btn" data-value="Sendgrid" data-action="toggle-assurance" data-panel="arf" aria-pressed="false"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Sendgrid</button>
           </div>
           <span class="assurance-subgroup-label">Technical</span>
           <div class="assurance-btn-group" id="arf-assurance-btns-tech">
-            <button type="button" class="assurance-btn" data-value="Password Reset" data-action="toggle-assurance" data-panel="arf"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Password Reset</button>
-            <button type="button" class="assurance-btn" data-value="IP shared" data-action="toggle-assurance" data-panel="arf"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>IP shared</button>
-            <button type="button" class="assurance-btn" data-value="Virus scan shared" data-action="toggle-assurance" data-panel="arf"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Virus scan shared</button>
-            <button type="button" class="assurance-btn other-btn" data-value="Other" data-action="toggle-assurance" data-panel="arf"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>+ Other</button>
+            <button type="button" class="assurance-btn" data-value="Password Reset" data-action="toggle-assurance" data-panel="arf" aria-pressed="false"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Password Reset</button>
+            <button type="button" class="assurance-btn" data-value="IP shared" data-action="toggle-assurance" data-panel="arf" aria-pressed="false"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>IP shared</button>
+            <button type="button" class="assurance-btn" data-value="Virus scan shared" data-action="toggle-assurance" data-panel="arf" aria-pressed="false"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Virus scan shared</button>
+            <button type="button" class="assurance-btn other-btn" data-value="Other" data-action="toggle-assurance" data-panel="arf" aria-pressed="false"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>+ Other</button>
           </div>
           <div class="other-field" id="arf-other-field">
             <label for="arf-other-text">Other Assurance Details</label>
             <textarea id="arf-other-text" rows="2" placeholder="Describe additional assurance details..."></textarea>
           </div>
         </div>
-        <div class="screenshot-field">
-          <label>Assurance Screenshots</label>
+          <div class="screenshot-field">
+          <label for="arf-assurance-screenshot-input">Assurance Screenshots</label>
           <div class="upload-zone" id="arf-assurance-upload-zone">
             <input type="file" id="arf-assurance-screenshot-input" accept="image/*" multiple aria-label="Upload assurance screenshots">
             <svg class="upload-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
@@ -156,7 +164,7 @@
           <span class="hint">Screenshot proof of assurances (Mailchimp config, password reset, etc.)</span>
         </div>
         <!-- Validation banner (ARF) -->
-        <div class="validation-banner" id="arf-validation-banner" role="alert" aria-live="polite">
+        <div class="validation-banner" id="arf-validation-banner" role="alert">
           <div class="validation-banner-title">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             Please fill in the required fields:
@@ -207,8 +215,8 @@
         <div class="field">
           <label for="bounce-account">Account<span class="req">*</span></label>
           <input type="text" id="bounce-account" aria-required="true" placeholder="e.g. user@example.com or example.com">
-          <a class="btn btn-secondary btn-mailboards" href="https://mailboards.ops.titan.email/home?env=prod" target="_blank" rel="noopener noreferrer">Check on Mailboards</a>
-          <a class="btn btn-secondary btn-user-agent" href="https://mailboards.ops.titan.email/mail_analytics?env=prod&mail_type=outgoing&mail_status=&sender=&recipient=&from_date=&to_date=" target="_blank" rel="noopener noreferrer">Check User Agent</a>
+          <a class="btn btn-secondary btn-tool-link btn-mailboards" href="https://mailboards.ops.titan.email/home?env=prod" target="_blank" rel="noopener noreferrer">Check on Mailboards</a>
+          <a class="btn btn-secondary btn-tool-link btn-user-agent" href="https://mailboards.ops.titan.email/mail_analytics?env=prod&mail_type=outgoing&mail_status=&sender=&recipient=&from_date=&to_date=" target="_blank" rel="noopener noreferrer">Check User Agent</a>
         </div>
         <div class="field">
           <label for="bounce-prev-unblock">Previous Unblock Request?<span class="req">*</span></label>
@@ -216,7 +224,7 @@
         </div>
         <!-- CSV Bounce List Upload -->
         <div class="csv-upload-field">
-          <label>Bounce List CSV<span class="req">*</span></label>
+          <label for="bounce-csv-input">Bounce List CSV<span class="req">*</span></label>
           <div class="csv-drop-zone" id="bounce-csv-zone">
             <input type="file" id="bounce-csv-input" accept=".csv,text/csv" aria-label="Upload bounce list CSV">
             <svg class="csv-drop-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="18"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
@@ -284,33 +292,33 @@
           <span class="assurance-group-label">Assurances</span>
           <span class="assurance-subgroup-label">Email Hygiene</span>
           <div class="assurance-btn-group" id="bounce-assurance-btns-email">
-            <button type="button" class="assurance-btn" data-value="Neverbounce" data-action="toggle-assurance" data-panel="bounce"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Neverbounce</button>
-            <button type="button" class="assurance-btn" data-value="Zerobounce" data-action="toggle-assurance" data-panel="bounce"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Zerobounce</button>
-            <button type="button" class="assurance-btn" data-value="Mailchimp" data-action="toggle-assurance" data-panel="bounce"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Mailchimp</button>
-            <button type="button" class="assurance-btn" data-value="Sendgrid" data-action="toggle-assurance" data-panel="bounce"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Sendgrid</button>
+            <button type="button" class="assurance-btn" data-value="Neverbounce" data-action="toggle-assurance" data-panel="bounce" aria-pressed="false"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Neverbounce</button>
+            <button type="button" class="assurance-btn" data-value="Zerobounce" data-action="toggle-assurance" data-panel="bounce" aria-pressed="false"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Zerobounce</button>
+            <button type="button" class="assurance-btn" data-value="Mailchimp" data-action="toggle-assurance" data-panel="bounce" aria-pressed="false"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Mailchimp</button>
+            <button type="button" class="assurance-btn" data-value="Sendgrid" data-action="toggle-assurance" data-panel="bounce" aria-pressed="false"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Sendgrid</button>
           </div>
           <span class="assurance-subgroup-label">Technical</span>
           <div class="assurance-btn-group" id="bounce-assurance-btns-tech">
-            <button type="button" class="assurance-btn" data-value="Password reset" data-action="toggle-assurance" data-panel="bounce"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Password reset</button>
-            <button type="button" class="assurance-btn" data-value="IP shared" data-action="toggle-assurance" data-panel="bounce"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>IP shared</button>
-            <button type="button" class="assurance-btn" data-value="Virus scan shared" data-action="toggle-assurance" data-panel="bounce"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Virus scan shared</button>
-            <button type="button" class="assurance-btn" data-value="Contact Form" id="bounce-contact-form-assurance-btn" data-action="toggle-contact-form"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Contact Form</button>
-            <button type="button" class="assurance-btn other-btn" data-value="Other" data-action="toggle-assurance" data-panel="bounce"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>+ Other</button>
+            <button type="button" class="assurance-btn" data-value="Password reset" data-action="toggle-assurance" data-panel="bounce" aria-pressed="false"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Password reset</button>
+            <button type="button" class="assurance-btn" data-value="IP shared" data-action="toggle-assurance" data-panel="bounce" aria-pressed="false"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>IP shared</button>
+            <button type="button" class="assurance-btn" data-value="Virus scan shared" data-action="toggle-assurance" data-panel="bounce" aria-pressed="false"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Virus scan shared</button>
+            <button type="button" class="assurance-btn" data-value="Contact Form" id="bounce-contact-form-assurance-btn" data-action="toggle-contact-form" aria-pressed="false"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Contact Form</button>
+            <button type="button" class="assurance-btn other-btn" data-value="Other" data-action="toggle-assurance" data-panel="bounce" aria-pressed="false"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>+ Other</button>
           </div>
           <div class="website-suboptions" id="bounce-contact-form-suboptions">
             <span class="website-suboptions-label">Contact Form — select applicable:</span>
-            <button type="button" class="website-suboption-btn" data-value="Email Verification" data-action="toggle-suboption"><svg class="check-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Email Verification</button>
-            <button type="button" class="website-suboption-btn" data-value="Antivirus" data-action="toggle-suboption"><svg class="check-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Antivirus</button>
-            <button type="button" class="website-suboption-btn" data-value="Honeypot" data-action="toggle-suboption"><svg class="check-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Honeypot</button>
-            <button type="button" class="website-suboption-btn" data-value="Captcha" data-action="toggle-suboption"><svg class="check-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Captcha</button>
+            <button type="button" class="website-suboption-btn" data-value="Email Verification" data-action="toggle-suboption" aria-pressed="false"><svg class="check-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Email Verification</button>
+            <button type="button" class="website-suboption-btn" data-value="Antivirus" data-action="toggle-suboption" aria-pressed="false"><svg class="check-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Antivirus</button>
+            <button type="button" class="website-suboption-btn" data-value="Honeypot" data-action="toggle-suboption" aria-pressed="false"><svg class="check-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Honeypot</button>
+            <button type="button" class="website-suboption-btn" data-value="Captcha" data-action="toggle-suboption" aria-pressed="false"><svg class="check-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Captcha</button>
           </div>
           <div class="other-field" id="bounce-other-field">
             <label for="bounce-other-text">Other Assurance Details</label>
             <textarea id="bounce-other-text" rows="2" placeholder="Describe additional assurance details..."></textarea>
           </div>
         </div>
-        <div class="screenshot-field">
-          <label>Assurance Screenshots</label>
+          <div class="screenshot-field">
+          <label for="bounce-assurance-screenshot-input">Assurance Screenshots</label>
           <div class="upload-zone" id="bounce-assurance-upload-zone">
             <input type="file" id="bounce-assurance-screenshot-input" accept="image/*" multiple aria-label="Upload assurance screenshots">
             <svg class="upload-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
@@ -320,7 +328,7 @@
           <div class="screenshot-previews" id="bounce-assurance-previews"></div>
           <span class="hint">Screenshot proof of assurances (Mailchimp config, password reset, etc.)</span>
         </div>
-        <div class="validation-banner" id="bounce-validation-banner" role="alert" aria-live="polite">
+        <div class="validation-banner" id="bounce-validation-banner" role="alert">
           <div class="validation-banner-title">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             Please fill in the required fields:
