@@ -22,7 +22,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ### Domain Lookup
 - **Auto WHOIS lookup** — fetches domain creation date and age via [whoisjson.com](https://whoisjson.com)
 - **Website Check** — classifies the domain as *Valid Website* or *No website* via a serverless function; supports SPA shell detection for JS-heavy sites
-- **DKIM Check** — detects common DKIM selectors (titan, neo, google, etc.) via DNS lookup
+- **DKIM Check** — detects Titan and Neo DKIM selectors (`titan`, `titan1`–`titan9`, `neo`, `neo1`–`neo9`) via DNS lookup
 - **Lookup debounce** — 1-second debounce prevents API spam from rapid button clicks or CSV auto-triggers
 - **Stale cache invalidation** — editing the domain input immediately clears the cached WHOIS result and hides the result card
 - **Per-panel generate gating** — the Generate button is disabled only while *that panel's own* lookup is in-flight; the other panel remains unaffected
@@ -73,9 +73,9 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Login rate limiting** — the `/api/login` endpoint uses the shared rate-limit store to prevent brute-force attacks
 - **CORS** — all API endpoints restrict `Origin` to `APP_ORIGIN` env var; `Vary: Origin` header is set correctly
 - **Rate limiting** — max 20 requests/min per IP on all API endpoints; rate-limit map prunes stale entries above 10,000 to prevent memory leaks
-- **Session token expiry** — auth cookies carry a 24-hour expiry enforced during signature verification; leaked tokens are automatically rejected after 24h
+- **Session token expiry** — auth cookies carry an 8-hour expiry enforced during signature verification; leaked tokens are automatically rejected after 8 hours
 - **Hardened auth cookie** — `__Host-` cookie prefix enforces `Path=/` + `Secure` at the browser level, preventing subdomain cookie overwrite
-- **Rate-limit spoofing prevention** — IP extraction uses the last address in `X-Forwarded-For` (untrusted proxies append on the left), preventing attackers from rotating the first IP to bypass rate limits
+- **Rate-limit spoofing prevention** — IP is taken from the first entry in `X-Forwarded-For` (set by Vercel's trusted edge); falls back to `req.socket.remoteAddress`
 - **Hostname validation** — domain input regex rejects IPv4/IPv6 addresses, localhost variants, `.localhost`/`.local`/`.internal` TLDs, consecutive dots, and hyphen-leading labels; `@` stripping prevents email-based bypass
 - **CSP hardening** — Content-Security-Policy includes `base-uri 'self'`, `form-action 'none'`, and `object-src 'none'` to prevent injection via `<base>`, form-jacking, and plugin attacks
 - **HSTS** — `Strict-Transport-Security` header enforces HTTPS with `max-age=31536000; includeSubDomains; preload`
@@ -97,7 +97,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ├── package.json                    # Node deps (used for local dev / tests)
 ├── .gitignore
 ├── api/
-│   ├── _utils.js                   # Shared helpers: sanitiseDomain, checkRateLimit (with map pruning), signToken, verifyToken, CORS headers, classifyFetchError
+│   ├── _utils.js                   # Shared helpers: sanitiseDomain, checkRateLimit (with KV + in-memory fallback), signToken, verifyToken, CORS headers, classifyFetchError
 │   ├── config.js                   # Centralised API config (rate limits, DKIM selectors, website-check patterns, parked keywords)
 │   ├── whois.js                    # WHOIS lookup serverless function
 │   ├── website-check.js            # Website reachability & classification (SPA detection, parked/placeholder detection, redirect analysis)
@@ -131,9 +131,9 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 
 All API endpoints enforce:
 - **CORS** — `Origin` must match `APP_ORIGIN` env var; `Vary: Origin` is set
-- **Rate limiting** — max 20 requests/min per IP (in-memory, per serverless instance)
+- **Rate limiting** — max 20 requests/min per IP; uses Vercel KV when available, falls back to in-memory per-instance store
 
-> **Note on rate limiting:** Because Vercel spins up multiple serverless instances, rate-limit state is per-process, not global. For strict enforcement across all instances, replace the in-memory map in `api/_utils.js` with [Vercel KV](https://vercel.com/docs/storage/vercel-kv).
+> **Note on rate limiting:** The in-memory fallback is per-process, not shared across Vercel instances. For strict global enforcement, provision a [Vercel KV](https://vercel.com/docs/storage/vercel-kv) store and set `KV_REST_API_URL` + `KV_REST_API_TOKEN` in your environment variables.
 
 ---
 
@@ -147,6 +147,8 @@ Set these in the **Vercel Dashboard → Settings → Environment Variables**:
 | `AUTH_SECRET` | ✅ | Random secret used to HMAC-sign the auth session cookie |
 | `WHOISJSON_API_KEY` | ✅ | API key for [whoisjson.com](https://whoisjson.com) WHOIS lookups |
 | `APP_ORIGIN` | ✅ | Your deployment URL (e.g. `https://your-app.vercel.app`) — used for CORS |
+| `KV_REST_API_URL` | ⭐ | Vercel KV endpoint for persistent cross-instance rate limiting (optional but recommended) |
+| `KV_REST_API_TOKEN` | ⭐ | Vercel KV token (required if `KV_REST_API_URL` is set) |
 
 > **Generating `AUTH_SECRET`:** Run `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` or use [generate-secret.vercel.app](https://generate-secret.vercel.app/32).
 
@@ -162,7 +164,7 @@ This project is deployed on **Vercel** with no build step — it's served as sta
 
 1. Fork or clone this repo
 2. Import into [Vercel](https://vercel.com)
-3. Set all four **Environment Variables** listed above
+3. Set all four required **Environment Variables** listed above
 4. Enable **Vercel Analytics** in your project's Analytics tab
 5. Deploy — no build command or output directory needed
 
@@ -220,16 +222,16 @@ APP_ORIGIN=http://localhost:3000
 ## Security
 
 - **Auth cookie** is HMAC-SHA256 signed using `AUTH_SECRET` — forgery without the secret is not feasible
-- **Session token expiry** — auth tokens carry a `sub` and `iat` claim; verified tokens expire after 24 hours
+- **Session token expiry** — auth tokens carry a `sub` and `iat` claim; verified tokens expire after 8 hours
 - **`__Host-` cookie prefix** — prevents subdomain cookie overwrite; also enforces `Path=/` and `Secure` at the browser level
 - **Edge middleware** re-verifies the cookie signature on every request using Web Crypto API
 - **`api/login.js`** uses Node.js `crypto.createHmac` (Node runtime); **`middleware.js`** uses `crypto.subtle` (Edge runtime) — both produce identical signatures with identical claim validation
 - **Constant-time comparison** in `api/login.js` prevents timing-based password inference
 - **Login rate limiting** prevents brute-force password guessing
-- **Rate-limit spoofing prevention** — IP extraction uses the last address in `X-Forwarded-For` (untrusted proxies append on the left)
+- **IP extraction** — uses the first entry in `X-Forwarded-For` (set by Vercel's trusted edge proxy); falls back to `req.socket.remoteAddress`
 - **No default password** — `APP_PASSWORD` must be set as an environment variable; the server returns a 500 error if it's missing
 - **CORS** prevents API calls from unauthorised origins; `Vary: Origin` is set to avoid cache poisoning
-- **Rate limiting** mitigates brute-force and scraping; stale entries are pruned to prevent memory leaks
+- **Rate limiting** mitigates brute-force and scraping; uses Vercel KV when available with an in-memory fallback; stale entries are pruned to prevent memory leaks
 - **CSP** includes `base-uri 'self'`, `form-action 'none'`, and `object-src 'none'` directives
 - **HSTS** enforces HTTPS with `max-age=31536000; includeSubDomains; preload`
 - **Middleware URL matching** uses exact path or subpath prefix to prevent `/api/login-staging` from bypassing auth
