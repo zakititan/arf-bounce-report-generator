@@ -84,17 +84,16 @@ export function verifyToken(token) {
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
 export async function checkRateLimit(ip) {
-  let kv;
   try {
-    kv = (await import('@vercel/kv')).kv;
+    const { kv } = await import('@vercel/kv');
+    const key = `rl:${ip}`;
+    const count = await kv.incr(key);
+    if (count === 1) await kv.expire(key, RATE_LIMIT_WINDOW_MS / 1000);
+    return count > RATE_LIMIT_MAX;
   } catch {
-    // Fallback: if @vercel/kv is not installed (e.g. local dev), allow all
+    // Fallback: if @vercel/kv is not installed or KV is not configured, allow all
     return false;
   }
-  const key = `rl:${ip}`;
-  const count = await kv.incr(key);
-  if (count === 1) await kv.expire(key, RATE_LIMIT_WINDOW_MS / 1000);
-  return count > RATE_LIMIT_MAX;
 }
 
 // ── Middleware wrapper ────────────────────────────────────────────────────────
