@@ -1,11 +1,17 @@
-import { signToken, checkRateLimit, safeEqual, getClientIp, withMiddleware } from './_utils.js';
+import { signToken, checkRateLimit, safeEqual, getClientIp } from './_utils.js';
 import { SESSION_MAX_AGE_S } from './config.js';
 
 const PASSWORD = (process.env.APP_PASSWORD || '').trim();
 const COOKIE_NAME = '__Host-auth_session';
 const MAX_AGE = SESSION_MAX_AGE_S;
+const ALLOWED_ORIGIN = process.env.APP_ORIGIN || '';
 
-export default withMiddleware(async function handler(req, res) {
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (ALLOWED_ORIGIN) res.setHeader('Vary', 'Origin');
+  if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
@@ -43,4 +49,4 @@ export default withMiddleware(async function handler(req, res) {
     `${COOKIE_NAME}=${token}; HttpOnly; Secure; SameSite=Strict; Max-Age=${MAX_AGE}; Path=/`
   );
   res.status(200).json({ ok: true });
-});
+}
