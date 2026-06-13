@@ -40,7 +40,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ### UX & Polish
 - **Email → domain sanitisation** — pasting or typing a full email address (`user@example.com`) in the domain field automatically strips the local-part to `example.com`; also strips `http(s)://`, trailing paths, and ports
 - **Auto-lookup on paste** — pasting a domain or email into either panel's domain field automatically fires the WHOIS/Website/DKIM lookup without needing to click the Lookup button
-- **Form state persistence** — all 14 field values are saved to `localStorage` on every change and restored on next visit
+- **Form state persistence** — all 16 field values are saved to `localStorage` on every change and restored on next visit
 - **Dark / Light theme** — respects system preference with a manual toggle; preference is persisted to `localStorage` with a smooth 250ms crossfade transition
 - **Required field validation** — all required fields are highlighted with inline error messages before generation is allowed
 - **Error resilience** — generate functions are wrapped in `try/catch` so unexpected errors surface as a user-facing toast instead of silently failing
