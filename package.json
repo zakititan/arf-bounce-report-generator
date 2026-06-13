@@ -7,6 +7,6 @@
     "@vercel/kv": "^2.0.0"
   },
   "scripts": {
-    "test": "node --test tests/sanitiseDomain.test.js tests/api-handlers.test.js tests/website-check.test.js tests/withMiddleware.test.js"
+    "test": "node --test tests/sanitiseDomain.test.js tests/api-handlers.test.js tests/website-check.test.js tests/withMiddleware.test.js tests/safeEqual.test.js tests/createCache.test.js tests/getClientIp.test.js tests/rateLimitInMemory.test.js tests/pureFunctions.test.js tests/website-check-helpers.test.js"
   }
 }

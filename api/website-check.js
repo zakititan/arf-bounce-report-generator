@@ -22,7 +22,7 @@ function extractTitle(html) {
   return m ? m[1].trim() : '';
 }
 
-function extractMetaRobots(html) {
+export function extractMetaRobots(html) {
   // Matches both <meta name="robots" content="noindex"> and
   // <meta content="noindex" name="robots"> (HTML5 allows attributes in any order)
   const m =
@@ -31,12 +31,12 @@ function extractMetaRobots(html) {
   return m ? m[1].toLowerCase() : '';
 }
 
-function hasNoindex(html) {
+export function hasNoindex(html) {
   const robots = extractMetaRobots(html);
   return robots.includes('noindex');
 }
 
-function isImageOnlyPage(bodyLength, bodyBytes) {
+export function isImageOnlyPage(bodyLength, bodyBytes) {
   if (bodyBytes === 0) return false;
   return (bodyLength / bodyBytes) < WEBSITE_MIN_TEXT_RATIO;
 }
@@ -92,7 +92,7 @@ function redirectsToParkedService(response, requestedDomain) {
  * This prevents parked SPAs (rare but possible) from being incorrectly marked as
  * Valid Website.
  */
-function isSpaShell(bodyText) {
+export function isSpaShell(bodyText) {
   const hasJsBundle = /<script\s[^>]*src=["'][^"']*\.js/i.test(bodyText);
   if (!hasJsBundle) return false;
   const lower = bodyText.toLowerCase();
