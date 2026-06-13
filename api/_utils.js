@@ -5,6 +5,39 @@ const kvPromise = import('@vercel/kv').then(m => m.kv).catch(() => null);
 const ALLOWED_ORIGIN = process.env.APP_ORIGIN || '';
 const LOCAL_TLD_RE = /\.(localhost|local|internal)$/;
 
+// ── In-memory response cache ────────────────────────────────────────────────
+/**
+ * Returns a generic in-memory cache with TTL and auto-pruning.
+ * @param {number} ttlMs - Time-to-live in milliseconds.
+ * @returns {{ get: (key: string) => any|null, set: (key: string, value: any) => void }}
+ */
+export function createCache(ttlMs) {
+  const _store = new Map();
+
+  function prune() {
+    const now = Date.now();
+    for (const [k, v] of _store) {
+      if (v.expires < now) _store.delete(k);
+    }
+  }
+
+  return {
+    get(key) {
+      const entry = _store.get(key);
+      if (!entry) return null;
+      if (entry.expires < Date.now()) {
+        _store.delete(key);
+        return null;
+      }
+      return entry.value;
+    },
+    set(key, value) {
+      _store.set(key, { value, expires: Date.now() + ttlMs });
+      if (_store.size > 1000) prune();
+    },
+  };
+}
+
 // ── Domain sanitisation ───────────────────────────────────────────────────────
 /**
  * Strips protocol, path, query, fragment, and port from an input string,

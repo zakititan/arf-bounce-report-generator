@@ -1,5 +1,7 @@
-import { sanitiseDomain, withMiddleware } from './_utils.js';
-import { DKIM_FAMILIES, DKIM_INDEXED_RANGE, TIMEOUT_DKIM_MS } from './config.js';
+import { sanitiseDomain, withMiddleware, createCache } from './_utils.js';
+import { DKIM_FAMILIES, DKIM_SELECTORS, TIMEOUT_DKIM_MS } from './config.js';
+
+const cache = createCache(15 * 60 * 1000);
 
 export default withMiddleware(async function handler(req, res) {
   const domain = sanitiseDomain(req.query.domain);
@@ -7,24 +9,41 @@ export default withMiddleware(async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid or missing domain parameter' });
   }
 
-  const allSelectors = DKIM_FAMILIES.flatMap(family => [
-    family,
-    ...DKIM_INDEXED_RANGE.map(n => `${family}${n}`),
-  ]);
+  const cached = cache.get(domain);
+  if (cached) return res.status(200).json(cached);
 
-  const results = await Promise.allSettled(
-    allSelectors.map(selector => lookupDkim(selector, domain))
+  // Phase 1: query base selectors (titan, neo) for early termination
+  const baseSelectors = DKIM_FAMILIES.map(f => f);
+  const baseResults = await Promise.allSettled(
+    baseSelectors.map(selector => lookupDkim(selector, domain))
   );
 
-  const matched = results
-    .map((r, i) => (r.status === 'fulfilled' && r.value ? { selector: allSelectors[i], record: r.value } : null))
+  const baseMatched = baseResults
+    .map((r, i) => (r.status === 'fulfilled' && r.value ? { selector: baseSelectors[i], record: r.value } : null))
     .filter(Boolean);
 
-  return res.status(200).json({
+  let matched = baseMatched;
+
+  // Phase 2: if no base match, query remaining indexed selectors
+  if (matched.length === 0) {
+    const indexedSelectors = DKIM_SELECTORS.filter(s => !baseSelectors.includes(s));
+    const indexedResults = await Promise.allSettled(
+      indexedSelectors.map(selector => lookupDkim(selector, domain))
+    );
+
+    matched = indexedResults
+      .map((r, i) => (r.status === 'fulfilled' && r.value ? { selector: indexedSelectors[i], record: r.value } : null))
+      .filter(Boolean);
+  }
+
+  const result = {
     status: matched.length > 0 ? 'Set' : 'Not Set',
     selectors_found: matched.map(m => m.selector),
     detail: matched[0] || null,
-  });
+  };
+
+  cache.set(domain, result);
+  return res.status(200).json(result);
 });
 
 async function lookupDkim(selector, domain) {

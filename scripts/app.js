@@ -30,6 +30,11 @@ const MAX_SCREENSHOTS = 10;
 const LOOKUP_DEBOUNCE_MS = 1000;
 const LS_KEY = 'arf_bounce_form_state';
 const _lookupTimers = { arf: null, bounce: null };
+const _progressTimers = {};
+function debouncedUpdateFormProgress(prefix) {
+  clearTimeout(_progressTimers[prefix]);
+  _progressTimers[prefix] = setTimeout(() => updateFormProgress(prefix), 150);
+}
 
 function escapeHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
@@ -178,43 +183,41 @@ function initDomainInputs() {
 });
 
 // ── Check ARF count link updater ───────────────────────────────────
-(function() {
-  const accountInput = document.getElementById('arf-account');
-  const arfCountLink = document.querySelector('#arf-panel .btn-abusedesk');
-  if (!accountInput || !arfCountLink) return;
-
+const arfAccountInput = document.getElementById('arf-account');
+const arfCountLink = document.querySelector('#arf-panel .btn-abusedesk');
+if (arfAccountInput && arfCountLink) {
   function updateArfCountHref() {
-    const account = accountInput.value.trim();
+    const account = arfAccountInput.value.trim();
     arfCountLink.href = account
       ? 'https://abusedesk.ops.titan.email/history.html?entity=' + encodeURIComponent(account) + '&region=us-east-1'
       : 'https://abusedesk.ops.titan.email/history.html?entity=&region=us-east-1';
   }
 
-  accountInput.addEventListener('input', updateArfCountHref);
-  accountInput.addEventListener('paste', () => setTimeout(updateArfCountHref, 0));
+  arfAccountInput.addEventListener('input', updateArfCountHref);
+  arfAccountInput.addEventListener('paste', () => setTimeout(updateArfCountHref, 0));
   updateArfCountHref();
-})();
+}
 
 // ── Check User Agent link updater ─────────────────────────────────
-(function() {
+function updateUserAgentHref() {
   const accountInput = document.getElementById('bounce-account');
   const userAgentLink = document.querySelector('#bounce-panel .btn-user-agent');
   if (!accountInput || !userAgentLink) return;
-
-  function updateUserAgentHref() {
-    const account = accountInput.value.trim();
-    const fromDate = state.bounce.csvFromDate || '';
-    const toDate = state.bounce.csvToDate || '';
-    userAgentLink.href = 'https://mailboards.ops.titan.email/mail_analytics?env=prod&mail_type=outgoing&mail_status=&sender=' +
-      encodeURIComponent(account) + '&recipient=&from_date=' + encodeURIComponent(fromDate) + '&to_date=' + encodeURIComponent(toDate);
+  const account = accountInput.value.trim();
+  const fromDate = state.bounce.csvFromDate || '';
+  const toDate = state.bounce.csvToDate || '';
+  userAgentLink.href = 'https://mailboards.ops.titan.email/mail_analytics?env=prod&mail_type=outgoing&mail_status=&sender=' +
+    encodeURIComponent(account) + '&recipient=&from_date=' + encodeURIComponent(fromDate) + '&to_date=' + encodeURIComponent(toDate);
+}
+{
+  const uaAccountInput = document.getElementById('bounce-account');
+  const userAgentLink = document.querySelector('#bounce-panel .btn-user-agent');
+  if (uaAccountInput && userAgentLink) {
+    uaAccountInput.addEventListener('input', updateUserAgentHref);
+    uaAccountInput.addEventListener('paste', () => setTimeout(updateUserAgentHref, 0));
+    updateUserAgentHref();
   }
-
-  accountInput.addEventListener('input', updateUserAgentHref);
-  accountInput.addEventListener('paste', () => setTimeout(updateUserAgentHref, 0));
-  updateUserAgentHref();
-  // Expose for CSV processing to call after dates are extracted
-  window.__updateUserAgentHref = updateUserAgentHref;
-})();
+}
 
 // ── Copy with visual button feedback ──────────────────────────────────
 function copyOutputWithFeedback(id) {
@@ -289,14 +292,15 @@ function copyOutputWithFeedback(id) {
 function initEventDelegation() {
   // Track which panel user last interacted with (for Ctrl/Cmd+Enter shortcut).
   // Runs on every focusin that bubbles from an input or select inside a .panel.
-  document.querySelector('.app-shell').addEventListener('focusin', (e) => {
+  const shell = document.querySelector('.app-shell');
+  shell.addEventListener('focusin', (e) => {
     const panel = e.target.closest('[id$="-panel"]');
     if (!panel) return;
     if (panel.id === 'arf-panel') lastActivePanel = 'arf';
     else if (panel.id === 'bounce-panel') lastActivePanel = 'bounce';
   });
 
-  document.querySelector('.app-shell').addEventListener('click', (e) => {
+  shell.addEventListener('click', (e) => {
     const target = e.target.closest('[data-action]');
     if (!target) return;
     const action = target.getAttribute('data-action');
@@ -345,7 +349,7 @@ function initEventDelegation() {
     }
   });
 
-  document.querySelector('.app-shell').addEventListener('change', (e) => {
+  shell.addEventListener('change', (e) => {
     const target = e.target.closest('[data-action]');
     if (!target) return;
     const action = target.getAttribute('data-action');
@@ -446,7 +450,7 @@ function attachPersistListeners() {
     if (el) {
       const panelPrefix = id.startsWith('arf') ? 'arf' : 'bounce';
       el.addEventListener('change', () => { saveFormState(); updateFormProgress(panelPrefix); });
-      el.addEventListener('input', () => updateFormProgress(panelPrefix));
+      el.addEventListener('input', () => debouncedUpdateFormProgress(panelPrefix));
     }
   });
 }
@@ -499,6 +503,7 @@ function processCsv(file) {
   reader.onload = function (e) {
     const lines = e.target.result.split(/\r?\n/).filter(l => l.trim() !== '');
     const dataRows = Math.max(0, lines.length - 1);
+    const firstDataRow = lines.length >= 2 ? parseCsvRow(lines[1]) : null;
     state.bounce.csvCount = dataRows;
     document.getElementById('bounce-csv-count').textContent = dataRows + ' bounce' + (dataRows !== 1 ? 's' : '');
     document.getElementById('bounce-csv-name').textContent = file.name;
@@ -508,18 +513,18 @@ function processCsv(file) {
     document.getElementById('bounce-csv-result').classList.add('visible');
     // Extract date range from 1st column (index 0) of CSV
     if (lines.length >= 2) {
-      const firstRow = parseCsvRow(lines[1]);
+      const firstRow = firstDataRow;
       const lastRow = parseCsvRow(lines[lines.length - 1]);
       const rawFirst = (firstRow[0] || '').trim();
       const rawLast = (lastRow[0] || '').trim();
       state.bounce.csvToDate = rawFirst ? rawFirst.substring(0, 10) : null;
       state.bounce.csvFromDate = rawLast ? rawLast.substring(0, 10) : null;
-      if (window.__updateUserAgentHref) window.__updateUserAgentHref();
+      updateUserAgentHref();
     }
     if (lines.length >= 2) {
       // Domain is taken from the 2nd column (index 1) if it yields a valid
       // domain/email, otherwise falls back to the 3rd column (index 2).
-      const cols = parseCsvRow(lines[1]);
+      const cols = firstDataRow;
       const col2Value = cols[1] || '';
       const col3Value = cols[2] || '';
       const detectedDomain = sanitiseDomainInput(col2Value) || sanitiseDomainInput(col3Value);
@@ -552,7 +557,7 @@ function clearCsv() {
   document.getElementById('bounce-csv-name').textContent = '';
   document.getElementById('bounce-lt40-badge').textContent = '';
   document.getElementById('bounce-csv-input').value = '';
-  if (window.__updateUserAgentHref) window.__updateUserAgentHref();
+  updateUserAgentHref();
 }
 
 // ── Domain Lookup (debounced) ─────────────────────────────────────────
@@ -622,11 +627,6 @@ async function _doLookup(prefix) {
   }
 }
 
-function mapVerdictToSelect(verdict) {
-  if (verdict === 'Valid Website') return 'Valid Website';
-  return 'No website';
-}
-
 async function checkWebsite(prefix, domain) {
   const websiteEl = document.getElementById(prefix + '-result-website');
   const websiteSelect = document.getElementById(prefix + '-website');
@@ -641,7 +641,7 @@ async function checkWebsite(prefix, domain) {
       websiteEl.firstChild.textContent = verdict;
     }
     if (websiteSelect && websiteSelect.value === '') {
-      const mapped = mapVerdictToSelect(verdict);
+      const mapped = verdict === 'Valid Website' ? 'Valid Website' : 'No website';
       websiteSelect.value = mapped;
       if (hintEl) hintEl.textContent = 'Auto-detected: ' + reason;
       updateFormProgress(prefix);

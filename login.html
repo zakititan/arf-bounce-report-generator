@@ -178,9 +178,9 @@ async function handleLogin(e) {
     });
 
     if (res.ok) {
-      const params = new URLSearchParams(window.location.search);
       window.location.href = '/';
     } else {
+      err.textContent = 'Incorrect password. Please try again.';
       err.classList.add('visible');
       btn.disabled = false;
       btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Unlock';
