@@ -122,6 +122,35 @@ function initDomainInputs() {
   });
 }
 
+// Account field → auto-fill domain input + trigger lookup
+['arf', 'bounce'].forEach(prefix => {
+  const accountInput = document.getElementById(prefix + '-account');
+  if (!accountInput) return;
+
+  // On paste: keep raw value in Account, push sanitised domain to Domain input
+  accountInput.addEventListener('paste', (e) => {
+    e.preventDefault();
+    const pasted = (e.clipboardData || window.clipboardData).getData('text');
+    const sanitised = sanitiseDomainInput(pasted);
+    accountInput.value = pasted; // preserve full email in account field
+    const domainInput = document.getElementById(prefix + '-domain-input');
+    if (domainInput) domainInput.value = sanitised;
+    state[prefix].whois = null;
+    document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
+    lookupDomain(prefix); // debounced
+  });
+
+  // On input: sync sanitised domain and trigger debounced lookup
+  accountInput.addEventListener('input', () => {
+    const sanitised = sanitiseDomainInput(accountInput.value);
+    const domainInput = document.getElementById(prefix + '-domain-input');
+    if (domainInput) domainInput.value = sanitised;
+    state[prefix].whois = null;
+    document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
+    lookupDomain(prefix); // debounced — safe to call on every keystroke
+  });
+});
+
 // ── Copy with visual button feedback ──────────────────────────────────
 function copyOutputWithFeedback(id) {
   const el = document.getElementById(id);
@@ -312,9 +341,9 @@ function initPasteSupport() {
 
 // ── localStorage persistence ──────────────────────────────────────────
 const PERSIST_FIELDS = [
-  'arf-domain-type', 'arf-complaints', 'arf-prev-unblock',
+  'arf-account', 'arf-domain-type', 'arf-complaints', 'arf-prev-unblock',
   'arf-blocked-lt2', 'arf-email-type', 'arf-website', 'arf-dkim', 'arf-domain-input',
-  'bounce-prev-unblock', 'bounce-other-blocked', 'bounce-website',
+  'bounce-account', 'bounce-prev-unblock', 'bounce-other-blocked', 'bounce-website',
   'bounce-dkim', 'bounce-domain-input', 'bounce-other-blocked-detail',
 ];
 
@@ -696,9 +725,10 @@ function clearAssurances(prefix) {
 function v(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
 
 function validateARF() {
-  const fieldIds = ['arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim'];
+  const fieldIds = ['arf-account','arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim'];
   clearFieldErrors(fieldIds);
   const errors = [];
+  if (!v('arf-account')) errors.push({ id: 'arf-account', label: 'Account' });
   if (!v('arf-domain-type'))  errors.push({ id: 'arf-domain-type',  label: 'Domain Type' });
   if (!v('arf-complaints'))   errors.push({ id: 'arf-complaints',   label: 'No. of ARF Complaints' });
   if (!v('arf-prev-unblock')) errors.push({ id: 'arf-prev-unblock', label: 'Previous Unblock Request' });
@@ -706,13 +736,17 @@ function validateARF() {
   if (!v('arf-email-type'))   errors.push({ id: 'arf-email-type',   label: 'Email Content Type' });
   if (!v('arf-website'))      errors.push({ id: 'arf-website',      label: 'Valid Website' });
   if (!v('arf-dkim'))         errors.push({ id: 'arf-dkim',         label: 'DKIM Status' });
+  const arfAssurances = getActiveAssurances('arf');
+  if (arfAssurances.length === 0)
+    errors.push({ id: null, label: 'Assurances (select at least one)' });
   return errors;
 }
 
 function validateBounce() {
-  const fieldIds = ['bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-other-blocked-detail'];
+  const fieldIds = ['bounce-account','bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-other-blocked-detail'];
   clearFieldErrors(fieldIds);
   const errors = [];
+  if (!v('bounce-account')) errors.push({ id: 'bounce-account', label: 'Account' });
   if (!v('bounce-prev-unblock'))  errors.push({ id: 'bounce-prev-unblock',  label: 'Previous Unblock Request' });
   if (state.bounce.csvCount === null) errors.push({ id: null,               label: 'Bounce List CSV (upload a CSV file)' });
   if (!v('bounce-other-blocked')) errors.push({ id: 'bounce-other-blocked', label: 'Other Blocked Email in Domain' });
@@ -720,6 +754,9 @@ function validateBounce() {
     errors.push({ id: 'bounce-other-blocked-detail', label: 'Blocked Email Account(s) in Same Domain' });
   if (!v('bounce-website'))       errors.push({ id: 'bounce-website',       label: 'Valid Website' });
   if (!v('bounce-dkim'))          errors.push({ id: 'bounce-dkim',          label: 'DKIM Status' });
+  const bounceAssurances = getActiveAssurances('bounce');
+  if (bounceAssurances.length === 0)
+    errors.push({ id: null, label: 'Assurances (select at least one)' });
   return errors;
 }
 
@@ -797,7 +834,7 @@ function generateARF() {
 function clearARF() {
   if (!confirm('Clear all ARF form data? This cannot be undone.')) return;
 
-  ['arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim','arf-domain-input']
+  ['arf-account','arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim','arf-domain-input']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   state.arf.screenshots.length = 0;
   state.arf.assuranceScreenshots.length = 0;
@@ -895,7 +932,7 @@ function generateBounce() {
 function clearBounce() {
   if (!confirm('Clear all Bounce form data? This cannot be undone.')) return;
 
-  ['bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-domain-input']
+  ['bounce-account','bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-domain-input']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   clearCsv();
   state.bounce.assuranceScreenshots.length = 0;
@@ -926,9 +963,9 @@ function createTaeJira(prefix) {
 
   copyOutputWithFeedback(prefix + '-output-text');
 
-  const domain = document.getElementById(prefix + '-domain-input')?.value || '';
+  const account = document.getElementById(prefix + '-account')?.value.trim() || '';
   const typeLabel = prefix === 'arf' ? 'ARF' : 'Bounce';
-  const summary = encodeURIComponent(typeLabel + ' unsuspension request: ' + domain);
+  const summary = encodeURIComponent(typeLabel + ' unsuspension request: ' + account);
   const label = prefix === 'arf' ? 'ARF_unsuspension' : 'Bounce_unsuspension';
   const jiraUrl = 'https://jira.directi.com/secure/CreateIssueDetails!init.jspa?pid=12900&issuetype=10902&priority=10000&labels=' + label + '&summary=' + summary;
 
