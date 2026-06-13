@@ -41,6 +41,8 @@ const state = {
   },
   bounce: {
     csvCount: null,
+    csvFromDate: null,
+    csvToDate: null,
     assuranceScreenshots: [],
     whois: null,
     lookupInFlight: false,
@@ -188,6 +190,27 @@ function initDomainInputs() {
   accountInput.addEventListener('input', updateArfCountHref);
   accountInput.addEventListener('paste', () => setTimeout(updateArfCountHref, 0));
   updateArfCountHref();
+})();
+
+// ── Check User Agent link updater ─────────────────────────────────
+(function() {
+  const accountInput = document.getElementById('bounce-account');
+  const userAgentLink = document.querySelector('#bounce-panel .btn-user-agent');
+  if (!accountInput || !userAgentLink) return;
+
+  function updateUserAgentHref() {
+    const account = accountInput.value.trim();
+    const fromDate = state.bounce.csvFromDate || '';
+    const toDate = state.bounce.csvToDate || '';
+    userAgentLink.href = 'https://mailboards.ops.titan.email/mail_analytics?env=prod&mail_type=outgoing&mail_status=&sender=' +
+      encodeURIComponent(account) + '&recipient=&from_date=' + encodeURIComponent(fromDate) + '&to_date=' + encodeURIComponent(toDate);
+  }
+
+  accountInput.addEventListener('input', updateUserAgentHref);
+  accountInput.addEventListener('paste', () => setTimeout(updateUserAgentHref, 0));
+  updateUserAgentHref();
+  // Expose for CSV processing to call after dates are extracted
+  window.__updateUserAgentHref = updateUserAgentHref;
 })();
 
 // ── Copy with visual button feedback ──────────────────────────────────
@@ -484,6 +507,16 @@ function processCsv(file) {
     if (dataRows < 40) { badge.textContent = '< 40 ✓'; badge.className = 'csv-lt40-badge ok'; }
     else { badge.textContent = '≥ 40 ⚠'; badge.className = 'csv-lt40-badge warn'; }
     document.getElementById('bounce-csv-result').classList.add('visible');
+    // Extract date range from 1st column (index 0) of CSV
+    if (lines.length >= 2) {
+      const firstRow = parseCsvRow(lines[1]);
+      const lastRow = parseCsvRow(lines[lines.length - 1]);
+      const rawFirst = (firstRow[0] || '').trim();
+      const rawLast = (lastRow[0] || '').trim();
+      state.bounce.csvToDate = rawFirst ? rawFirst.substring(0, 10) : null;
+      state.bounce.csvFromDate = rawLast ? rawLast.substring(0, 10) : null;
+      if (window.__updateUserAgentHref) window.__updateUserAgentHref();
+    }
     if (lines.length >= 2) {
       // Domain is taken from the 2nd column (index 1) if it yields a valid
       // domain/email, otherwise falls back to the 3rd column (index 2).
@@ -513,11 +546,14 @@ function processCsv(file) {
 }
 function clearCsv() {
   state.bounce.csvCount = null;
+  state.bounce.csvFromDate = null;
+  state.bounce.csvToDate = null;
   document.getElementById('bounce-csv-result').classList.remove('visible');
   document.getElementById('bounce-csv-count').textContent = '—';
   document.getElementById('bounce-csv-name').textContent = '';
   document.getElementById('bounce-lt40-badge').textContent = '';
   document.getElementById('bounce-csv-input').value = '';
+  if (window.__updateUserAgentHref) window.__updateUserAgentHref();
 }
 
 // ── Domain Lookup (debounced) ─────────────────────────────────────────

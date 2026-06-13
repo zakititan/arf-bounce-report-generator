@@ -79,6 +79,11 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Check ARF count** — a "Check on AD" button sits in a 50/50 split row alongside the ARF Complaints field, linking to the Abuse Desk history page (`abusedesk.ops.titan.email/history.html`) with the Account name as the `entity` parameter and `region=us-east-1`
 - **Dynamic href** — the link URL updates in real-time as the Account field is typed or pasted into
 
+### User Agent Quick Link (Bounce Panel)
+- **Check User Agent** — a "Check User Agent" button sits below "Check on Mailboards" in the Bounce panel, linking to [mailboards.ops.titan.email/mail_analytics](https://mailboards.ops.titan.email/mail_analytics) with `sender` set to the Account value and `from_date`/`to_date` extracted from the 1st column of the uploaded CSV
+- **Date extraction** — `from_date` is taken from the last data row's 1st column; `to_date` is taken from the first data row's 1st column; timestamps are truncated to `YYYY-MM-DD`
+- **Dynamic href** — the link URL updates when the Account field changes or a CSV is uploaded/cleared
+
 ### Testing
 - **105 unit tests across 4 files** — covers `sanitiseDomain` (38 edge cases), `checkRateLimit`/`classifyFetchError`/token helpers (25 test cases including expiry, missing claims, non-JSON payload), website-check helpers (~38 test cases), and `withMiddleware` CORS/rate-limit middleware (8 test cases)
 - **Config integrity checks** — all keyword/pattern arrays are verified at test time for empty strings and lowercase consistency
