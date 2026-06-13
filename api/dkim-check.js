@@ -1,29 +1,42 @@
 import { sanitiseDomain, withMiddleware } from './_utils.js';
-import { DKIM_SELECTORS, TIMEOUT_DKIM_MS, globalRateLimitStore } from './config.js';
+import { DKIM_FAMILIES, DKIM_INDEXED_RANGE, TIMEOUT_DKIM_MS } from './config.js';
 
-export default withMiddleware(globalRateLimitStore, async function handler(req, res) {
+export default withMiddleware(async function handler(req, res) {
   const domain = sanitiseDomain(req.query.domain);
   if (!domain) {
     return res.status(400).json({ error: 'Invalid or missing domain parameter' });
   }
 
-  const results = await Promise.allSettled(
-    DKIM_SELECTORS.map(selector => lookupDkim(selector, domain))
+  // Phase 1: check only base selectors (titan, neo)
+  const baseResults = await Promise.allSettled(
+    DKIM_FAMILIES.map(selector => lookupDkim(selector, domain))
   );
 
-  const matched = results
-    .map((r, i) => (r.status === 'fulfilled' && r.value ? { selector: DKIM_SELECTORS[i], record: r.value } : null))
+  const matchedFamily = baseResults
+    .map((r, i) => (r.status === 'fulfilled' && r.value ? { family: DKIM_FAMILIES[i], record: r.value } : null))
     .filter(Boolean);
 
-  if (matched.length > 0) {
-    return res.status(200).json({
-      status: 'Set',
-      selectors_found: matched.map(m => m.selector),
-      detail: matched[0],
-    });
+  if (matchedFamily.length === 0) {
+    return res.status(200).json({ status: 'Not Set', selectors_found: [], detail: null });
   }
 
-  return res.status(200).json({ status: 'Not Set', selectors_found: [], detail: null });
+  // Phase 2: check numbered variants for the first matched family only
+  const best = matchedFamily[0];
+  const numberedSelectors = DKIM_INDEXED_RANGE.map(n => `${best.family}${n}`);
+  const numberedResults = await Promise.allSettled(
+    numberedSelectors.map(selector => lookupDkim(selector, domain))
+  );
+
+  const allSelectors = [best.family, ...numberedSelectors];
+  const matched = [best, ...numberedResults
+    .map((r, i) => (r.status === 'fulfilled' && r.value ? { selector: numberedSelectors[i], record: r.value } : null))
+    .filter(Boolean)];
+
+  return res.status(200).json({
+    status: 'Set',
+    selectors_found: matched.map(m => m.selector),
+    detail: matched[0],
+  });
 });
 
 async function lookupDkim(selector, domain) {

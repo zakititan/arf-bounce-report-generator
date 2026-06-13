@@ -1,5 +1,5 @@
-import { withMiddleware } from './_utils.js';
-import { TIMEOUT_HEALTH_MS, globalRateLimitStore } from './config.js';
+import { withMiddleware, classifyFetchError } from './_utils.js';
+import { TIMEOUT_HEALTH_MS } from './config.js';
 
 async function checkWhoisAPI() {
   const key = process.env.WHOISJSON_API_KEY;
@@ -22,11 +22,11 @@ async function checkWhoisAPI() {
       return { ok: false, reason: 'upstream_error', message: `Unexpected response: HTTP ${res.status}.` };
     return { ok: true, message: 'Reachable.' };
   } catch (err) {
-    const isTimeout = err?.name === 'AbortError' || err?.message?.toLowerCase().includes('timeout');
+    const { reason } = classifyFetchError(err, 'WHOIS', TIMEOUT_HEALTH_MS);
     return {
       ok: false,
-      reason: isTimeout ? 'timeout' : 'network',
-      message: isTimeout
+      reason,
+      message: reason === 'timeout'
         ? `Timed out after ${TIMEOUT_HEALTH_MS / 1000}s.`
         : `Network error: ${err?.message || 'unknown'}.`,
     };
@@ -49,18 +49,18 @@ async function checkDnsAPI() {
       return { ok: false, reason: 'dns_error', message: `DNS status code ${data.Status}.` };
     return { ok: true, message: 'Reachable.' };
   } catch (err) {
-    const isTimeout = err?.name === 'AbortError' || err?.message?.toLowerCase().includes('timeout');
+    const { reason } = classifyFetchError(err, 'Google DNS', TIMEOUT_HEALTH_MS);
     return {
       ok: false,
-      reason: isTimeout ? 'timeout' : 'network',
-      message: isTimeout
+      reason,
+      message: reason === 'timeout'
         ? `Timed out after ${TIMEOUT_HEALTH_MS / 1000}s.`
         : `Network error: ${err?.message || 'unknown'}.`,
     };
   }
 }
 
-export default withMiddleware(globalRateLimitStore, async function handler(req, res) {
+export default withMiddleware(async function handler(req, res) {
   const [whoisjson, googleDns] = await Promise.all([checkWhoisAPI(), checkDnsAPI()]);
   const allOk = whoisjson.ok && googleDns.ok;
   return res.status(allOk ? 200 : 503).json({

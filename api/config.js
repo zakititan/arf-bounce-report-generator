@@ -7,11 +7,8 @@
 export const RATE_LIMIT_MAX      = 20;      // requests per window per IP
 export const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
 
-// Shared rate-limit store across all API handlers (single Map, not per-endpoint).
-// NOTE: This is an in-process store — it resets on each serverless cold start and
-// does NOT enforce limits across multiple concurrent instances. For strict global
-// rate limiting, replace this with Vercel KV (Redis) or a similar edge store.
-export const globalRateLimitStore = new Map();
+export const SESSION_MAX_AGE_MS = 8 * 60 * 60 * 1000; // 8 hours (matches cookie Max-Age)
+export const SESSION_MAX_AGE_S  = SESSION_MAX_AGE_MS / 1000;
 
 // ── Timeouts (ms) ────────────────────────────────────────────────────────────
 export const TIMEOUT_WHOIS_MS   = 10_000; // WhoisJSON is occasionally slow

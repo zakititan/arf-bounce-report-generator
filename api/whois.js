@@ -1,9 +1,9 @@
 import { sanitiseDomain, withMiddleware, classifyFetchError } from './_utils.js';
-import { TIMEOUT_WHOIS_MS, globalRateLimitStore } from './config.js';
+import { TIMEOUT_WHOIS_MS } from './config.js';
 
 const WHOISJSON_API_KEY = process.env.WHOISJSON_API_KEY;
 
-export default withMiddleware(globalRateLimitStore, async function handler(req, res) {
+export default withMiddleware(async function handler(req, res) {
   if (!WHOISJSON_API_KEY) {
     return res.status(500).json({
       error:  'WHOIS API key is not configured — contact the administrator.',
@@ -33,7 +33,7 @@ export default withMiddleware(globalRateLimitStore, async function handler(req, 
 
     if (creationRaw) {
       let createdAt;
-      if (typeof creationRaw === 'number')       createdAt = new Date(creationRaw * 1000);
+      if (typeof creationRaw === 'number')       createdAt = creationRaw > 1e12 ? new Date(creationRaw) : new Date(creationRaw * 1000);
       else if (Array.isArray(creationRaw))        createdAt = new Date(creationRaw[0]);
       else                                        createdAt = new Date(creationRaw);
 

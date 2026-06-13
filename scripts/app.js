@@ -29,6 +29,7 @@ import {
 const MAX_SCREENSHOTS = 10;
 const LOOKUP_DEBOUNCE_MS = 1000;
 const LS_KEY = 'arf_bounce_form_state';
+const _lookupTimers = { arf: null, bounce: null };
 
 // ── State ─────────────────────────────────────────────────────────────
 const state = {
@@ -37,14 +38,12 @@ const state = {
     assuranceScreenshots: [],
     whois: null,
     lookupInFlight: false,
-    lookupLastFired: 0,
   },
   bounce: {
     csvCount: null,
     assuranceScreenshots: [],
     whois: null,
     lookupInFlight: false,
-    lookupLastFired: 0,
   },
 };
 window.__state = state;
@@ -207,7 +206,7 @@ function initEventDelegation() {
         else if (panel === 'bounce') clearBounce();
         break;
       case 'lookup':
-        if (panel) lookupDomain(panel);
+        if (panel) lookupDomainImmediate(panel);
         break;
       case 'create-jira':
         createTaeJira(panel);
@@ -339,8 +338,9 @@ function attachPersistListeners() {
   PERSIST_FIELDS.forEach(id => {
     const el = document.getElementById(id);
     if (el) {
-      el.addEventListener('change', () => { saveFormState(); updateFormProgress('arf'); updateFormProgress('bounce'); });
-      el.addEventListener('input', () => { updateFormProgress('arf'); updateFormProgress('bounce'); });
+      const panelPrefix = id.startsWith('arf') ? 'arf' : 'bounce';
+      el.addEventListener('change', () => { saveFormState(); updateFormProgress(panelPrefix); });
+      el.addEventListener('input', () => updateFormProgress(panelPrefix));
     }
   });
 }
@@ -433,11 +433,19 @@ function clearCsv() {
 }
 
 // ── Domain Lookup (debounced) ─────────────────────────────────────────
-async function lookupDomain(prefix) {
-  const now = Date.now();
-  if (now - state[prefix].lookupLastFired < LOOKUP_DEBOUNCE_MS) return;
-  state[prefix].lookupLastFired = now;
+// Debounced — use for auto-triggers (paste, CSV detection)
+function lookupDomain(prefix) {
+  clearTimeout(_lookupTimers[prefix]);
+  _lookupTimers[prefix] = setTimeout(() => _doLookup(prefix), LOOKUP_DEBOUNCE_MS);
+}
 
+// Immediate — use for explicit user button clicks
+function lookupDomainImmediate(prefix) {
+  clearTimeout(_lookupTimers[prefix]);
+  _doLookup(prefix);
+}
+
+async function _doLookup(prefix) {
   const input = document.getElementById(prefix + '-domain-input');
   if (input) input.value = sanitiseDomainInput(input.value);
   const domain = input ? input.value.trim() : '';
@@ -480,7 +488,6 @@ async function lookupDomain(prefix) {
     updateStepper(prefix, '1');
     showToast('WHOIS lookup failed — still checking website & DKIM…');
   } finally {
-    // Always run website & DKIM checks regardless of WHOIS outcome
     await Promise.allSettled([
       checkWebsite(prefix, domain),
       checkDkim(prefix, domain),
@@ -614,6 +621,28 @@ function renderPreviews(prefix, key) {
   }
 }
 function removeScreenshot(idx, prefix, key) { state[prefix][key].splice(idx, 1); renderPreviews(prefix, key); }
+
+function renderInlineScreenshots(outputArea, screenshots, dividerLabel) {
+  if (screenshots.length === 0) return;
+  const divider = document.createElement('div');
+  divider.className = 'output-inline-divider';
+  divider.textContent = dividerLabel;
+  outputArea.appendChild(divider);
+  const grid = document.createElement('div');
+  grid.className = 'output-screenshots-inline';
+  screenshots.forEach((s, i) => {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'output-screenshot-item';
+    const img = document.createElement('img');
+    img.src = s.dataUrl; img.alt = s.name; img.title = s.name; img.loading = 'lazy';
+    const label = document.createElement('span');
+    label.className = 'output-screenshot-label';
+    label.textContent = (i + 1) + '. ' + s.name;
+    wrapper.appendChild(img); wrapper.appendChild(label);
+    grid.appendChild(wrapper);
+  });
+  outputArea.appendChild(grid);
+}
 
 // ── Conditional fields ────────────────────────────────────────────────
 function toggleOtherBlockedField(val) {
@@ -752,57 +781,8 @@ function generateARF() {
     pre.textContent = lines.join('\n');
     outputArea.appendChild(pre);
 
-    if (hasScreenshots) {
-      const divider = document.createElement('div');
-      divider.className = 'output-inline-divider';
-      divider.textContent = '── Screenshots ──';
-      outputArea.appendChild(divider);
-
-      const grid = document.createElement('div');
-      grid.className = 'output-screenshots-inline';
-      state.arf.screenshots.forEach((s, i) => {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'output-screenshot-item';
-        const img = document.createElement('img');
-        img.src = s.dataUrl;
-        img.alt = s.name;
-        img.title = s.name;
-        img.loading = 'lazy';
-        const label = document.createElement('span');
-        label.className = 'output-screenshot-label';
-        label.textContent = (i + 1) + '. ' + s.name;
-        wrapper.appendChild(img);
-        wrapper.appendChild(label);
-        grid.appendChild(wrapper);
-      });
-      outputArea.appendChild(grid);
-    }
-
-    if (hasAssuranceSs) {
-      const divider = document.createElement('div');
-      divider.className = 'output-inline-divider';
-      divider.textContent = '── Assurance Screenshots ──';
-      outputArea.appendChild(divider);
-
-      const grid = document.createElement('div');
-      grid.className = 'output-screenshots-inline';
-      state.arf.assuranceScreenshots.forEach((s, i) => {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'output-screenshot-item';
-        const img = document.createElement('img');
-        img.src = s.dataUrl;
-        img.alt = s.name;
-        img.title = s.name;
-        img.loading = 'lazy';
-        const label = document.createElement('span');
-        label.className = 'output-screenshot-label';
-        label.textContent = (i + 1) + '. ' + s.name;
-        wrapper.appendChild(img);
-        wrapper.appendChild(label);
-        grid.appendChild(wrapper);
-      });
-      outputArea.appendChild(grid);
-    }
+    renderInlineScreenshots(outputArea, state.arf.screenshots, '── Screenshots ──');
+    renderInlineScreenshots(outputArea, state.arf.assuranceScreenshots, '── Assurance Screenshots ──');
 
     outputSection.style.display = 'block';
     outputSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -900,31 +880,7 @@ function generateBounce() {
     pre.textContent = lines.join('\n');
     outputArea.appendChild(pre);
 
-    if (hasAssuranceSs) {
-      const divider = document.createElement('div');
-      divider.className = 'output-inline-divider';
-      divider.textContent = '── Assurance Screenshots ──';
-      outputArea.appendChild(divider);
-
-      const grid = document.createElement('div');
-      grid.className = 'output-screenshots-inline';
-      state.bounce.assuranceScreenshots.forEach((s, i) => {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'output-screenshot-item';
-        const img = document.createElement('img');
-        img.src = s.dataUrl;
-        img.alt = s.name;
-        img.title = s.name;
-        img.loading = 'lazy';
-        const label = document.createElement('span');
-        label.className = 'output-screenshot-label';
-        label.textContent = (i + 1) + '. ' + s.name;
-        wrapper.appendChild(img);
-        wrapper.appendChild(label);
-        grid.appendChild(wrapper);
-      });
-      outputArea.appendChild(grid);
-    }
+    renderInlineScreenshots(outputArea, state.bounce.assuranceScreenshots, '── Assurance Screenshots ──');
 
     outputSection.style.display = 'block';
     outputSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
