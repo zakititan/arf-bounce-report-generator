@@ -9,8 +9,6 @@ let _toastTimer = null;
 export function showToast(msg, type) {
   const t = document.getElementById('toast');
   t.textContent = msg;
-  t.setAttribute('role', 'status');
-  t.setAttribute('aria-live', 'polite');
   t.setAttribute('data-type', type || 'info');
   t.classList.add('show');
   clearTimeout(_toastTimer);

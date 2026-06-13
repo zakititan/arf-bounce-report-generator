@@ -4,6 +4,24 @@
  * Each function creates its own AbortController for timeout/cancellation.
  */
 
+const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const _cache = new Map();
+
+function getCached(key) {
+  const entry = _cache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expires) { _cache.delete(key); return null; }
+  return entry.value;
+}
+
+function setCache(key, value) {
+  if (_cache.size > 500) {
+    const cutoff = Date.now();
+    for (const [k, v] of _cache) { if (cutoff > v.expires) _cache.delete(k); }
+  }
+  _cache.set(key, { value, expires: Date.now() + CACHE_TTL_MS });
+}
+
 /**
  * Maps the `reason` field returned by the server into a short,
  * human-readable label suitable for a toast or inline hint.
@@ -25,6 +43,9 @@ function describeReason(reason, fallback) {
  * Handles network errors, non-JSON responses, and HTTP error statuses.
  */
 async function apiFetch(url) {
+  const cached = getCached(url);
+  if (cached) return cached;
+
   let res;
   try {
     res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
@@ -42,6 +63,7 @@ async function apiFetch(url) {
   if (!res.ok || data.error) {
     throw new Error(describeReason(data?.reason, data?.error || 'Request failed (HTTP ' + res.status + ')'));
   }
+  setCache(url, data);
   return data;
 }
 

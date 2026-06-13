@@ -1,4 +1,4 @@
-import { sanitiseDomain, withMiddleware, classifyFetchError } from './_utils.js';
+import { sanitiseDomain, withMiddleware, classifyFetchError, createCache } from './_utils.js';
 import {
   TIMEOUT_WEBSITE_MS,
   WEBSITE_MAX_BODY_BYTES,
@@ -14,6 +14,8 @@ import {
 
 const HTML_TAG_RE = /<[^>]*>/g;
 const WHITESPACE_RE = /\s+/g;
+const decoder = new TextDecoder();
+const cache = createCache(15 * 60 * 1000);
 
 function extractTitle(html) {
   const m = html.match(/<title[^>]*>([^<]*)<\/title>/i);
@@ -109,7 +111,9 @@ function isSpaShell(bodyText) {
 export default withMiddleware(async function handler(req, res) {
   const domain = sanitiseDomain(req.query.domain);
   if (!domain) return res.status(400).json({ error: 'Invalid or missing domain parameter' });
-  const decoder = new TextDecoder();
+
+  const cached = cache.get(domain);
+  if (cached) return res.status(200).json(cached);
 
   const urls = [`https://${domain}`, `http://${domain}`];
 
@@ -142,18 +146,19 @@ export default withMiddleware(async function handler(req, res) {
       }
 
       const reader = response.body.getReader();
-      let bodyText = '', bytesRead = 0;
+      let bytesRead = 0;
       let done = false;
+      const chunks = [];
       while (bytesRead < WEBSITE_MAX_BODY_BYTES) {
         const result = await reader.read();
         done = result.done;
         if (done) break;
-        bodyText += decoder.decode(result.value, { stream: true });
+        chunks.push(decoder.decode(result.value, { stream: true }));
         bytesRead += result.value.byteLength;
       }
       if (!done) reader.cancel().catch(() => {});
-      // Flush any remaining bytes buffered by the streaming TextDecoder
-      bodyText += decoder.decode();
+      chunks.push(decoder.decode());
+      const bodyText = chunks.join('');
 
       if (!bodyText.trim()) {
         return res.status(200).json({ verdict: 'No website', status, reason: 'Empty response body' });
@@ -219,11 +224,13 @@ export default withMiddleware(async function handler(req, res) {
         });
       }
 
-      return res.status(200).json({
+      const result = {
         verdict: 'Valid Website',
         status,
         reason: `Reachable with content (HTTP ${status})`,
-      });
+      };
+      cache.set(domain, result);
+      return res.status(200).json(result);
     } catch (err) {
       const isLastUrl = url === urls[urls.length - 1];
       if (!isLastUrl) continue;

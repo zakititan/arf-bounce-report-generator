@@ -1,7 +1,8 @@
-import { sanitiseDomain, withMiddleware, classifyFetchError } from './_utils.js';
+import { sanitiseDomain, withMiddleware, classifyFetchError, createCache } from './_utils.js';
 import { TIMEOUT_WHOIS_MS } from './config.js';
 
 const WHOISJSON_API_KEY = process.env.WHOISJSON_API_KEY;
+const cache = createCache(15 * 60 * 1000);
 
 export default withMiddleware(async function handler(req, res) {
   if (!WHOISJSON_API_KEY) {
@@ -15,6 +16,9 @@ export default withMiddleware(async function handler(req, res) {
   if (!domain) {
     return res.status(400).json({ error: 'Invalid or missing domain parameter' });
   }
+
+  const cached = cache.get(domain);
+  if (cached) return res.status(200).json(cached);
 
   try {
     const response = await fetch(
@@ -57,12 +61,14 @@ export default withMiddleware(async function handler(req, res) {
       }
     }
 
-    return res.status(200).json({
+    const result = {
       domain,
       creation_date:      creationFormatted,
       domain_age:         domainAgeText,
       domain_age_months:  domainAgeMonths,
-    });
+    };
+    cache.set(domain, result);
+    return res.status(200).json(result);
   } catch (err) {
     const { status, error, reason } = classifyFetchError(err, 'WHOIS', TIMEOUT_WHOIS_MS);
     return res.status(status).json({ error, reason });
