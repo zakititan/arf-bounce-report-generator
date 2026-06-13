@@ -151,6 +151,27 @@ function initDomainInputs() {
   });
 });
 
+// ── Mailboards link href updater ─────────────────────────────────────
+['arf', 'bounce'].forEach(prefix => {
+  const accountInput = document.getElementById(prefix + '-account');
+  const mailboardsLink = document.querySelector('#' + prefix + '-panel .btn-mailboards');
+  if (!accountInput || !mailboardsLink) return;
+
+  function updateMailboardsHref() {
+    const account = accountInput.value.trim();
+    if (account) {
+      const param = account.includes('@') ? 'email' : 'domain';
+      mailboardsLink.href = 'https://mailboards.ops.titan.email/home?' + param + '=' + encodeURIComponent(account) + '&env=prod';
+    } else {
+      mailboardsLink.href = 'https://mailboards.ops.titan.email/home?env=prod';
+    }
+  }
+
+  accountInput.addEventListener('input', updateMailboardsHref);
+  accountInput.addEventListener('paste', () => setTimeout(updateMailboardsHref, 0));
+  updateMailboardsHref();
+});
+
 // ── Check ARF count link updater ───────────────────────────────────
 (function() {
   const accountInput = document.getElementById('arf-account');

@@ -62,6 +62,11 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Rich clipboard paste** — the full report text and embedded screenshots are copied to the clipboard before opening JIRA, so pressing `Ctrl+V` in the Description field pastes everything inline
 - **Safety gate** — the button shows a warning if no report has been generated yet
 
+### Mailboards Integration
+- **Mailboards button** — a "Mailboards" link sits below the Account field in both ARF and Bounce panels, linking to [mailboards.ops.titan.email](https://mailboards.ops.titan.email)
+- **Smart parameter selection** — if the Account field contains an email address (`@` present), the URL uses `?email=`; otherwise it uses `?domain=`; falls back to bare `?env=prod` when the Account field is empty
+- **Dynamic href updates** — the link URL updates in real-time as the Account field is typed or pasted into; no report generation required
+
 ### Abuse Desk Quick Link
 - **Check ARF count** — a "Check" button sits next to the ARF Complaints field, linking to the Abuse Desk history page (`abusedesk.ops.titan.email/history.html`) with the Account name as the `entity` parameter and `region=us-east-1`
 - **Dynamic href** — the link URL updates in real-time as the Account field is typed or pasted into
