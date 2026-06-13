@@ -134,7 +134,7 @@ function initDomainInputs() {
     const sanitised = sanitiseDomainInput(pasted);
     accountInput.value = pasted; // preserve full email in account field
     const domainInput = document.getElementById(prefix + '-domain-input');
-    if (domainInput && !domainInput.value.trim()) domainInput.value = sanitised;
+    if (domainInput) domainInput.value = sanitised;
     state[prefix].whois = null;
     document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
     lookupDomain(prefix);
@@ -144,7 +144,7 @@ function initDomainInputs() {
   accountInput.addEventListener('input', () => {
     const sanitised = sanitiseDomainInput(accountInput.value);
     const domainInput = document.getElementById(prefix + '-domain-input');
-    if (domainInput && !domainInput.value.trim()) domainInput.value = sanitised;
+    if (domainInput) domainInput.value = sanitised;
     state[prefix].whois = null;
     document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
     lookupDomain(prefix);
