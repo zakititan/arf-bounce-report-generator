@@ -12,6 +12,9 @@ import {
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
+const HTML_TAG_RE = /<[^>]*>/g;
+const WHITESPACE_RE = /\s+/g;
+
 function extractTitle(html) {
   const m = html.match(/<title[^>]*>([^<]*)<\/title>/i);
   return m ? m[1].trim() : '';
@@ -156,7 +159,7 @@ export default withMiddleware(async function handler(req, res) {
         return res.status(200).json({ verdict: 'No website', status, reason: 'Empty response body' });
       }
 
-      const visibleText = bodyText.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+      const visibleText = bodyText.replace(HTML_TAG_RE, '').replace(WHITESPACE_RE, ' ').trim();
       const bodyLength = visibleText.length;
 
       // Check title tag for parked indicators

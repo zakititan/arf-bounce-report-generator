@@ -1,23 +1,17 @@
-import { signToken, checkRateLimit } from './_utils.js';
+import { signToken, checkRateLimit, safeEqual, getClientIp } from './_utils.js';
 import { SESSION_MAX_AGE_S } from './config.js';
 
 const PASSWORD = (process.env.APP_PASSWORD || '').trim();
 const COOKIE_NAME = '__Host-auth_session';
 const MAX_AGE = SESSION_MAX_AGE_S;
-
-/**
- * Constant-time string comparison to prevent timing attacks.
- * Returns true only if a === b in both length and content.
- */
-function safeEqual(a, b) {
-  if (typeof a !== 'string' || typeof b !== 'string') return false;
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
+const ALLOWED_ORIGIN = process.env.APP_ORIGIN || '';
 
 export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (ALLOWED_ORIGIN) res.setHeader('Vary', 'Origin');
+  if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
@@ -28,7 +22,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
+  const ip = getClientIp(req);
   if (await checkRateLimit(ip)) {
     res.status(429).json({ error: 'Too many login attempts — please wait a moment.' });
     return;

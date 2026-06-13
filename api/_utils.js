@@ -1,6 +1,10 @@
 import { createHmac } from 'crypto';
 import { IPV4_PATTERN, IPV6_PATTERN, LOCALHOST_NAMES, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS, SESSION_MAX_AGE_MS } from './config.js';
 
+const kvPromise = import('@vercel/kv').then(m => m.kv).catch(() => null);
+const ALLOWED_ORIGIN = process.env.APP_ORIGIN || '';
+const LOCAL_TLD_RE = /\.(localhost|local|internal)$/;
+
 // ── Domain sanitisation ───────────────────────────────────────────────────────
 /**
  * Strips protocol, path, query, fragment, and port from an input string,
@@ -29,7 +33,7 @@ export function sanitiseDomain(raw) {
 
   // Reject localhost variants
   if (LOCALHOST_NAMES.includes(v)) return null;
-  if (/\.(localhost|local|internal)$/.test(v)) return null;
+  if (LOCAL_TLD_RE.test(v)) return null;
 
   // Reject malformed hostnames: each label must start/end with alnum and
   // may contain hyphens; no consecutive dots; TLD must be at least 2 alpha chars.
@@ -89,7 +93,8 @@ let _kvWarnedOnce = false;
 
 export async function checkRateLimit(ip) {
   try {
-    const { kv } = await import('@vercel/kv');
+    const kv = await kvPromise;
+    if (!kv) throw new Error('kv not available');
     const key = `rl:${ip}`;
     const count = await kv.incr(key);
     if (count === 1) await kv.expire(key, RATE_LIMIT_WINDOW_MS / 1000);
@@ -131,11 +136,10 @@ function _checkRateLimitInMemory(ip) {
  */
 export function withMiddleware(handler) {
   return async function (req, res) {
-    const allowedOrigin = process.env.APP_ORIGIN || '';
-    res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+    res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    if (allowedOrigin) res.setHeader('Vary', 'Origin');
+    if (ALLOWED_ORIGIN) res.setHeader('Vary', 'Origin');
     if (req.method === 'OPTIONS') return res.status(204).end();
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -167,4 +171,24 @@ export function classifyFetchError(err, context, timeoutMs) {
     return { status: 502, error: `${context}: connection refused`, reason: 'connrefused' };
   }
   return { status: 502, error: `${context} failed: ${err.message}`, reason: 'unknown' };
+}
+
+// ── Shared helpers ────────────────────────────────────────────────────────────
+/**
+ * Constant-time string comparison to prevent timing attacks.
+ * Returns true only if a === b in both length and content.
+ */
+export function safeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return result === 0;
+}
+
+/**
+ * Extract the client IP from a request, preferring X-Forwarded-For.
+ */
+export function getClientIp(req) {
+  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
 }

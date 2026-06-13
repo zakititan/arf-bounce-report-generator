@@ -31,6 +31,10 @@ const LOOKUP_DEBOUNCE_MS = 1000;
 const LS_KEY = 'arf_bounce_form_state';
 const _lookupTimers = { arf: null, bounce: null };
 
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+}
+
 // ── State ─────────────────────────────────────────────────────────────
 const state = {
   arf: {
@@ -48,7 +52,6 @@ const state = {
     lookupInFlight: false,
   },
 };
-window.__state = state;
 let lastActivePanel = null; // tracks which panel the user last interacted with (for Ctrl/Cmd+Enter)
 
 // ── Init ──────────────────────────────────────────────────────────────
@@ -241,14 +244,14 @@ function copyOutputWithFeedback(id) {
     // Strip screenshot filename lists from HTML text (images with labels below replace them)
     const textForHtml = text.split('\n── ')[0];
     let html = '<div style="font-family:DM Mono,Courier New,monospace;font-size:12px;line-height:1.9;">';
-    html += textForHtml.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+    html += escapeHtml(textForHtml);
     html += '</div>';
     let imgCount = 0;
     grids.forEach(grid => {
       const divider = grid.previousElementSibling;
       if (divider && divider.classList.contains('output-inline-divider')) {
         html += '<div style="font-family:DM Mono,Courier New,monospace;font-size:11px;color:#7a7974;margin-top:12px;letter-spacing:0.05em;">';
-        html += divider.textContent.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        html += escapeHtml(divider.textContent);
         html += '</div>';
       }
       html += '<div style="margin-top:8px">';
@@ -268,7 +271,7 @@ function copyOutputWithFeedback(id) {
     doCopy(navigator.clipboard.write([item]));
   } else {
     const html = '<div style="font-family:DM Mono,Courier New,monospace;font-size:12px;line-height:1.9;">' +
-      text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>') +
+      escapeHtml(text) +
       '</div>';
     if (typeof ClipboardItem !== 'undefined') {
       const item = new ClipboardItem({
@@ -483,10 +486,6 @@ function parseCsvRow(row) {
   return cols;
 }
 
-function extractDomain(value) {
-  return sanitiseDomainInput(value);
-}
-
 // ── CSV Bounce List ───────────────────────────────────────────────────
 function handleCsvDrop(e) {
   e.preventDefault();
@@ -688,7 +687,8 @@ async function checkDkim(prefix, domain) {
 function handleDrop(e, prefix, key) {
   e.preventDefault();
   const zoneId = prefix + (key === 'assuranceScreenshots' ? '-assurance' : '') + '-upload-zone';
-  document.getElementById(zoneId).classList.remove('dragover');
+  const zone = document.getElementById(zoneId);
+  if (zone) zone.classList.remove('dragover');
   processFiles(Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/')), prefix, key);
 }
 function handleFileSelect(e, prefix, key) { processFiles(Array.from(e.target.files), prefix, key); e.target.value = ''; }
@@ -711,7 +711,7 @@ function renderPreviews(prefix, key) {
   const target = state[prefix][key];
   container.innerHTML = '';
   if (target.length === 0) {
-    renderScreenshotEmptyState(containerId, prefix + '.' + key);
+    renderScreenshotEmptyState(containerId, state[prefix][key].length);
     return;
   }
   target.forEach((s, i) => {
@@ -771,6 +771,7 @@ function renderInlineScreenshots(outputArea, screenshots, dividerLabel) {
 // ── Conditional fields ────────────────────────────────────────────────
 function toggleOtherBlockedField(val) {
   const wrap = document.getElementById('bounce-other-blocked-detail-wrap');
+  if (!wrap) return;
   if (val === 'Yes') wrap.classList.add('visible');
   else { wrap.classList.remove('visible'); document.getElementById('bounce-other-blocked-detail').value = ''; }
 }
@@ -779,6 +780,7 @@ function toggleAssurance(btn, prefix) {
   btn.setAttribute('aria-pressed', btn.classList.contains('active'));
   if (btn.getAttribute('data-value') === 'Other') {
     const f = document.getElementById(prefix + '-other-field');
+    if (!f) return;
     if (btn.classList.contains('active')) { f.classList.add('visible'); document.getElementById(prefix + '-other-text').focus(); }
     else { f.classList.remove('visible'); document.getElementById(prefix + '-other-text').value = ''; }
   }
@@ -789,6 +791,7 @@ function toggleContactFormAssurance(btn) {
   btn.classList.toggle('active');
   btn.setAttribute('aria-pressed', btn.classList.contains('active'));
   const panel = document.getElementById('bounce-contact-form-suboptions');
+  if (!panel) return;
   if (btn.classList.contains('active')) panel.classList.add('visible');
   else { panel.classList.remove('visible'); panel.querySelectorAll('.website-suboption-btn').forEach(b => b.classList.remove('active')); }
 }
@@ -857,6 +860,27 @@ function validateBounce() {
 }
 
 // ── ARF Generate / Clear ──────────────────────────────────────────────
+function renderReportOutput(prefix, lines, fullCopyText, inlineScreenshots) {
+  const outputSection = document.getElementById(prefix + '-output-section');
+  const outputArea = outputSection.querySelector('.output-area');
+  const copyBtn = outputArea.querySelector('.copy-btn-wrap');
+  outputArea.innerHTML = '';
+  if (copyBtn) outputArea.appendChild(copyBtn);
+  outputArea.dataset.copyText = fullCopyText;
+  const ts = document.getElementById(prefix + '-output-timestamp');
+  if (ts) ts.textContent = 'Generated: ' + getOutputTimestamp();
+  const pre = document.createElement('pre');
+  pre.id = prefix + '-output-text';
+  pre.className = 'output-text';
+  pre.textContent = lines.join('\n');
+  outputArea.appendChild(pre);
+  inlineScreenshots.forEach(({ screenshots, label }) => {
+    renderInlineScreenshots(outputArea, screenshots, label);
+  });
+  outputSection.style.display = 'block';
+  outputSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
 function generateARF() {
   try {
     const errors = validateARF();
@@ -895,29 +919,10 @@ function generateARF() {
     }
     const fullCopyText = copyLines.join('\n\n');
 
-    const outputSection = document.getElementById('arf-output-section');
-    const outputArea = outputSection.querySelector('.output-area');
-
-    const copyBtn = outputArea.querySelector('.copy-btn-wrap');
-    outputArea.innerHTML = '';
-    if (copyBtn) outputArea.appendChild(copyBtn);
-
-    outputArea.dataset.copyText = fullCopyText;
-
-    const ts = document.getElementById('arf-output-timestamp');
-    if (ts) ts.textContent = 'Generated: ' + getOutputTimestamp();
-
-    const pre = document.createElement('pre');
-    pre.id = 'arf-output-text';
-    pre.className = 'output-text';
-    pre.textContent = lines.join('\n');
-    outputArea.appendChild(pre);
-
-    renderInlineScreenshots(outputArea, state.arf.screenshots, '── Screenshots ──');
-    renderInlineScreenshots(outputArea, state.arf.assuranceScreenshots, '── Assurance Screenshots ──');
-
-    outputSection.style.display = 'block';
-    outputSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    renderReportOutput('arf', lines, fullCopyText, [
+      { screenshots: state.arf.screenshots, label: '── Screenshots ──' },
+      { screenshots: state.arf.assuranceScreenshots, label: '── Assurance Screenshots ──' },
+    ]);
     showToast('ARF report generated!');
   } catch (err) {
     showToast('Failed to generate report — please try again.');
@@ -925,21 +930,32 @@ function generateARF() {
   }
 }
 
-// clearARF: confirm before destroying form data
-function clearARF() {
-  if (!confirm('Clear all ARF form data? This cannot be undone.')) return;
+// clearARF/clearBounce: confirm before destroying form data
+function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, afterClear }) {
+  const label = prefix === 'arf' ? 'ARF' : 'Bounce';
+  if (!confirm('Clear all ' + label + ' form data? This cannot be undone.')) return;
 
-  ['arf-account','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim','arf-domain-input']
-    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-  state.arf.screenshots.length = 0;
-  state.arf.assuranceScreenshots.length = 0;
-  renderPreviews('arf', 'screenshots');
-  renderPreviews('arf', 'assuranceScreenshots');
-  clearAssurances('arf');
-  state.arf.whois = null;
-  document.getElementById('arf-domain-result').classList.remove('visible', 'error');
-  ['arf-website-hint','arf-dkim-hint'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = ''; });
-  const outputSection = document.getElementById('arf-output-section');
+  fieldIds.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+
+  if (clearScreenshots) {
+    state[prefix].screenshots.forEach(s => { s.dataUrl = null; });
+    state[prefix].screenshots.length = 0;
+  }
+  state[prefix].assuranceScreenshots.forEach(s => { s.dataUrl = null; });
+  state[prefix].assuranceScreenshots.length = 0;
+  renderPreviews(prefix, 'screenshots');
+  renderPreviews(prefix, 'assuranceScreenshots');
+
+  if (prefix === 'bounce') { clearCsv(); toggleOtherBlockedField(''); }
+  clearAssurances(prefix);
+  state[prefix].whois = null;
+  resetWhoisState(prefix);
+  ['website-hint', 'dkim-hint'].forEach(suffix => {
+    const el = document.getElementById(prefix + '-' + suffix);
+    if (el) el.textContent = '';
+  });
+
+  const outputSection = document.getElementById(prefix + '-output-section');
   outputSection.style.display = 'none';
   const outputArea = outputSection.querySelector('.output-area');
   const copyBtn = outputArea.querySelector('.copy-btn-wrap');
@@ -947,14 +963,24 @@ function clearARF() {
   delete outputArea.dataset.copyText;
   if (copyBtn) outputArea.appendChild(copyBtn);
   const pre = document.createElement('pre');
-  pre.id = 'arf-output-text';
+  pre.id = prefix + '-output-text';
   pre.className = 'output-text';
   outputArea.appendChild(pre);
-  document.getElementById('arf-validation-banner').classList.remove('visible');
-  clearFieldErrors(['arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim']);
-  updateStepper('arf', '0');
-  updateFormProgress('arf');
+
+  document.getElementById(prefix + '-validation-banner').classList.remove('visible');
+  clearFieldErrors(clearFieldErrorIds);
+  updateStepper(prefix, '0');
+  updateFormProgress(prefix);
+  if (afterClear) afterClear();
   saveFormState();
+}
+
+function clearARF() {
+  clearPanel('arf',
+    ['arf-account','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim','arf-domain-input'],
+    ['arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim'],
+    { clearScreenshots: true }
+  );
 }
 
 // ── Bounce Generate / Clear ───────────────────────────────────────────
@@ -994,28 +1020,9 @@ function generateBounce() {
     }
     const fullCopyText = copyLines.join('\n\n');
 
-    const outputSection = document.getElementById('bounce-output-section');
-    const outputArea = outputSection.querySelector('.output-area');
-
-    const copyBtn = outputArea.querySelector('.copy-btn-wrap');
-    outputArea.innerHTML = '';
-    if (copyBtn) outputArea.appendChild(copyBtn);
-
-    outputArea.dataset.copyText = fullCopyText;
-
-    const ts = document.getElementById('bounce-output-timestamp');
-    if (ts) ts.textContent = 'Generated: ' + getOutputTimestamp();
-
-    const pre = document.createElement('pre');
-    pre.id = 'bounce-output-text';
-    pre.className = 'output-text';
-    pre.textContent = lines.join('\n');
-    outputArea.appendChild(pre);
-
-    renderInlineScreenshots(outputArea, state.bounce.assuranceScreenshots, '── Assurance Screenshots ──');
-
-    outputSection.style.display = 'block';
-    outputSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    renderReportOutput('bounce', lines, fullCopyText, [
+      { screenshots: state.bounce.assuranceScreenshots, label: '── Assurance Screenshots ──' },
+    ]);
     showToast('Bounce report generated!');
   } catch (err) {
     showToast('Failed to generate report — please try again.');
@@ -1025,27 +1032,11 @@ function generateBounce() {
 
 // clearBounce: confirm before destroying form data
 function clearBounce() {
-  if (!confirm('Clear all Bounce form data? This cannot be undone.')) return;
-
-  ['bounce-account','bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-domain-input','bounce-other-blocked-detail']
-    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-  clearCsv();
-  state.bounce.assuranceScreenshots.length = 0;
-  renderPreviews('bounce', 'assuranceScreenshots');
-  toggleOtherBlockedField('');
-  clearAssurances('bounce');
-  state.bounce.whois = null;
-  document.getElementById('bounce-domain-result').classList.remove('visible', 'error');
-  ['bounce-website-hint','bounce-dkim-hint'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = ''; });
-  const outputEl = document.getElementById('bounce-output-text');
-  outputEl.textContent = '';
-  delete outputEl.closest('.output-area').dataset.copyText;
-  document.getElementById('bounce-output-section').style.display = 'none';
-  document.getElementById('bounce-validation-banner').classList.remove('visible');
-  clearFieldErrors(['bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-other-blocked-detail']);
-  updateStepper('bounce', '0');
-  updateFormProgress('bounce');
-  saveFormState();
+  clearPanel('bounce',
+    ['bounce-account','bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-domain-input','bounce-other-blocked-detail'],
+    ['bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-other-blocked-detail'],
+    { clearScreenshots: false }
+  );
 }
 
 // ── JIRA integration ──────────────────────────────────────────────
