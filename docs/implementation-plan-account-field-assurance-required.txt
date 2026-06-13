@@ -1,0 +1,335 @@
+===============================================================================
+IMPLEMENTATION PLAN
+Feature: Account Field + Mandatory Assurance
+Repo:    https://github.com/zakititan/arf-bounce-report-generator
+Date:    2026-06-13
+For:     DeepSeek
+===============================================================================
+
+OVERVIEW
+--------
+Three features to implement:
+
+  1. Add an "Account" text field to both the ARF and Bounce panels.
+  2. Typing/pasting into Account auto-fills the Domain Lookup input and
+     triggers a debounced lookup automatically.
+  3. At least one assurance button must be active before the report can
+     be generated (validation enforced in both panels).
+
+Files to modify:
+  - index.html
+  - scripts/app.js
+  - README.md  (field count update only)
+
+Files NOT to touch:
+  - api/*.js, middleware.js, styles/main.css, scripts/ui.js,
+    scripts/api.js, tests/*, vercel.json
+
+
+===============================================================================
+PART 1 — index.html
+===============================================================================
+
+--- 1A. ARF Panel: Add Account field -------------------------------------------
+
+Find this comment inside the ARF panel section (#arf-panel):
+
+    <!-- Domain Lookup (ARF) -->
+
+Insert the following block IMMEDIATELY BEFORE that comment:
+
+    <div class="field">
+      <label for="arf-account">Account<span class="req">*</span></label>
+      <input type="text" id="arf-account" placeholder="e.g. user@example.com or example.com">
+    </div>
+
+No other HTML changes are needed in the ARF panel.
+
+
+--- 1B. Bounce Panel: Add Account field ----------------------------------------
+
+Find this comment inside the Bounce panel section (#bounce-panel):
+
+    <!-- Domain Lookup (Bounce) -->
+
+Insert the following block IMMEDIATELY BEFORE that comment:
+
+    <div class="field">
+      <label for="bounce-account">Account<span class="req">*</span></label>
+      <input type="text" id="bounce-account" placeholder="e.g. user@example.com or example.com">
+    </div>
+
+No other HTML changes are needed in the Bounce panel.
+
+
+--- 1C. Update ARF form progress bar -------------------------------------------
+
+Find the element with id="arf-form-progress-fill". It has a data-fields attribute.
+Replace its current data-fields value with:
+
+    data-fields="arf-account,arf-domain-type,arf-complaints,arf-prev-unblock,arf-blocked-lt2,arf-email-type,arf-website,arf-dkim"
+
+(arf-account is prepended to the existing list.)
+
+
+--- 1D. Update Bounce form progress bar ----------------------------------------
+
+Find the element with id="bounce-form-progress-fill". It has a data-fields attribute.
+Replace its current data-fields value with:
+
+    data-fields="bounce-account,bounce-prev-unblock,bounce-website,bounce-dkim"
+
+(bounce-account is prepended to the existing list.)
+
+
+===============================================================================
+PART 2 — scripts/app.js
+===============================================================================
+
+--- 2A. PERSIST_FIELDS array ---------------------------------------------------
+
+Find the PERSIST_FIELDS const declaration. It currently reads:
+
+    const PERSIST_FIELDS = [
+      'arf-domain-type', 'arf-complaints', 'arf-prev-unblock',
+      'arf-blocked-lt2', 'arf-email-type', 'arf-website', 'arf-dkim', 'arf-domain-input',
+      'bounce-prev-unblock', 'bounce-other-blocked', 'bounce-website',
+      'bounce-dkim', 'bounce-domain-input', 'bounce-other-blocked-detail',
+    ];
+
+Replace it with:
+
+    const PERSIST_FIELDS = [
+      'arf-account', 'arf-domain-type', 'arf-complaints', 'arf-prev-unblock',
+      'arf-blocked-lt2', 'arf-email-type', 'arf-website', 'arf-dkim', 'arf-domain-input',
+      'bounce-account', 'bounce-prev-unblock', 'bounce-other-blocked', 'bounce-website',
+      'bounce-dkim', 'bounce-domain-input', 'bounce-other-blocked-detail',
+    ];
+
+('arf-account' prepended to the arf group; 'bounce-account' prepended to the bounce group.)
+
+
+--- 2B. initDomainInputs() — add Account→Domain sync --------------------------
+
+The existing initDomainInputs() function loops over ['arf', 'bounce'] and
+attaches listeners to the domain input fields. AFTER the closing of that
+forEach loop (after the closing `});` of the forEach), add the following
+NEW forEach block:
+
+    // Account field → auto-fill domain input + trigger lookup
+    ['arf', 'bounce'].forEach(prefix => {
+      const accountInput = document.getElementById(prefix + '-account');
+      if (!accountInput) return;
+
+      // On paste: keep raw value in Account, push sanitised domain to Domain input
+      accountInput.addEventListener('paste', (e) => {
+        e.preventDefault();
+        const pasted = (e.clipboardData || window.clipboardData).getData('text');
+        const sanitised = sanitiseDomainInput(pasted);
+        accountInput.value = pasted; // preserve full email in account field
+        const domainInput = document.getElementById(prefix + '-domain-input');
+        if (domainInput) domainInput.value = sanitised;
+        state[prefix].whois = null;
+        document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
+        lookupDomain(prefix); // debounced
+      });
+
+      // On input: sync sanitised domain and trigger debounced lookup
+      accountInput.addEventListener('input', () => {
+        const sanitised = sanitiseDomainInput(accountInput.value);
+        const domainInput = document.getElementById(prefix + '-domain-input');
+        if (domainInput) domainInput.value = sanitised;
+        state[prefix].whois = null;
+        document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
+        lookupDomain(prefix); // debounced — safe to call on every keystroke
+      });
+    });
+
+IMPORTANT NOTES for this block:
+  - sanitiseDomainInput() already exists in app.js. Do NOT redefine it.
+  - lookupDomain() (debounced) already exists. Do NOT use lookupDomainImmediate().
+  - The Account field stores the raw user input (e.g. full email address).
+  - The Domain Lookup input receives the sanitised domain (e.g. example.com).
+  - This means JIRA summary will use the Account value (see Part 2E below).
+
+
+--- 2C. validateARF() — add Account + Assurance checks ------------------------
+
+Find the validateARF() function. It currently starts with:
+
+    function validateARF() {
+      const fieldIds = ['arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim'];
+      clearFieldErrors(fieldIds);
+      const errors = [];
+      if (!v('arf-domain-type'))  errors.push({ id: 'arf-domain-type',  label: 'Domain Type' });
+      ...
+
+Make these two changes:
+
+  CHANGE 1 — Add 'arf-account' to the fieldIds array:
+
+      const fieldIds = ['arf-account','arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim'];
+
+  CHANGE 2 — Add the Account check as the FIRST error check (before the domain-type check):
+
+      if (!v('arf-account')) errors.push({ id: 'arf-account', label: 'Account' });
+
+  CHANGE 3 — Add assurance check AFTER all existing field checks, just before `return errors;`:
+
+      const arfAssurances = getActiveAssurances('arf');
+      if (arfAssurances.length === 0)
+        errors.push({ id: null, label: 'Assurances (select at least one)' });
+
+  NOTE: { id: null, label: '...' } is the existing pattern for non-field errors
+  (e.g. the CSV check in validateBounce). It renders in the banner without
+  highlighting a specific input. Do NOT change showValidationErrors() in ui.js.
+
+
+--- 2D. validateBounce() — add Account + Assurance checks ---------------------
+
+Find the validateBounce() function. It currently starts with:
+
+    function validateBounce() {
+      const fieldIds = ['bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-other-blocked-detail'];
+      clearFieldErrors(fieldIds);
+      const errors = [];
+      if (!v('bounce-prev-unblock'))  errors.push(...);
+      ...
+
+Make these two changes:
+
+  CHANGE 1 — Add 'bounce-account' to the fieldIds array:
+
+      const fieldIds = ['bounce-account','bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-other-blocked-detail'];
+
+  CHANGE 2 — Add Account check as the FIRST error check:
+
+      if (!v('bounce-account')) errors.push({ id: 'bounce-account', label: 'Account' });
+
+  CHANGE 3 — Add assurance check AFTER all existing checks, just before `return errors;`:
+
+      const bounceAssurances = getActiveAssurances('bounce');
+      if (bounceAssurances.length === 0)
+        errors.push({ id: null, label: 'Assurances (select at least one)' });
+
+
+--- 2E. createTaeJira() — use Account for JIRA summary ------------------------
+
+Find the createTaeJira() function. It currently has these two lines:
+
+    const domain = document.getElementById(prefix + '-domain-input')?.value || '';
+    const summary = encodeURIComponent(typeLabel + ' unsuspension request: ' + domain);
+
+Replace those two lines with:
+
+    const account = document.getElementById(prefix + '-account')?.value.trim() || '';
+    const summary = encodeURIComponent(typeLabel + ' unsuspension request: ' + account);
+
+This makes the JIRA summary use the Account field value (e.g. the full email
+address) instead of the bare sanitised domain. No other change in this function.
+
+
+--- 2F. clearARF() — reset Account field --------------------------------------
+
+Find the clearARF() function. It has an array of field IDs to reset:
+
+    ['arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim','arf-domain-input']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+
+Add 'arf-account' to that array:
+
+    ['arf-account','arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim','arf-domain-input']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+
+
+--- 2G. clearBounce() — reset Account field -----------------------------------
+
+Find the clearBounce() function. It has an array of field IDs to reset:
+
+    ['bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-domain-input']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+
+Add 'bounce-account' to that array:
+
+    ['bounce-account','bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-domain-input']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+
+
+===============================================================================
+PART 3 — README.md
+===============================================================================
+
+Find the sentence in the Testing section that reads:
+
+    **Form state persistence** — all 14 field values are saved to `localStorage`
+    on every change and restored on next visit
+
+Change "14" to "16":
+
+    **Form state persistence** — all 16 field values are saved to `localStorage`
+    on every change and restored on next visit
+
+This reflects the addition of arf-account and bounce-account to PERSIST_FIELDS.
+
+
+===============================================================================
+BEHAVIOURAL SUMMARY (for verification)
+===============================================================================
+
+After implementing:
+
+  1. Both panels display an "Account *" text input above the Domain Lookup row.
+
+  2. Typing or pasting any value into Account (including a full email like
+     user@example.com) auto-populates the Domain Lookup input with the
+     sanitised domain (example.com) and fires a debounced WHOIS/Website/DKIM
+     lookup after 1 second of inactivity.
+
+  3. Clicking Generate without filling Account shows "Account" in the
+     validation banner and highlights the field with an error state.
+
+  4. Clicking Generate with no assurance buttons selected shows
+     "Assurances (select at least one)" in the validation banner.
+     The Generate button itself is NOT disabled — validation fires on click,
+     same as all other required fields.
+
+  5. The JIRA summary (Create TAE JIRA button) reads:
+       "ARF unsuspension request: <account value>"
+       "Bounce unsuspension request: <account value>"
+     instead of the plain domain.
+
+  6. Clearing a panel also clears the Account field.
+
+  7. Account field value is saved to localStorage and restored on next visit.
+
+  8. The form progress bar counts the Account field as a required field.
+
+
+===============================================================================
+CONSTRAINTS & NOTES
+===============================================================================
+
+  - Do NOT modify styles/main.css. The existing .field, .req, and
+    validation-banner CSS already handles the new input correctly.
+
+  - Do NOT modify scripts/ui.js. showValidationErrors() already handles
+    { id: null } entries (renders in banner without field highlight).
+
+  - Do NOT modify any api/*.js files.
+
+  - Do NOT rename, move, or restructure any existing functions.
+
+  - The Domain Lookup input (arf-domain-input / bounce-domain-input) must
+    remain in the HTML and keep working independently (manual typing + Lookup
+    button still works). The Account field only ALSO sets it as a side-effect.
+
+  - sanitiseDomainInput() strips http(s)://, @-prefix, paths, ports.
+    It is already defined in app.js. Do NOT redefine it.
+
+  - lookupDomain(prefix) is the debounced version (1000ms).
+    lookupDomainImmediate(prefix) is for explicit button clicks only.
+    Use lookupDomain() in the Account input listeners.
+
+===============================================================================
+END OF PLAN
+===============================================================================
