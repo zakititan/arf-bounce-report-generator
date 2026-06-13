@@ -62,6 +62,11 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Rich clipboard paste** — the full report text and embedded screenshots are copied to the clipboard before opening JIRA, so pressing `Ctrl+V` in the Description field pastes everything inline
 - **Safety gate** — the button shows a warning if no report has been generated yet
 
+### Mailboards Integration
+- **Mailboards button** — a "Mailboards" link sits below the Account field in both ARF and Bounce panels, linking to [mailboards.ops.titan.email](https://mailboards.ops.titan.email)
+- **Smart parameter selection** — if the Account field contains an email address (`@` present), the URL uses `?email=`; otherwise it uses `?domain=`; falls back to bare `?env=prod` when the Account field is empty
+- **Dynamic href updates** — the link URL updates in real-time as the Account field is typed or pasted into; no report generation required
+
 ### Testing
 - **105 unit tests across 4 files** — covers `sanitiseDomain` (38 edge cases), `checkRateLimit`/`classifyFetchError`/token helpers (25 test cases including expiry, missing claims, non-JSON payload), website-check helpers (~38 test cases), and `withMiddleware` CORS/rate-limit middleware (8 test cases)
 - **Config integrity checks** — all keyword/pattern arrays are verified at test time for empty strings and lowercase consistency
