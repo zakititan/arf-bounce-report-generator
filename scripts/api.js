@@ -7,14 +7,14 @@
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 const _cache = new Map();
 
-function getCached(key) {
+export function getCached(key) {
   const entry = _cache.get(key);
   if (!entry) return null;
   if (Date.now() > entry.expires) { _cache.delete(key); return null; }
   return entry.value;
 }
 
-function setCache(key, value) {
+export function setCache(key, value) {
   if (_cache.size > 500) {
     const cutoff = Date.now();
     for (const [k, v] of _cache) { if (cutoff > v.expires) _cache.delete(k); }
@@ -26,7 +26,7 @@ function setCache(key, value) {
  * Maps the `reason` field returned by the server into a short,
  * human-readable label suitable for a toast or inline hint.
  */
-function describeReason(reason, fallback) {
+export function describeReason(reason, fallback) {
   const map = {
     timeout:             'Lookup timed out — try again in a moment.',
     auth:                'API key is invalid or misconfigured.',

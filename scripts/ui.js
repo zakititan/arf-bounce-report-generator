@@ -146,7 +146,7 @@ export function updateFormProgress(prefix) {
 }
 
 // ── Domain age color ──────────────────────────────────────────────
-function parseAgeToDays(text) {
+export function parseAgeToDays(text) {
   const years = text.match(/(\d+)\s*years?/i);
   const months = text.match(/(\d+)\s*months?/i);
   const days = text.match(/(\d+)\s*days?/i);

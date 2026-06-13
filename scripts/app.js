@@ -15,6 +15,7 @@
  */
 
 import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck } from './api.js';
+import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, parseCsvRow as _parseCsvRow } from './pure.js';
 import {
   showToast, initThemeToggle,
   clearFieldErrors, showValidationErrors,
@@ -25,6 +26,11 @@ import {
   renderScreenshotEmptyState, getOutputTimestamp
 } from './ui.js';
 
+// ── Re-export pure functions for backward compatibility ──────────────
+export const escapeHtml = _escapeHtml;
+export const sanitiseDomainInput = _sanitiseDomainInput;
+export const parseCsvRow = _parseCsvRow;
+
 // ── Constants ─────────────────────────────────────────────────────────
 const MAX_SCREENSHOTS = 10;
 const LOOKUP_DEBOUNCE_MS = 1000;
@@ -34,10 +40,6 @@ const _progressTimers = {};
 function debouncedUpdateFormProgress(prefix) {
   clearTimeout(_progressTimers[prefix]);
   _progressTimers[prefix] = setTimeout(() => updateFormProgress(prefix), 150);
-}
-
-function escapeHtml(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
 }
 
 // ── State ─────────────────────────────────────────────────────────────
@@ -90,14 +92,7 @@ function initKeyboardShortcuts() {
 }
 
 // ── Domain input: sanitise email → domain + invalidate cache ──────────
-function sanitiseDomainInput(value) {
-  let v = value.trim();
-  v = v.replace(/^https?:\/\//i, '');
-  const atIdx = v.indexOf('@');
-  if (atIdx !== -1) v = v.slice(atIdx + 1);
-  v = v.split('/')[0].split('?')[0].split('#')[0].split(':')[0];
-  return v.toLowerCase().trim();
-}
+// sanitiseDomainInput is imported from pure.js and re-exported above
 
 function resetWhoisState(prefix) {
   state[prefix].whois = null;
@@ -475,20 +470,7 @@ function setGenerateBtnState(prefix) {
 }
 
 // ── CSV helpers ───────────────────────────────────────────────────────
-function parseCsvRow(row) {
-  const cols = [];
-  let cur = '', inQuotes = false;
-  for (let i = 0; i < row.length; i++) {
-    const ch = row[i];
-    if (ch === '"') {
-      if (inQuotes && row[i + 1] === '"') { cur += '"'; i++; }
-      else inQuotes = !inQuotes;
-    } else if (ch === ',' && !inQuotes) { cols.push(cur.trim()); cur = ''; }
-    else cur += ch;
-  }
-  cols.push(cur.trim());
-  return cols;
-}
+// parseCsvRow is imported from pure.js and re-exported above
 
 // ── CSV Bounce List ───────────────────────────────────────────────────
 function handleCsvDrop(e) {
