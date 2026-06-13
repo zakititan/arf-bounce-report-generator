@@ -1,29 +1,28 @@
 # Remaining Fixes
 
-Generated: 13 June 2026  
-Branch: `feat/improvement-plan`  
+Generated: 13 June 2026
+Branch: `feat/improvement-plan`
 Repo: [arf-bounce-report-generator](https://github.com/zakititan/arf-bounce-report-generator)
 
-This document covers two issues that remain after the improvement plan was implemented and
-the KV safety patch was applied. Implement them in the order listed.
+Three issues remain after the improvement plan commit (`b526a06`) and the KV safety
+patch (`36573d5`). Implement them in the order listed. Each fix is self-contained
+and touches only the file(s) explicitly named.
 
 ---
 
 ## Issue 1 — Rate Limiting Is Silently Disabled Until Vercel KV Is Provisioned
 
-**Priority:** High  
-**File:** `api/_utils.js`
+**Priority:** High
+**File to edit:** `api/_utils.js`
 
-### Problem
+### Context
 
-The current `checkRateLimit` falls back to `return false` (allow all) whenever
-`@vercel/kv` throws for any reason — including the most common production case
-where the package is installed but the Vercel KV store has not been created and
-linked (missing `KV_REST_API_URL` / `KV_REST_API_TOKEN` env vars). This means
-the login endpoint has **zero rate limiting** until an operator manually provisions
-KV. There is no log, no warning, and no in-memory fallback.
+`checkRateLimit` catches ALL errors (import failure, missing env vars, KV network
+error) and silently returns `false` (allow request). This means the login endpoint
+has zero rate limiting until an operator manually creates and links a Vercel KV
+store. There is no log, no warning, and no fallback.
 
-Current code (`api/_utils.js`, `checkRateLimit` function):
+### Current code (find this exact block in `api/_utils.js`)
 
 ```js
 export async function checkRateLimit(ip) {
@@ -34,24 +33,18 @@ export async function checkRateLimit(ip) {
     if (count === 1) await kv.expire(key, RATE_LIMIT_WINDOW_MS / 1000);
     return count > RATE_LIMIT_MAX;
   } catch {
-    // KV not available — silently allows all requests
+    // Fallback: if @vercel/kv is not installed or KV is not configured, allow all
     return false;
   }
 }
 ```
 
-### Fix
-
-Add an **in-memory Map fallback** that activates whenever KV is unavailable.
-This restores the same sliding-window logic that existed before the improvement
-plan, so rate limiting is always active regardless of whether KV is provisioned.
-Also add a `console.warn` on the first KV failure so operators know KV is not
-configured.
-
-Replace the entire `checkRateLimit` function in `api/_utils.js` with:
+### Replacement code (replace the entire block above with this)
 
 ```js
-// In-memory fallback store used when Vercel KV is unavailable.
+// In-memory fallback store — used when Vercel KV is unavailable.
+// Resets on cold start and is not shared across instances, but ensures
+// rate limiting is always active even before KV is provisioned.
 const _rateLimitFallbackStore = new Map();
 let _kvWarnedOnce = false;
 
@@ -91,35 +84,26 @@ function _checkRateLimitInMemory(ip) {
 }
 ```
 
-### No other files need to change for this fix.
+**No other files need to change for this fix.**
 
 ---
 
-## Issue 2 — `lookupDomain` Debounce Regression Breaks CSV Auto-Lookup
+## Issue 2 — Lookup Button Has Unnecessary 1-Second Delay (Debounce Regression)
 
-**Priority:** Medium  
-**File:** `scripts/app.js`
+**Priority:** Medium
+**File to edit:** `scripts/app.js`
 
-### Problem
+### Context
 
-The debounce was refactored from a timestamp-guard into `setTimeout`/`clearTimeout`.
-This is correct for user-typed input (fix #8 from the improvement plan), but it
-introduced a regression: `lookupDomain` now returns **immediately** without waiting
-for the lookup to finish — it only schedules a timer.
+The improvement plan correctly replaced the old timestamp-guard debounce with
+`setTimeout`/`clearTimeout`. However, this created a regression: `lookupDomain`
+now always waits 1 second before firing, even when the user explicitly clicks the
+Lookup button. The button should fire immediately. The debounce is only appropriate
+for auto-triggers (paste events, CSV domain detection).
 
-The CSV auto-detection code in `processCsv` calls `lookupDomain('bounce')` and
-implicitly relied on it being awaitable. Because `lookupDomain` now returns a
-`Promise<void>` that resolves before the actual lookup runs, callers that depend on
-the lookup being complete (e.g. any post-lookup state checks) will silently see
-stale data.
+### Change 1 — Remove `async` from `lookupDomain` (it no longer awaits anything)
 
-More critically: when a user **clicks the Lookup button** (`data-action="lookup"`),
-they expect the lookup to fire immediately (no 1-second wait). The button path goes
-through `lookupDomain`, which now adds an unnecessary 1-second delay on explicit
-button clicks.
-
-Current code (`scripts/app.js`):
-
+Find:
 ```js
 async function lookupDomain(prefix) {
   clearTimeout(_lookupTimers[prefix]);
@@ -127,65 +111,90 @@ async function lookupDomain(prefix) {
 }
 ```
 
-### Fix
-
-Split into two separate call paths:
-
-1. **`lookupDomain(prefix)`** — debounced, used by `paste` and `processCsv` (auto-triggers).
-2. **`lookupDomainImmediate(prefix)`** — no debounce, used by the Lookup button click.
-
-In `scripts/app.js`:
-
-**Step 1** — Update `lookupDomain` to keep the debounce (no change to its body):
-
+Replace with:
 ```js
-// Debounced — use for auto-triggers (paste, CSV detection)
+// Debounced — use for auto-triggers (paste, CSV domain detection)
 function lookupDomain(prefix) {
   clearTimeout(_lookupTimers[prefix]);
   _lookupTimers[prefix] = setTimeout(() => _doLookup(prefix), LOOKUP_DEBOUNCE_MS);
 }
-```
 
-Note: remove the `async` keyword since it no longer `await`s anything.
-
-**Step 2** — Add a new immediate variant below `lookupDomain`:
-
-```js
-// Immediate — use for explicit user button clicks
+// Immediate — use for explicit Lookup button clicks
 function lookupDomainImmediate(prefix) {
   clearTimeout(_lookupTimers[prefix]);
   _doLookup(prefix);
 }
 ```
 
-**Step 3** — In `initEventDelegation`, change the `'lookup'` action handler
-to call `lookupDomainImmediate` instead of `lookupDomain`:
+### Change 2 — Wire the Lookup button to the immediate variant
 
+In `initEventDelegation`, find the `'lookup'` case inside the `switch` block:
 ```js
-// Before
 case 'lookup':
   if (panel) lookupDomain(panel);
   break;
+```
 
-// After
+Replace with:
+```js
 case 'lookup':
   if (panel) lookupDomainImmediate(panel);
   break;
 ```
 
-`processCsv` and the `paste` event listener in `initDomainInputs` should
-continue calling `lookupDomain(prefix)` (the debounced version) — no change needed
-there.
+### What NOT to change
 
-### No other files need to change for this fix.
+- `processCsv` calls `lookupDomain('bounce')` — leave it as-is (debounced is correct here).
+- `initDomainInputs` paste handler calls `lookupDomain(prefix)` — leave it as-is.
+- `_doLookup` function — do not touch.
+
+**No other files need to change for this fix.**
+
+---
+
+## Issue 3 — `middleware.js` Has a Hardcoded Session Age That Can Drift
+
+**Priority:** Low
+**File to edit:** `middleware.js`
+
+### Context
+
+Fix #2/#11 from the improvement plan centralised the session max-age into
+`SESSION_MAX_AGE_MS` in `api/config.js`. This was correctly applied in
+`api/_utils.js` and `api/login.js`. However, `middleware.js` still hardcodes
+the same value directly because it runs in the Vercel Edge Runtime and cannot
+import from `api/config.js` (Node.js-only module).
+
+The value is currently correct (8 hours = both files agree), but if someone
+updates `api/config.js` in the future they may not notice `middleware.js` needs
+to match — causing silent session validation drift.
+
+### Current code (find this in the `verifyToken` function in `middleware.js`)
+
+```js
+const MAX_AGE_MS = 8 * 60 * 60 * 1000;
+```
+
+### Replacement code (replace just that one line)
+
+```js
+// IMPORTANT: This value MUST match SESSION_MAX_AGE_MS in api/config.js.
+// middleware.js runs in the Vercel Edge Runtime and cannot import Node modules,
+// so this constant is intentionally duplicated here. Update both files together.
+const MAX_AGE_MS = 8 * 60 * 60 * 1000; // 8 hours
+```
+
+**No other files need to change for this fix.**
 
 ---
 
 ## Implementation Order
 
-| Step | Issue | Branch Suggestion |
-|------|-------|-------------------|
+| Step | Issue | Suggested Branch |
+|------|-------|-----------------|
 | 1 | Rate limit in-memory fallback | `fix/rate-limit-fallback` |
-| 2 | Lookup debounce button regression | `fix/lookup-debounce-split` |
+| 2 | Lookup button debounce split | `fix/lookup-debounce-split` |
+| 3 | Middleware session age comment | can be combined with step 1 or 2 |
 
-Both fixes are independent and can be implemented in either order or in the same commit.
+Issues 1, 2, and 3 are fully independent — they can be implemented in any order
+or combined into a single commit.
