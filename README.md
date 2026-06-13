@@ -85,8 +85,9 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Dynamic href** — the link URL updates when the Account field changes or a CSV is uploaded/cleared
 
 ### Testing
-- **105 unit tests across 4 files** — covers `sanitiseDomain` (38 edge cases), `checkRateLimit`/`classifyFetchError`/token helpers (25 test cases including expiry, missing claims, non-JSON payload), website-check helpers (~38 test cases), and `withMiddleware` CORS/rate-limit middleware (8 test cases)
+- **202 unit tests across 10 files** — covers `sanitiseDomain` (39 edge cases), `checkRateLimit`/`classifyFetchError`/token helpers (25 test cases including expiry, missing claims, non-JSON payload), website-check helpers (~38 test cases), `withMiddleware` CORS/rate-limit middleware (8 test cases), `safeEqual` (10 cases), `createCache` (8 cases including TTL expiry and pruning), `getClientIp` (6 cases), `rateLimitInMemory` (6 cases), pure functions `escapeHtml`/`parseCsvRow`/`sanitiseDomainInput`/`describeReason`/`parseAgeToDays` (20 cases)
 - **Config integrity checks** — all keyword/pattern arrays are verified at test time for empty strings and lowercase consistency
+- **Pure function extraction** — `escapeHtml`, `parseCsvRow`, `sanitiseDomainInput` extracted to `scripts/pure.js` for testability; `app.js` re-exports from there
 
 ### Security
 - **Login gate** — password-protected access via `login.html` + Vercel Edge middleware with HMAC-SHA256 signed cookies
@@ -116,6 +117,14 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Toast timer safety** — rapid `showToast()` calls clear the previous timer, preventing premature hide
 - **Memory leak prevention** — screenshot data URLs are explicitly nulled before array clear to free base64 strings
 - **Null guard coverage** — `toggleOtherBlockedField`, `toggleAssurance`, `toggleContactFormAssurance` all guard against missing DOM elements
+- **Backend API caching** — generic `createCache(ttlMs)` utility with 15-minute TTL applied to WHOIS, Website Check, and DKIM Check endpoints; auto-prunes stale entries above 1000 entries
+- **DKIM early termination** — queries 2 base selectors first (`titan`, `neo`); skips 18 indexed selectors if match found, reducing DNS queries by ~89% for common cases
+- **`sanitiseDomain` memoization** — caches last 200 results to avoid redundant regex-heavy validation on repeated calls
+- **`parseAgeToDays` extraction** — age parsing extracted from inline DOM logic into a pure function for direct unit testing (6 accumulation cases)
+- **Pure function extraction** — `escapeHtml`, `parseCsvRow`, `sanitiseDomainInput` moved to `scripts/pure.js` (no DOM dependencies) so they can be imported and tested in Node.js
+- **X-XSS-Protection header removed** — modern browsers ignore this header; it was never effective against DOM-based XSS
+- **Login error text reset** — `errorText.textContent` is cleared on page load to prevent stale error messages from persisting across refreshes
+- **CSS optimization** — consolidated duplicate selectors, moved shared properties to base rules
 
 ---
 
@@ -130,24 +139,31 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ├── package.json                    # Node deps (used for local dev / tests)
 ├── .gitignore
 ├── api/
-│   ├── _utils.js                   # Shared helpers: sanitiseDomain, checkRateLimit (with KV + in-memory fallback), signToken, verifyToken, safeEqual, getClientIp, CORS headers, classifyFetchError
+│   ├── _utils.js                   # Shared helpers: sanitiseDomain, createCache(ttlMs), checkRateLimit (with KV + in-memory fallback), signToken, verifyToken, safeEqual, getClientIp, CORS headers, classifyFetchError
 │   ├── config.js                   # Centralised API config (rate limits, DKIM selectors, website-check patterns, parked keywords)
-│   ├── whois.js                    # WHOIS lookup serverless function
-│   ├── website-check.js            # Website reachability & classification (SPA detection, parked/placeholder detection, redirect analysis)
-│   ├── dkim-check.js               # DNS DKIM selector check
+│   ├── whois.js                    # WHOIS lookup serverless function (cached 15 min)
+│   ├── website-check.js            # Website reachability & classification (SPA detection, parked/placeholder detection, redirect analysis; cached 15 min)
+│   ├── dkim-check.js               # DNS DKIM selector check (cached 15 min, early termination)
 │   ├── health.js                   # Health-check endpoint (probes WhoisJSON + Google DNS)
 │   └── login.js                    # Login handler — constant-time password check, rate limited, sets signed auth cookie
 ├── scripts/
 │   ├── app.js                      # Core app logic (ARF + Bounce generate, domain lookup, CSV, unified state, event delegation)
+│   ├── pure.js                     # Pure functions (escapeHtml, parseCsvRow, sanitiseDomainInput) — no DOM dependencies
 │   ├── api.js                      # Frontend API helpers (fetchWhois, fetchWebsiteCheck, fetchDkimCheck — throws on non-2xx)
 │   └── ui.js                       # UI helpers (showToast with types, theme toggle with transition, stepper, form progress, age colors, validation display, drag-and-drop)
 ├── styles/
 │   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, responsive)
 └── tests/
-    ├── sanitiseDomain.test.js      # Unit tests for domain sanitisation logic
+    ├── sanitiseDomain.test.js      # Unit tests for domain sanitisation logic (39 cases)
     ├── api-handlers.test.js        # Tests for checkRateLimit, classifyFetchError, signToken/verifyToken
     ├── website-check.test.js       # Tests for website classification helpers + config integrity
-    └── withMiddleware.test.js       # Tests for CORS, rate limiting, and method guard middleware
+    ├── withMiddleware.test.js       # Tests for CORS, rate limiting, and method guard middleware
+    ├── safeEqual.test.js           # Tests for constant-time string comparison (10 cases)
+    ├── createCache.test.js         # Tests for generic TTL cache utility (8 cases)
+    ├── getClientIp.test.js         # Tests for IP extraction from X-Forwarded-For (6 cases)
+    ├── rateLimitInMemory.test.js   # Tests for in-memory rate limiter (6 cases)
+    ├── pureFunctions.test.js       # Tests for pure functions: escapeHtml, parseCsvRow, sanitiseDomainInput, describeReason, parseAgeToDays (20 cases)
+    └── website-check-helpers.test.js # Tests for website-check exported helpers (extractMetaRobots, hasNoindex, isImageOnlyPage, isSpaShell)
 ```
 
 ---
