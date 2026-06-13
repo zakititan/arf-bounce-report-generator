@@ -83,6 +83,10 @@ export function verifyToken(token) {
 }
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
+// In-memory fallback store used when Vercel KV is unavailable.
+const _rateLimitFallbackStore = new Map();
+let _kvWarnedOnce = false;
+
 export async function checkRateLimit(ip) {
   try {
     const { kv } = await import('@vercel/kv');
@@ -91,9 +95,31 @@ export async function checkRateLimit(ip) {
     if (count === 1) await kv.expire(key, RATE_LIMIT_WINDOW_MS / 1000);
     return count > RATE_LIMIT_MAX;
   } catch {
-    // Fallback: if @vercel/kv is not installed or KV is not configured, allow all
+    if (!_kvWarnedOnce) {
+      console.warn('[rate-limit] @vercel/kv unavailable — falling back to in-memory store. Configure KV_REST_API_URL and KV_REST_API_TOKEN to enable persistent rate limiting.');
+      _kvWarnedOnce = true;
+    }
+    return _checkRateLimitInMemory(ip);
+  }
+}
+
+function _checkRateLimitInMemory(ip) {
+  const now = Date.now();
+  const entry = _rateLimitFallbackStore.get(ip) || { count: 0, windowStart: now };
+  if (now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
+    _rateLimitFallbackStore.set(ip, { count: 1, windowStart: now });
+    // Prune stale entries to prevent unbounded memory growth
+    if (_rateLimitFallbackStore.size > 10_000) {
+      const cutoff = now - RATE_LIMIT_WINDOW_MS;
+      for (const [k, v] of _rateLimitFallbackStore) {
+        if (v.windowStart < cutoff) _rateLimitFallbackStore.delete(k);
+      }
+    }
     return false;
   }
+  entry.count += 1;
+  _rateLimitFallbackStore.set(ip, entry);
+  return entry.count > RATE_LIMIT_MAX;
 }
 
 // ── Middleware wrapper ────────────────────────────────────────────────────────

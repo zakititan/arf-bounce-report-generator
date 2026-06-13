@@ -206,7 +206,7 @@ function initEventDelegation() {
         else if (panel === 'bounce') clearBounce();
         break;
       case 'lookup':
-        if (panel) lookupDomain(panel);
+        if (panel) lookupDomainImmediate(panel);
         break;
       case 'create-jira':
         createTaeJira(panel);
@@ -433,9 +433,16 @@ function clearCsv() {
 }
 
 // ── Domain Lookup (debounced) ─────────────────────────────────────────
-async function lookupDomain(prefix) {
+// Debounced — use for auto-triggers (paste, CSV detection)
+function lookupDomain(prefix) {
   clearTimeout(_lookupTimers[prefix]);
   _lookupTimers[prefix] = setTimeout(() => _doLookup(prefix), LOOKUP_DEBOUNCE_MS);
+}
+
+// Immediate — use for explicit user button clicks
+function lookupDomainImmediate(prefix) {
+  clearTimeout(_lookupTimers[prefix]);
+  _doLookup(prefix);
 }
 
 async function _doLookup(prefix) {
