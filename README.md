@@ -106,6 +106,17 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Login redirect removed** — successful login always redirects to `/`; the `redirect` query parameter is no longer accepted, preventing open redirect and `javascript:` injection
 - **API error resilience** — all fetch calls are wrapped in a centralized `apiFetch()` helper that safely handles network errors and non-JSON responses instead of crashing
 
+### Code Quality & Performance
+- **No theme flash** — inline `<script>` in `<head>` sets dark theme before first paint, preventing flash on dark-mode systems
+- **Cached module imports** — `@vercel/kv` and `APP_ORIGIN` env var are cached at module scope instead of read per-request
+- **Regex constants** — frequently used regexes (`LOCAL_TLD_RE`, `HTML_TAG_RE`, `WHITESPACE_RE`) are module-level constants, not recreated per call
+- **Drag event caching** — `getElementById` results are cached in a `Map` instead of queried on every ~60Hz drag event
+- **Shared utilities** — `safeEqual()`, `getClientIp()`, `escapeHtml()` extracted into reusable helpers; `renderReportOutput()` and `clearPanel()` deduplicate generate/clear logic across ARF and Bounce
+- **Button CSS consolidation** — `.btn-tool-link` base class shared by Mailboards, User Agent, and Abuse Desk buttons; unique overrides kept minimal
+- **Toast timer safety** — rapid `showToast()` calls clear the previous timer, preventing premature hide
+- **Memory leak prevention** — screenshot data URLs are explicitly nulled before array clear to free base64 strings
+- **Null guard coverage** — `toggleOtherBlockedField`, `toggleAssurance`, `toggleContactFormAssurance` all guard against missing DOM elements
+
 ---
 
 ## Project Structure
@@ -119,7 +130,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ├── package.json                    # Node deps (used for local dev / tests)
 ├── .gitignore
 ├── api/
-│   ├── _utils.js                   # Shared helpers: sanitiseDomain, checkRateLimit (with KV + in-memory fallback), signToken, verifyToken, CORS headers, classifyFetchError
+│   ├── _utils.js                   # Shared helpers: sanitiseDomain, checkRateLimit (with KV + in-memory fallback), signToken, verifyToken, safeEqual, getClientIp, CORS headers, classifyFetchError
 │   ├── config.js                   # Centralised API config (rate limits, DKIM selectors, website-check patterns, parked keywords)
 │   ├── whois.js                    # WHOIS lookup serverless function
 │   ├── website-check.js            # Website reachability & classification (SPA detection, parked/placeholder detection, redirect analysis)
