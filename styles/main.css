@@ -506,7 +506,7 @@ html.theme-transitioning, html.theme-transitioning * { transition: background 25
   justify-content: center;
   text-align: center;
   gap: var(--space-1);
-  padding: var(--space-3);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
   font-weight: 500;
