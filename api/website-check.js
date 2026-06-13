@@ -8,11 +8,7 @@ import {
   PARKED_TITLE_KEYWORDS,
   PARKED_DOMAIN_PATTERNS,
   SPA_ROOT_PATTERNS,
-  globalRateLimitStore,
 } from './config.js';
-
-// TextDecoder at module scope — avoids re-instantiation on every request.
-const decoder = new TextDecoder();
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -107,9 +103,10 @@ function isSpaShell(bodyText) {
 
 // ── Main handler ──────────────────────────────────────────────────────
 
-export default withMiddleware(globalRateLimitStore, async function handler(req, res) {
+export default withMiddleware(async function handler(req, res) {
   const domain = sanitiseDomain(req.query.domain);
   if (!domain) return res.status(400).json({ error: 'Invalid or missing domain parameter' });
+  const decoder = new TextDecoder();
 
   const urls = [`https://${domain}`, `http://${domain}`];
 
@@ -143,13 +140,15 @@ export default withMiddleware(globalRateLimitStore, async function handler(req, 
 
       const reader = response.body.getReader();
       let bodyText = '', bytesRead = 0;
+      let done = false;
       while (bytesRead < WEBSITE_MAX_BODY_BYTES) {
-        const { done, value } = await reader.read();
+        const result = await reader.read();
+        done = result.done;
         if (done) break;
-        bodyText += decoder.decode(value, { stream: true });
-        bytesRead += value.byteLength;
+        bodyText += decoder.decode(result.value, { stream: true });
+        bytesRead += result.value.byteLength;
       }
-      reader.cancel();
+      if (!done) reader.cancel().catch(() => {});
       // Flush any remaining bytes buffered by the streaming TextDecoder
       bodyText += decoder.decode();
 

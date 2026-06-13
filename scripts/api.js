@@ -27,8 +27,10 @@ function describeReason(reason, fallback) {
 async function apiFetch(url) {
   let res;
   try {
-    res = await fetch(url);
+    res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
   } catch (err) {
+    if (err.name === 'TimeoutError' || err.name === 'AbortError')
+      throw new Error('Request timed out — please try again.');
     throw new Error('Network error — could not reach the server.');
   }
   let data;

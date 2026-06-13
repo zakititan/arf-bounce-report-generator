@@ -1,6 +1,19 @@
-import { describe, it, afterEach } from 'node:test';
+import { describe, it, afterEach, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { withMiddleware } from '../api/_utils.js';
+
+// Mock @vercel/kv
+const mockKvState = {};
+const mockKv = {
+  incr: mock.fn((key) => {
+    mockKvState[key] = (mockKvState[key] || 0) + 1;
+    return mockKvState[key];
+  }),
+  expire: mock.fn(() => {}),
+};
+mock.module('@vercel/kv', {
+  namedExports: { kv: mockKv },
+});
 
 /**
  * Create a minimal mock Vercel request object.
@@ -52,6 +65,12 @@ describe('withMiddleware', () => {
   const ORIGINAL_ORIGIN = process.env.APP_ORIGIN;
   const ORIGINAL_SECRET = process.env.AUTH_SECRET;
 
+  beforeEach(() => {
+    Object.keys(mockKvState).forEach(k => delete mockKvState[k]);
+    mockKv.incr.mock.resetCalls();
+    mockKv.expire.mock.resetCalls();
+  });
+
   afterEach(() => {
     if (ORIGINAL_ORIGIN === undefined) delete process.env.APP_ORIGIN;
     else process.env.APP_ORIGIN = ORIGINAL_ORIGIN;
@@ -61,9 +80,8 @@ describe('withMiddleware', () => {
 
   it('sets CORS headers on all responses', async () => {
     process.env.APP_ORIGIN = 'https://example.com';
-    const store = new Map();
     const handler = async (req, res) => res.status(200).json({ ok: true });
-    const wrapped = withMiddleware(store, handler);
+    const wrapped = withMiddleware(handler);
 
     const req = mockReq('GET');
     const res = mockRes();
@@ -77,10 +95,9 @@ describe('withMiddleware', () => {
 
   it('handles OPTIONS preflight without reaching handler', async () => {
     process.env.APP_ORIGIN = 'https://example.com';
-    const store = new Map();
     let handlerCalled = false;
     const handler = async (req, res) => { handlerCalled = true; return res.status(200).json({ ok: true }); };
-    const wrapped = withMiddleware(store, handler);
+    const wrapped = withMiddleware(handler);
 
     const req = mockReq('OPTIONS');
     const res = mockRes();
@@ -92,10 +109,9 @@ describe('withMiddleware', () => {
   });
 
   it('rejects non-GET methods with 405', async () => {
-    const store = new Map();
     let handlerCalled = false;
     const handler = async (req, res) => { handlerCalled = true; return res.status(200).json({ ok: true }); };
-    const wrapped = withMiddleware(store, handler);
+    const wrapped = withMiddleware(handler);
 
     const req = mockReq('POST');
     const res = mockRes();
@@ -107,9 +123,8 @@ describe('withMiddleware', () => {
   });
 
   it('blocks requests exceeding rate limit with 429', async () => {
-    const store = new Map();
     const handler = async (req, res) => res.status(200).json({ ok: true });
-    const wrapped = withMiddleware(store, handler);
+    const wrapped = withMiddleware(handler);
 
     // checkRateLimit uses count > RATE_LIMIT_MAX (strict), so 21st call is blocked
     const req = mockReq('GET', { 'x-forwarded-for': '1.2.3.4' });
@@ -126,9 +141,8 @@ describe('withMiddleware', () => {
   });
 
   it('passes request to handler under rate limit', async () => {
-    const store = new Map();
     const handler = async (req, res) => res.status(200).json({ ok: true, domain: req.headers['x-forwarded-for'] });
-    const wrapped = withMiddleware(store, handler);
+    const wrapped = withMiddleware(handler);
 
     const req = mockReq('GET', { 'x-forwarded-for': '5.6.7.8' });
     const res = mockRes();
@@ -139,14 +153,13 @@ describe('withMiddleware', () => {
   });
 
   it('extracts IP from x-forwarded-for header', async () => {
-    const store = new Map();
     let capturedIp = null;
     const handler = async (req, res) => {
       // The IP used for rate limiting is derived from x-forwarded-for inside withMiddleware
       capturedIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim();
       return res.status(200).json({ ok: true });
     };
-    const wrapped = withMiddleware(store, handler);
+    const wrapped = withMiddleware(handler);
 
     const req = mockReq('GET', { 'x-forwarded-for': '10.0.0.1, 10.0.0.2' });
     const res = mockRes();
@@ -157,9 +170,8 @@ describe('withMiddleware', () => {
   });
 
   it('falls back to socket.remoteAddress when x-forwarded-for is missing', async () => {
-    const store = new Map();
     const handler = async (req, res) => res.status(200).json({ ok: true });
-    const wrapped = withMiddleware(store, handler);
+    const wrapped = withMiddleware(handler);
 
     // Make enough requests to hit rate limit — the IP used will be socket.remoteAddress
     const req = mockReq('GET', {}, '10.0.0.99');
@@ -174,9 +186,8 @@ describe('withMiddleware', () => {
 
   it('sets wildcard CORS when APP_ORIGIN is missing', async () => {
     delete process.env.APP_ORIGIN;
-    const store = new Map();
     const handler = async (req, res) => res.status(200).json({ ok: true });
-    const wrapped = withMiddleware(store, handler);
+    const wrapped = withMiddleware(handler);
 
     const req = mockReq('GET');
     const res = mockRes();

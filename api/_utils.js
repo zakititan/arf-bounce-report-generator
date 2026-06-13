@@ -1,5 +1,5 @@
 import { createHmac } from 'crypto';
-import { IPV4_PATTERN, IPV6_PATTERN, LOCALHOST_NAMES, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from './config.js';
+import { IPV4_PATTERN, IPV6_PATTERN, LOCALHOST_NAMES, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS, SESSION_MAX_AGE_MS } from './config.js';
 
 // ── Domain sanitisation ───────────────────────────────────────────────────────
 /**
@@ -74,8 +74,7 @@ export function verifyToken(token) {
     try { parsed = JSON.parse(payload); } catch { return false; }
     if (!parsed || parsed.sub !== 'authenticated' || typeof parsed.iat !== 'number') return false;
     const age = Date.now() - parsed.iat;
-    const MAX_AGE_MS = 24 * 60 * 60 * 1000;
-    if (age > MAX_AGE_MS || age < 0) return false;
+    if (age > SESSION_MAX_AGE_MS || age < 0) return false;
 
     return true;
   } catch {
@@ -84,33 +83,18 @@ export function verifyToken(token) {
 }
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
-/**
- * In-process sliding-window rate limiter.
- * store: a shared Map (pass globalRateLimitStore from config.js)
- *
- * Automatically prunes entries older than the current window to prevent
- * unbounded memory growth on long-lived serverless containers.
- */
-export function checkRateLimit(store, ip) {
-  const now = Date.now();
-  const entry = store.get(ip) || { count: 0, windowStart: now };
-
-  if (now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
-    // New window
-    store.set(ip, { count: 1, windowStart: now });
-    // Prune stale entries to prevent unbounded Map growth
-    if (store.size > 10_000) {
-      const cutoff = now - RATE_LIMIT_WINDOW_MS;
-      for (const [k, v] of store) {
-        if (v.windowStart < cutoff) store.delete(k);
-      }
-    }
-    return false; // not limited
+export async function checkRateLimit(ip) {
+  let kv;
+  try {
+    kv = (await import('@vercel/kv')).kv;
+  } catch {
+    // Fallback: if @vercel/kv is not installed (e.g. local dev), allow all
+    return false;
   }
-
-  entry.count += 1;
-  store.set(ip, entry);
-  return entry.count > RATE_LIMIT_MAX; // true = over limit
+  const key = `rl:${ip}`;
+  const count = await kv.incr(key);
+  if (count === 1) await kv.expire(key, RATE_LIMIT_WINDOW_MS / 1000);
+  return count > RATE_LIMIT_MAX;
 }
 
 // ── Middleware wrapper ────────────────────────────────────────────────────────
@@ -120,7 +104,7 @@ export function checkRateLimit(store, ip) {
  *  - Rate limiting (uses the provided store)
  *  - Method guard (GET only)
  */
-export function withMiddleware(rateLimitStore, handler) {
+export function withMiddleware(handler) {
   return async function (req, res) {
     const allowedOrigin = process.env.APP_ORIGIN || '';
     res.setHeader('Access-Control-Allow-Origin', allowedOrigin || '*');
@@ -130,8 +114,8 @@ export function withMiddleware(rateLimitStore, handler) {
     if (req.method === 'OPTIONS') return res.status(204).end();
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-    const ip = req.headers['x-forwarded-for']?.split(',').pop()?.trim() || req.socket?.remoteAddress || 'unknown';
-    if (checkRateLimit(rateLimitStore, ip)) {
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
+    if (await checkRateLimit(ip)) {
       return res.status(429).json({ error: 'Too many requests — please slow down.' });
     }
 

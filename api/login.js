@@ -1,9 +1,9 @@
 import { signToken, checkRateLimit } from './_utils.js';
-import { globalRateLimitStore } from './config.js';
+import { SESSION_MAX_AGE_S } from './config.js';
 
 const PASSWORD = process.env.APP_PASSWORD;
 const COOKIE_NAME = '__Host-auth_session';
-const MAX_AGE = 60 * 60 * 8; // 8 hours
+const MAX_AGE = SESSION_MAX_AGE_S;
 
 /**
  * Constant-time string comparison to prevent timing attacks.
@@ -17,7 +17,7 @@ function safeEqual(a, b) {
   return diff === 0;
 }
 
-export default function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
     return;
@@ -28,8 +28,8 @@ export default function handler(req, res) {
     return;
   }
 
-  const ip = req.headers['x-forwarded-for']?.split(',').pop()?.trim() || req.socket?.remoteAddress || 'unknown';
-  if (checkRateLimit(globalRateLimitStore, ip)) {
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
+  if (await checkRateLimit(ip)) {
     res.status(429).json({ error: 'Too many login attempts — please wait a moment.' });
     return;
   }

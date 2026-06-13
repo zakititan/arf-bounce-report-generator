@@ -2,49 +2,48 @@ import { describe, it, before, after, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { sanitiseDomain, checkRateLimit, classifyFetchError, signToken, verifyToken } from '../api/_utils.js';
 
+// Mock @vercel/kv
+const mockKvState = {};
+const mockKv = {
+  incr: mock.fn((key) => {
+    mockKvState[key] = (mockKvState[key] || 0) + 1;
+    return mockKvState[key];
+  }),
+  expire: mock.fn(() => {}),
+};
+mock.module('@vercel/kv', {
+  namedExports: { kv: mockKv },
+});
+
 describe('checkRateLimit', () => {
-  it('allows requests under the limit', () => {
-    const store = new Map();
+  beforeEach(() => {
+    Object.keys(mockKvState).forEach(k => delete mockKvState[k]);
+    mockKv.incr.mock.resetCalls();
+    mockKv.expire.mock.resetCalls();
+  });
+
+  it('allows requests under the limit', async () => {
     for (let i = 0; i < 5; i++) {
-      assert.equal(checkRateLimit(store, '1.2.3.4'), false, `request ${i + 1} allowed`);
+      assert.equal(await checkRateLimit('1.2.3.4'), false, `request ${i + 1} allowed`);
     }
   });
 
-  it('rejects requests over the limit', () => {
-    const store = new Map();
-    // RATE_LIMIT_MAX = 20, so we need 22 calls to hit the limit
-    for (let i = 0; i < 22; i++) checkRateLimit(store, '5.6.7.8');
-    assert.equal(checkRateLimit(store, '5.6.7.8'), true, '23rd request blocked');
+  it('rejects requests over the limit', async () => {
+    // RATE_LIMIT_MAX = 20, so 22 calls triggers limit (count > 20)
+    for (let i = 0; i < 22; i++) await checkRateLimit('5.6.7.8');
+    assert.equal(await checkRateLimit('5.6.7.8'), true, '23rd request blocked');
   });
 
-  it('resets after window expires', () => {
-    const store = new Map();
-    const originalNow = Date.now;
-    const t0 = Date.now();
-    checkRateLimit(store, '9.9.9.9');
-    checkRateLimit(store, '9.9.9.9');
-    mock.method(Date, 'now', () => t0 + 60_001);
-    assert.equal(checkRateLimit(store, '9.9.9.9'), false, 'reset after window');
-    mock.restoreAll();
-    Date.now = originalNow;
+  it('tracks different IPs independently', async () => {
+    for (let i = 0; i < 22; i++) await checkRateLimit('10.0.0.1');
+    assert.equal(await checkRateLimit('10.0.0.2'), false, 'different IP not blocked');
   });
 
-  it('tracks different IPs independently', () => {
-    const store = new Map();
-    for (let i = 0; i < 22; i++) checkRateLimit(store, '10.0.0.1');
-    assert.equal(checkRateLimit(store, '10.0.0.2'), false, 'different IP not blocked');
-  });
-
-  it('handles mixed-age store entries gracefully', () => {
-    const store = new Map();
-    const t0 = Date.now();
-    for (let i = 0; i < 5; i++) {
-      store.set(`old-${i}`, { count: 1, windowStart: t0 - 120_000 });
-    }
-    for (let i = 0; i < 5; i++) {
-      store.set(`current-${i}`, { count: 1, windowStart: t0 });
-    }
-    assert.equal(checkRateLimit(store, 'fresh-ip'), false, 'fresh IP allowed with mixed-age store');
+  it('calls kv.expire on first request for a new IP', async () => {
+    await checkRateLimit('99.99.99.99');
+    assert.equal(mockKv.expire.mock.calls.length, 1, 'expire called once');
+    await checkRateLimit('99.99.99.99');
+    assert.equal(mockKv.expire.mock.calls.length, 1, 'expire not called again');
   });
 });
 
@@ -181,7 +180,7 @@ describe('signToken / verifyToken', () => {
   });
 
   it('rejects expired token', () => {
-    const expiredIat = Date.now() - 25 * 60 * 60 * 1000;
+    const expiredIat = Date.now() - 9 * 60 * 60 * 1000;
     const token = signToken(JSON.stringify({ sub: 'authenticated', iat: expiredIat }));
     assert.equal(verifyToken(token), false, 'expired token');
   });
