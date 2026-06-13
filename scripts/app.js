@@ -244,7 +244,18 @@ function copyOutputWithFeedback(id) {
     });
     doCopy(navigator.clipboard.write([item]));
   } else {
-    doCopy(navigator.clipboard.writeText(text));
+    const html = '<div style="font-family:DM Mono,Courier New,monospace;font-size:12px;line-height:1.9;">' +
+      text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>') +
+      '</div>';
+    if (typeof ClipboardItem !== 'undefined') {
+      const item = new ClipboardItem({
+        'text/plain': new Blob([text], { type: 'text/plain' }),
+        'text/html': new Blob([html], { type: 'text/html' }),
+      });
+      doCopy(navigator.clipboard.write([item]));
+    } else {
+      doCopy(navigator.clipboard.writeText(text));
+    }
   }
 }
 
