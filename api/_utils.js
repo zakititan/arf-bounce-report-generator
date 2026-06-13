@@ -132,7 +132,7 @@ function _checkRateLimitInMemory(ip) {
 export function withMiddleware(handler) {
   return async function (req, res) {
     const allowedOrigin = process.env.APP_ORIGIN || '';
-    res.setHeader('Access-Control-Allow-Origin', allowedOrigin || '*');
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     if (allowedOrigin) res.setHeader('Vary', 'Origin');

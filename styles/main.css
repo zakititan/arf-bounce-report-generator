@@ -20,7 +20,9 @@
   --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem;
   --space-4: 1rem; --space-5: 1.25rem; --space-6: 1.5rem; --space-8: 2rem;
 }
+/* ── Dark theme — keep both selectors in sync ── */
 [data-theme="dark"] {
+  /* manual toggle */
   --color-bg: #0c0c0b; --color-surface: #141312; --color-surface-2: #181716;
   --color-surface-offset: #11100f; --color-divider: #1f1e1c; --color-border: #2b2a28;
   --color-text: #d4d3d0; --color-text-muted: #807f7c; --color-text-faint: #5c5b58;
@@ -31,6 +33,7 @@
   --shadow-sm: 0 1px 3px oklch(0 0 0 / 0.35); --shadow-md: 0 4px 16px oklch(0 0 0 / 0.45);
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme]) {
+  /* system preference */
   --color-bg:#0c0c0b;--color-surface:#141312;--color-surface-2:#181716;
   --color-surface-offset:#11100f;--color-divider:#1f1e1c;--color-border:#2b2a28;
   --color-text:#d4d3d0;--color-text-muted:#807f7c;--color-text-faint:#5c5b58;
@@ -542,6 +545,7 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
   border-radius: var(--radius-lg); padding: var(--space-4);
   font-family: var(--font-mono); font-size: var(--text-xs);
   color: var(--color-text); position: relative;
+  overflow-x: auto;
 }
 .output-text {
   white-space: pre-wrap;
@@ -619,4 +623,16 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
   .btn-copy-bottom { width: 100%; }
   .output-bottom-actions { flex-direction: column; }
   .output-bottom-actions .btn { width: 100%; }
+}
+
+/* ── Print ────────────────────────────────────────────────────── */
+@media print {
+  .topbar, .site-footer, .panel-actions, .upload-zone, .csv-drop-zone,
+  .domain-lookup-wrap, .progress-stepper, .form-progress-wrap,
+  .theme-toggle, .toast, .validation-banner,
+  .btn-mailboards, .btn-abusedesk { display: none !important; }
+  .main-content { display: block; }
+  .panel { break-inside: avoid; }
+  #arf-output-section, #bounce-output-section { display: block !important; }
+  .output-area { border: 1px solid #ccc; }
 }

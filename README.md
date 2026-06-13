@@ -22,7 +22,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ### Domain Lookup
 - **Auto WHOIS lookup** — fetches domain creation date and age via [whoisjson.com](https://whoisjson.com)
 - **Website Check** — classifies the domain as *Valid Website* or *No website* via a serverless function; supports SPA shell detection for JS-heavy sites
-- **DKIM Check** — detects Titan and Neo DKIM selectors (`titan`, `titan1`–`titan9`, `neo`, `neo1`–`neo9`) via DNS lookup
+- **DKIM Check** — detects Titan and Neo DKIM selectors (`titan`, `titan1`–`titan9`, `neo`, `neo1`–`neo9`) via DNS lookup; returns `"Set"` when any selector matches and `"Not Set"` when none do
 - **Lookup debounce** — 1-second debounce prevents API spam from rapid button clicks or CSV auto-triggers
 - **Stale cache invalidation** — editing the domain input immediately clears the cached WHOIS result and hides the result card
 - **Per-panel generate gating** — the Generate button is disabled only while *that panel's own* lookup is in-flight; the other panel remains unaffected
@@ -35,6 +35,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Drag-and-drop or file picker** upload of `.csv` bounce lists
 - **Automatic row count** with a `< 40` / `≥ 40` threshold badge
 - **Auto-detect domain from CSV** — domain is read from the 2nd column (index 1) of the first data row, falling back to the 3rd column (index 2); lookup fires automatically
+- **Account auto-fill** — the Account field is pre-filled with the raw column 2 value (email or domain) if all rows share the same column 2 value; otherwise falls back to the sanitised domain
 - Header row is always excluded from the bounce count
 
 ### UX & Polish
@@ -46,6 +47,13 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Error resilience** — generate functions are wrapped in `try/catch` so unexpected errors surface as a user-facing toast instead of silently failing
 - **10-screenshot cap** — excess files are skipped with a descriptive toast
 - **Toast type differentiation** — toasts carry a `data-type` attribute (success, error, warning, info) for coloured styling
+- **Accessible assurance buttons** — assurance toggle buttons use `aria-pressed` to reflect active state for screen readers
+- **Decorative SVG hiding** — all decorative icons carry `aria-hidden="true"` to prevent screen reader noise
+- **Required field markup** — 13 form fields include `aria-required="true"` for assistive technology
+- **XSS-safe validation** — validation error messages use `textContent` instead of `innerHTML` to prevent HTML injection
+- **Clipboard API guard** — shows a warning toast if `navigator.clipboard` is unavailable (non-HTTPS or insecure context)
+- **Combined age calculation** — `parseAgeToDays` accumulates all units (years + months + days) instead of returning only the first non-null match
+- **Print stylesheet** — hides UI chrome (topbar, buttons, upload zones, stepper) when printing, showing only the output areas
 - **Form completion progress bar** — a thin progress bar under each panel header fills as required fields are completed
 - **Assurance button subgroups** — assurance buttons are grouped into Email Hygiene and Technical sections with labelled headers
 - **Stepper/Progress reset on clear** — clicking Clear resets the stepper to step 1 and the progress bar to 0%
@@ -77,10 +85,10 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 
 ### Security
 - **Login gate** — password-protected access via `login.html` + Vercel Edge middleware with HMAC-SHA256 signed cookies
-- **No default password** — `APP_PASSWORD` environment variable must be set; no fallback `'changeme'` default
+- **No default password** — `APP_PASSWORD` environment variable must be set; no fallback `'changeme'` default; trailing whitespace is trimmed automatically
 - **Constant-time password comparison** — login handler uses an XOR loop (`safeEqual()`) to prevent timing attacks
 - **Login rate limiting** — the `/api/login` endpoint uses the shared rate-limit store to prevent brute-force attacks
-- **CORS** — all API endpoints restrict `Origin` to `APP_ORIGIN` env var; `Vary: Origin` header is set correctly
+- **CORS** — all API endpoints restrict `Origin` to `APP_ORIGIN` env var; `Vary: Origin` header is set correctly; no wildcard fallback when `APP_ORIGIN` is empty
 - **Rate limiting** — max 20 requests/min per IP on all API endpoints; rate-limit map prunes stale entries above 10,000 to prevent memory leaks
 - **Session token expiry** — auth cookies carry an 8-hour expiry enforced during signature verification; leaked tokens are automatically rejected after 8 hours
 - **Hardened auth cookie** — `__Host-` cookie prefix enforces `Path=/` + `Secure` at the browser level, preventing subdomain cookie overwrite
@@ -89,7 +97,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **CSP hardening** — Content-Security-Policy includes `base-uri 'self'`, `form-action 'none'`, and `object-src 'none'` to prevent injection via `<base>`, form-jacking, and plugin attacks
 - **HSTS** — `Strict-Transport-Security` header enforces HTTPS with `max-age=31536000; includeSubDomains; preload`
 - **Middleware URL matching** — public path check uses exact match or subpath prefix (`pathname === p || pathname.startsWith(p + '/')`) to prevent `/api/login-staging` from bypassing auth
-- **XSS prevention** — API response values (verdict, DKIM selectors) are set via `textContent` instead of `innerHTML` to prevent HTML injection
+- **XSS prevention** — API response values (verdict, DKIM selectors) and validation error labels are set via `textContent` instead of `innerHTML` to prevent HTML injection
 - **Login redirect removed** — successful login always redirects to `/`; the `redirect` query parameter is no longer accepted, preventing open redirect and `javascript:` injection
 - **API error resilience** — all fetch calls are wrapped in a centralized `apiFetch()` helper that safely handles network errors and non-JSON responses instead of crashing
 

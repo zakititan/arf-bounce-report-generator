@@ -89,6 +89,11 @@ function sanitiseDomainInput(value) {
   return v.toLowerCase().trim();
 }
 
+function resetWhoisState(prefix) {
+  state[prefix].whois = null;
+  document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
+}
+
 function initDomainInputs() {
   ['arf', 'bounce'].forEach(prefix => {
     const input = document.getElementById(prefix + '-domain-input');
@@ -99,8 +104,7 @@ function initDomainInputs() {
       const sanitised = sanitiseDomainInput(pasted);
       input.value = sanitised;
       if (sanitised !== pasted.trim()) showToast('Email stripped → ' + sanitised);
-      state[prefix].whois = null;
-      document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
+      resetWhoisState(prefix);
       lookupDomain(prefix);
     });
     input.addEventListener('blur', () => {
@@ -109,14 +113,12 @@ function initDomainInputs() {
       if (sanitised !== original.trim()) {
         input.value = sanitised;
         showToast('Email stripped → ' + sanitised);
-        state[prefix].whois = null;
-        document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
+        resetWhoisState(prefix);
       }
     });
     input.addEventListener('input', () => {
       if (state[prefix].whois) {
-        state[prefix].whois = null;
-        document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
+        resetWhoisState(prefix);
       }
     });
   });
@@ -135,8 +137,7 @@ function initDomainInputs() {
     accountInput.value = pasted; // preserve full email in account field
     const domainInput = document.getElementById(prefix + '-domain-input');
     if (domainInput) domainInput.value = sanitised;
-    state[prefix].whois = null;
-    document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
+    resetWhoisState(prefix);
     lookupDomain(prefix);
   });
 
@@ -145,8 +146,7 @@ function initDomainInputs() {
     const sanitised = sanitiseDomainInput(accountInput.value);
     const domainInput = document.getElementById(prefix + '-domain-input');
     if (domainInput) domainInput.value = sanitised;
-    state[prefix].whois = null;
-    document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
+    resetWhoisState(prefix);
     lookupDomain(prefix);
   });
 });
@@ -197,6 +197,7 @@ function copyOutputWithFeedback(id) {
   const outputArea = el.closest('.output-area');
   const text = (outputArea && outputArea.dataset.copyText) || el.textContent;
   if (!text.trim()) return;
+  if (!navigator.clipboard) { showToast('Copy not supported in this browser context.', 'warning'); return; }
 
   const doCopy = (writePromise) => {
     writePromise.then(() => {
@@ -449,9 +450,7 @@ function parseCsvRow(row) {
 }
 
 function extractDomain(value) {
-  if (!value) return '';
-  const atIdx = value.indexOf('@');
-  return atIdx !== -1 ? value.slice(atIdx + 1).toLowerCase().trim() : value.toLowerCase().trim();
+  return sanitiseDomainInput(value);
 }
 
 // ── CSV Bounce List ───────────────────────────────────────────────────
@@ -480,12 +479,20 @@ function processCsv(file) {
       const cols = parseCsvRow(lines[1]);
       const col2Value = cols[1] || '';
       const col3Value = cols[2] || '';
-      const detectedDomain = extractDomain(col2Value) || extractDomain(col3Value);
+      const detectedDomain = sanitiseDomainInput(col2Value) || sanitiseDomainInput(col3Value);
       const domainInput = document.getElementById('bounce-domain-input');
       if (detectedDomain && domainInput) {
         domainInput.value = detectedDomain;
         const accountInput = document.getElementById('bounce-account');
-        if (accountInput && !accountInput.value.trim()) accountInput.value = detectedDomain;
+        if (accountInput && !accountInput.value.trim()) {
+          const col2Values = lines.slice(1).map(line => {
+            const c = parseCsvRow(line);
+            return (c[1] || '').trim();
+          }).filter(v => v !== '');
+          const allSame = col2Values.length > 0 && col2Values.every(v => v === col2Values[0]);
+          accountInput.value = allSame ? col2Values[0] : detectedDomain;
+          accountInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
         showToast('Domain auto-detected: ' + detectedDomain + ' — running lookup…');
         lookupDomain('bounce');
       } else showToast(dataRows + ' bounce rows counted from ' + file.name);
@@ -722,6 +729,7 @@ function toggleOtherBlockedField(val) {
 }
 function toggleAssurance(btn, prefix) {
   btn.classList.toggle('active');
+  btn.setAttribute('aria-pressed', btn.classList.contains('active'));
   if (btn.getAttribute('data-value') === 'Other') {
     const f = document.getElementById(prefix + '-other-field');
     if (btn.classList.contains('active')) { f.classList.add('visible'); document.getElementById(prefix + '-other-text').focus(); }
@@ -732,11 +740,12 @@ function toggleAssurance(btn, prefix) {
 // ── Contact Form Assurance ────────────────────────────────────────────
 function toggleContactFormAssurance(btn) {
   btn.classList.toggle('active');
+  btn.setAttribute('aria-pressed', btn.classList.contains('active'));
   const panel = document.getElementById('bounce-contact-form-suboptions');
   if (btn.classList.contains('active')) panel.classList.add('visible');
   else { panel.classList.remove('visible'); panel.querySelectorAll('.website-suboption-btn').forEach(b => b.classList.remove('active')); }
 }
-function toggleContactFormSuboption(btn) { btn.classList.toggle('active'); }
+function toggleContactFormSuboption(btn) { btn.classList.toggle('active'); btn.setAttribute('aria-pressed', btn.classList.contains('active')); }
 function getActiveContactFormSuboptions() {
   const vals = [];
   document.querySelectorAll('#bounce-contact-form-suboptions .website-suboption-btn.active').forEach(b => vals.push(b.getAttribute('data-value')));
@@ -973,7 +982,7 @@ function generateBounce() {
 function clearBounce() {
   if (!confirm('Clear all Bounce form data? This cannot be undone.')) return;
 
-  ['bounce-account','bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-domain-input']
+  ['bounce-account','bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-domain-input','bounce-other-blocked-detail']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   clearCsv();
   state.bounce.assuranceScreenshots.length = 0;

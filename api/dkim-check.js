@@ -21,9 +21,9 @@ export default withMiddleware(async function handler(req, res) {
     .filter(Boolean);
 
   return res.status(200).json({
-    status: 'Set',
+    status: matched.length > 0 ? 'Set' : 'Not Set',
     selectors_found: matched.map(m => m.selector),
-    detail: matched[0],
+    detail: matched[0] || null,
   });
 });
 

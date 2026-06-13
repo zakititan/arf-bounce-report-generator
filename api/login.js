@@ -1,7 +1,7 @@
 import { signToken, checkRateLimit } from './_utils.js';
 import { SESSION_MAX_AGE_S } from './config.js';
 
-const PASSWORD = process.env.APP_PASSWORD;
+const PASSWORD = (process.env.APP_PASSWORD || '').trim();
 const COOKIE_NAME = '__Host-auth_session';
 const MAX_AGE = SESSION_MAX_AGE_S;
 
