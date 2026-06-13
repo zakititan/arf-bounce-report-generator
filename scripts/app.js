@@ -135,13 +135,19 @@ function initDomainInputs() {
     accountInput.value = pasted; // preserve full email in account field
     const domainInput = document.getElementById(prefix + '-domain-input');
     if (domainInput && !domainInput.value.trim()) domainInput.value = sanitised;
+    state[prefix].whois = null;
+    document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
+    lookupDomain(prefix);
   });
 
-  // On input: sync sanitised domain
+  // On input: sync sanitised domain and trigger lookup
   accountInput.addEventListener('input', () => {
     const sanitised = sanitiseDomainInput(accountInput.value);
     const domainInput = document.getElementById(prefix + '-domain-input');
     if (domainInput && !domainInput.value.trim()) domainInput.value = sanitised;
+    state[prefix].whois = null;
+    document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
+    lookupDomain(prefix);
   });
 });
 
