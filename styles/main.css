@@ -484,9 +484,10 @@ html.theme-transitioning, html.theme-transitioning * { transition: background 25
   align-items: center;
   gap: var(--space-1);
   margin-top: var(--space-2);
-  padding: var(--space-1) var(--space-3);
+  padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
+  min-height: 0;
   font-weight: 500;
   background: var(--color-surface-offset);
   color: var(--color-text-muted);
@@ -518,6 +519,7 @@ html.theme-transitioning, html.theme-transitioning * { transition: background 25
   transition: all 150ms ease;
   width: 100%;
   align-self: flex-end;
+  min-height: 0;
 }
 .btn-abusedesk:hover {
   background: var(--color-primary-highlight);
