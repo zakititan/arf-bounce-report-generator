@@ -151,6 +151,26 @@ function initDomainInputs() {
   });
 });
 
+// ── Mailboards link href updater ─────────────────────────────────────
+['arf', 'bounce'].forEach(prefix => {
+  const accountInput = document.getElementById(prefix + '-account');
+  const mailboardsLink = document.querySelector('#' + prefix + '-panel .btn-mailboards');
+  if (!accountInput || !mailboardsLink) return;
+
+  function updateMailboardsHref() {
+    const account = accountInput.value.trim();
+    if (account) {
+      mailboardsLink.href = 'https://mailboards.ops.titan.email/home?domain=' + encodeURIComponent(account) + '&env=prod';
+    } else {
+      mailboardsLink.href = 'https://mailboards.ops.titan.email/home?env=prod';
+    }
+  }
+
+  accountInput.addEventListener('input', updateMailboardsHref);
+  accountInput.addEventListener('paste', () => setTimeout(updateMailboardsHref, 0));
+  updateMailboardsHref();
+});
+
 // ── Copy with visual button feedback ──────────────────────────────────
 function copyOutputWithFeedback(id) {
   const el = document.getElementById(id);
