@@ -41,6 +41,8 @@ const state = {
   },
   bounce: {
     csvCount: null,
+    csvFromDate: null,
+    csvToDate: null,
     assuranceScreenshots: [],
     whois: null,
     lookupInFlight: false,
@@ -190,6 +192,27 @@ function initDomainInputs() {
   updateArfCountHref();
 })();
 
+// ── Check User Agent link updater ─────────────────────────────────
+(function() {
+  const accountInput = document.getElementById('bounce-account');
+  const userAgentLink = document.querySelector('#bounce-panel .btn-user-agent');
+  if (!accountInput || !userAgentLink) return;
+
+  function updateUserAgentHref() {
+    const account = accountInput.value.trim();
+    const fromDate = state.bounce.csvFromDate || '';
+    const toDate = state.bounce.csvToDate || '';
+    userAgentLink.href = 'https://mailboards.ops.titan.email/mail_analytics?env=prod&mail_type=outgoing&mail_status=&sender=' +
+      encodeURIComponent(account) + '&recipient=&from_date=' + encodeURIComponent(fromDate) + '&to_date=' + encodeURIComponent(toDate);
+  }
+
+  accountInput.addEventListener('input', updateUserAgentHref);
+  accountInput.addEventListener('paste', () => setTimeout(updateUserAgentHref, 0));
+  updateUserAgentHref();
+  // Expose for CSV processing to call after dates are extracted
+  window.__updateUserAgentHref = updateUserAgentHref;
+})();
+
 // ── Copy with visual button feedback ──────────────────────────────────
 function copyOutputWithFeedback(id) {
   const el = document.getElementById(id);
@@ -244,7 +267,18 @@ function copyOutputWithFeedback(id) {
     });
     doCopy(navigator.clipboard.write([item]));
   } else {
-    doCopy(navigator.clipboard.writeText(text));
+    const html = '<div style="font-family:DM Mono,Courier New,monospace;font-size:12px;line-height:1.9;">' +
+      text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>') +
+      '</div>';
+    if (typeof ClipboardItem !== 'undefined') {
+      const item = new ClipboardItem({
+        'text/plain': new Blob([text], { type: 'text/plain' }),
+        'text/html': new Blob([html], { type: 'text/html' }),
+      });
+      doCopy(navigator.clipboard.write([item]));
+    } else {
+      doCopy(navigator.clipboard.writeText(text));
+    }
   }
 }
 
@@ -381,7 +415,7 @@ function initPasteSupport() {
 
 // ── localStorage persistence ──────────────────────────────────────────
 const PERSIST_FIELDS = [
-  'arf-account', 'arf-domain-type', 'arf-complaints', 'arf-prev-unblock',
+  'arf-account', 'arf-complaints', 'arf-prev-unblock',
   'arf-blocked-lt2', 'arf-email-type', 'arf-website', 'arf-dkim', 'arf-domain-input',
   'bounce-account', 'bounce-prev-unblock', 'bounce-other-blocked', 'bounce-website',
   'bounce-dkim', 'bounce-domain-input', 'bounce-other-blocked-detail',
@@ -473,6 +507,16 @@ function processCsv(file) {
     if (dataRows < 40) { badge.textContent = '< 40 ✓'; badge.className = 'csv-lt40-badge ok'; }
     else { badge.textContent = '≥ 40 ⚠'; badge.className = 'csv-lt40-badge warn'; }
     document.getElementById('bounce-csv-result').classList.add('visible');
+    // Extract date range from 1st column (index 0) of CSV
+    if (lines.length >= 2) {
+      const firstRow = parseCsvRow(lines[1]);
+      const lastRow = parseCsvRow(lines[lines.length - 1]);
+      const rawFirst = (firstRow[0] || '').trim();
+      const rawLast = (lastRow[0] || '').trim();
+      state.bounce.csvToDate = rawFirst ? rawFirst.substring(0, 10) : null;
+      state.bounce.csvFromDate = rawLast ? rawLast.substring(0, 10) : null;
+      if (window.__updateUserAgentHref) window.__updateUserAgentHref();
+    }
     if (lines.length >= 2) {
       // Domain is taken from the 2nd column (index 1) if it yields a valid
       // domain/email, otherwise falls back to the 3rd column (index 2).
@@ -502,11 +546,14 @@ function processCsv(file) {
 }
 function clearCsv() {
   state.bounce.csvCount = null;
+  state.bounce.csvFromDate = null;
+  state.bounce.csvToDate = null;
   document.getElementById('bounce-csv-result').classList.remove('visible');
   document.getElementById('bounce-csv-count').textContent = '—';
   document.getElementById('bounce-csv-name').textContent = '';
   document.getElementById('bounce-lt40-badge').textContent = '';
   document.getElementById('bounce-csv-input').value = '';
+  if (window.__updateUserAgentHref) window.__updateUserAgentHref();
 }
 
 // ── Domain Lookup (debounced) ─────────────────────────────────────────
@@ -775,11 +822,10 @@ function clearAssurances(prefix) {
 function v(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
 
 function validateARF() {
-  const fieldIds = ['arf-account','arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim'];
+  const fieldIds = ['arf-account','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim'];
   clearFieldErrors(fieldIds);
   const errors = [];
   if (!v('arf-account')) errors.push({ id: 'arf-account', label: 'Account' });
-  if (!v('arf-domain-type'))  errors.push({ id: 'arf-domain-type',  label: 'Domain Type' });
   if (!v('arf-complaints'))   errors.push({ id: 'arf-complaints',   label: 'No. of ARF Complaints' });
   if (!v('arf-prev-unblock')) errors.push({ id: 'arf-prev-unblock', label: 'Previous Unblock Request' });
   if (!v('arf-blocked-lt2'))  errors.push({ id: 'arf-blocked-lt2',  label: 'Blocked Email Accounts < 2' });
@@ -824,7 +870,6 @@ function generateARF() {
 
     const lines = [
       '#ARF',
-      'Domain: ' + (v('arf-domain-type') || '-'),
       'No of ARF complaints = ' + (v('arf-complaints') || '-'),
       'No previous unblock request for the domain name : ' + (v('arf-prev-unblock') || '-'),
       'No. of blocked email accounts < 2 : ' + (v('arf-blocked-lt2') || '-'),
@@ -884,7 +929,7 @@ function generateARF() {
 function clearARF() {
   if (!confirm('Clear all ARF form data? This cannot be undone.')) return;
 
-  ['arf-account','arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim','arf-domain-input']
+  ['arf-account','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim','arf-domain-input']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   state.arf.screenshots.length = 0;
   state.arf.assuranceScreenshots.length = 0;
@@ -906,7 +951,7 @@ function clearARF() {
   pre.className = 'output-text';
   outputArea.appendChild(pre);
   document.getElementById('arf-validation-banner').classList.remove('visible');
-  clearFieldErrors(['arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim']);
+  clearFieldErrors(['arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim']);
   updateStepper('arf', '0');
   updateFormProgress('arf');
   saveFormState();
