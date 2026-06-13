@@ -381,7 +381,7 @@ function initPasteSupport() {
 
 // ── localStorage persistence ──────────────────────────────────────────
 const PERSIST_FIELDS = [
-  'arf-account', 'arf-domain-type', 'arf-complaints', 'arf-prev-unblock',
+  'arf-account', 'arf-complaints', 'arf-prev-unblock',
   'arf-blocked-lt2', 'arf-email-type', 'arf-website', 'arf-dkim', 'arf-domain-input',
   'bounce-account', 'bounce-prev-unblock', 'bounce-other-blocked', 'bounce-website',
   'bounce-dkim', 'bounce-domain-input', 'bounce-other-blocked-detail',
@@ -775,11 +775,10 @@ function clearAssurances(prefix) {
 function v(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
 
 function validateARF() {
-  const fieldIds = ['arf-account','arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim'];
+  const fieldIds = ['arf-account','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim'];
   clearFieldErrors(fieldIds);
   const errors = [];
   if (!v('arf-account')) errors.push({ id: 'arf-account', label: 'Account' });
-  if (!v('arf-domain-type'))  errors.push({ id: 'arf-domain-type',  label: 'Domain Type' });
   if (!v('arf-complaints'))   errors.push({ id: 'arf-complaints',   label: 'No. of ARF Complaints' });
   if (!v('arf-prev-unblock')) errors.push({ id: 'arf-prev-unblock', label: 'Previous Unblock Request' });
   if (!v('arf-blocked-lt2'))  errors.push({ id: 'arf-blocked-lt2',  label: 'Blocked Email Accounts < 2' });
@@ -824,7 +823,6 @@ function generateARF() {
 
     const lines = [
       '#ARF',
-      'Domain: ' + (v('arf-domain-type') || '-'),
       'No of ARF complaints = ' + (v('arf-complaints') || '-'),
       'No previous unblock request for the domain name : ' + (v('arf-prev-unblock') || '-'),
       'No. of blocked email accounts < 2 : ' + (v('arf-blocked-lt2') || '-'),
@@ -884,7 +882,7 @@ function generateARF() {
 function clearARF() {
   if (!confirm('Clear all ARF form data? This cannot be undone.')) return;
 
-  ['arf-account','arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim','arf-domain-input']
+  ['arf-account','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim','arf-domain-input']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   state.arf.screenshots.length = 0;
   state.arf.assuranceScreenshots.length = 0;
@@ -906,7 +904,7 @@ function clearARF() {
   pre.className = 'output-text';
   outputArea.appendChild(pre);
   document.getElementById('arf-validation-banner').classList.remove('visible');
-  clearFieldErrors(['arf-domain-type','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim']);
+  clearFieldErrors(['arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim']);
   updateStepper('arf', '0');
   updateFormProgress('arf');
   saveFormState();

@@ -45,7 +45,7 @@
         <h2 class="panel-title" id="arf-title">ARF Complaint Report</h2>
       </div>
       <div class="form-progress-wrap">
-        <div class="form-progress-bar"><div class="form-progress-fill" id="arf-form-progress-fill" data-fields="arf-account,arf-domain-type,arf-complaints,arf-prev-unblock,arf-blocked-lt2,arf-email-type,arf-website,arf-dkim"></div></div>
+        <div class="form-progress-bar"><div class="form-progress-fill" id="arf-form-progress-fill" data-fields="arf-account,arf-complaints,arf-prev-unblock,arf-blocked-lt2,arf-email-type,arf-website,arf-dkim"></div></div>
       </div>
       <div class="panel-body">
         <div class="progress-stepper" id="arf-stepper">
@@ -60,17 +60,11 @@
           <input type="text" id="arf-account" aria-required="true" placeholder="e.g. user@example.com or example.com">
           <a class="btn btn-secondary btn-mailboards" href="https://mailboards.ops.titan.email/home?env=prod" target="_blank" rel="noopener noreferrer">Mailboards</a>
         </div>
-        <div class="field-row">
-          <div class="field">
-            <label for="arf-domain-type">Domain Type<span class="req">*</span></label>
-            <select id="arf-domain-type" aria-required="true"><option value="">Select...</option><option value="Free">Free</option><option value="Paid">Paid</option></select>
-          </div>
-          <div class="field">
-            <label for="arf-complaints">No. of ARF Complaints<span class="req">*</span></label>
-            <div class="field-input-row">
-              <input type="number" id="arf-complaints" aria-required="true" placeholder="0" min="0">
-              <a class="btn btn-secondary btn-abusedesk" href="https://abusedesk.ops.titan.email/history.html?entity=&region=us-east-1" target="_blank" rel="noopener noreferrer">Check</a>
-            </div>
+        <div class="field">
+          <label for="arf-complaints">No. of ARF Complaints<span class="req">*</span></label>
+          <div class="field-input-row">
+            <input type="number" id="arf-complaints" aria-required="true" placeholder="0" min="0">
+            <a class="btn btn-secondary btn-abusedesk" href="https://abusedesk.ops.titan.email/history.html?entity=&region=us-east-1" target="_blank" rel="noopener noreferrer">Check</a>
           </div>
         </div>
         <div class="field-row">
