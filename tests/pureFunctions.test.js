@@ -237,6 +237,18 @@ describe('sanitiseAccountInput', () => {
     assert.equal(sanitiseAccountInput('my-domain.com'), 'my-domain.com');
   });
 
+  it('strips http:// protocol from domain', () => {
+    assert.equal(sanitiseAccountInput('http://titan.email/'), 'titan.email');
+  });
+
+  it('strips https:// protocol from domain', () => {
+    assert.equal(sanitiseAccountInput('https://example.com'), 'example.com');
+  });
+
+  it('preserves email with http:// prefix', () => {
+    assert.equal(sanitiseAccountInput('http://user@example.com'), 'http://user@example.com');
+  });
+
   it('does not lowercase domain (unlike sanitiseDomainInput)', () => {
     assert.equal(sanitiseAccountInput('Example.COM'), 'Example.COM');
   });
