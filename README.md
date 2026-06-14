@@ -20,7 +20,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Confirm before clear** — clearing either panel requires confirmation to prevent accidental data loss
 
 ### Domain Lookup
-- **Auto WHOIS lookup** — fetches domain creation date and age via [whoisjson.com](https://whoisjson.com)
+- **Auto WHOIS lookup** — fetches domain creation date and age via RDAP (Registration Data Access Protocol); falls back to [whoisjson.com](https://whoisjson.com) if RDAP fails
 - **Website Check** — classifies the domain as *Valid Website* or *No website* via a serverless function; supports SPA shell detection for JS-heavy sites
 - **DKIM Check** — detects Titan and Neo DKIM selectors (`titan`, `titan1`–`titan9`, `neo`, `neo1`–`neo9`) via DNS lookup; returns `"Set"` when any selector matches and `"Not Set"` when none do
 - **Lookup debounce** — 1-second debounce prevents API spam from rapid button clicks or CSV auto-triggers
@@ -40,6 +40,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 
 ### UX & Polish
 - **Email → domain sanitisation** — pasting or typing a full email address (`user@example.com`) in the domain field automatically strips the local-part to `example.com`; also strips `http(s)://`, trailing paths, and ports
+- **Account field sanitisation** — the Account field sanitises pasted input: domain-like values get HTML/protocol stripping and control char removal; email addresses (containing `@`) pass through untouched
 - **Auto-lookup on paste** — pasting a domain or email into either panel's domain field automatically fires the WHOIS/Website/DKIM lookup without needing to click the Lookup button
 - **Form state persistence** — all 15 field values are saved to `localStorage` on every change and restored on next visit
 - **Dark / Light theme** — respects system preference with a manual toggle; preference is persisted to `localStorage` with a smooth 250ms crossfade transition
@@ -85,9 +86,9 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Dynamic href** — the link URL updates when the Account field changes or a CSV is uploaded/cleared
 
 ### Testing
-- **202 unit tests across 10 files** — covers `sanitiseDomain` (39 edge cases), `checkRateLimit`/`classifyFetchError`/token helpers (25 test cases including expiry, missing claims, non-JSON payload), website-check helpers (~38 test cases), `withMiddleware` CORS/rate-limit middleware (8 test cases), `safeEqual` (10 cases), `createCache` (8 cases including TTL expiry and pruning), `getClientIp` (6 cases), `rateLimitInMemory` (6 cases), pure functions `escapeHtml`/`parseCsvRow`/`sanitiseDomainInput`/`describeReason`/`parseAgeToDays` (20 cases)
+- **230 unit tests across 11 files** — covers `sanitiseDomain` (39 edge cases), `checkRateLimit`/`classifyFetchError`/token helpers (25 test cases including expiry, missing claims, non-JSON payload), website-check helpers (~38 test cases), `withMiddleware` CORS/rate-limit middleware (8 test cases), `safeEqual` (10 cases), `createCache` (8 cases including TTL expiry and pruning), `getClientIp` (6 cases), `rateLimitInMemory` (6 cases), pure functions `escapeHtml`/`parseCsvRow`/`sanitiseDomainInput`/`sanitiseAccountInput`/`describeReason`/`parseAgeToDays` (33 cases), website-check-helpers (10 cases), RDAP response parsing (12 cases)
 - **Config integrity checks** — all keyword/pattern arrays are verified at test time for empty strings and lowercase consistency
-- **Pure function extraction** — `escapeHtml`, `parseCsvRow`, `sanitiseDomainInput` extracted to `scripts/pure.js` for testability; `app.js` re-exports from there
+- **Pure function extraction** — `escapeHtml`, `parseCsvRow`, `sanitiseDomainInput`, `sanitiseAccountInput` extracted to `scripts/pure.js` for testability; `app.js` re-exports from there
 
 ### Security
 - **Login gate** — password-protected access via `login.html` + Vercel Edge middleware with HMAC-SHA256 signed cookies
@@ -123,6 +124,8 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **`parseAgeToDays` extraction** — age parsing extracted from inline DOM logic into a pure function for direct unit testing (6 accumulation cases)
 - **Pure function extraction** — `escapeHtml`, `parseCsvRow`, `sanitiseDomainInput` moved to `scripts/pure.js` (no DOM dependencies) so they can be imported and tested in Node.js
 - **X-XSS-Protection header removed** — modern browsers ignore this header; it was never effective against DOM-based XSS
+- **RDAP-first WHOIS** — domain lookups use the free IANA RDAP protocol (no API key, structured JSON) with WhoisJSON as fallback; supports 200+ TLDs via hardcoded map + IANA bootstrap for unmapped TLDs
+- **Account field sanitisation** — `sanitiseAccountInput()` strips HTML tags, `javascript:` protocol, and control characters from pasted domain values while preserving email addresses (detected by `@`) for use with Mailboards and Abuse Desk links
 - **Login error text reset** — `errorText.textContent` is cleared on page load to prevent stale error messages from persisting across refreshes
 - **CSS optimization** — consolidated duplicate selectors, moved shared properties to base rules
 
@@ -140,15 +143,15 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ├── .gitignore
 ├── api/
 │   ├── _utils.js                   # Shared helpers: sanitiseDomain, createCache(ttlMs), checkRateLimit (with KV + in-memory fallback), signToken, verifyToken, safeEqual, getClientIp, CORS headers, classifyFetchError
-│   ├── config.js                   # Centralised API config (rate limits, DKIM selectors, website-check patterns, parked keywords)
-│   ├── whois.js                    # WHOIS lookup serverless function (cached 15 min)
+│   ├── config.js                   # Centralised API config (rate limits, DKIM selectors, website-check patterns, parked keywords, RDAP TLD map with 200+ entries)
+│   ├── whois.js                    # WHOIS lookup serverless function (RDAP-first with WhoisJSON fallback, cached 15 min)
 │   ├── website-check.js            # Website reachability & classification (SPA detection, parked/placeholder detection, redirect analysis; cached 15 min)
 │   ├── dkim-check.js               # DNS DKIM selector check (cached 15 min, early termination)
 │   ├── health.js                   # Health-check endpoint (probes WhoisJSON + Google DNS)
 │   └── login.js                    # Login handler — constant-time password check, rate limited, sets signed auth cookie
 ├── scripts/
 │   ├── app.js                      # Core app logic (ARF + Bounce generate, domain lookup, CSV, unified state, event delegation)
-│   ├── pure.js                     # Pure functions (escapeHtml, parseCsvRow, sanitiseDomainInput) — no DOM dependencies
+│   ├── pure.js                     # Pure functions (escapeHtml, parseCsvRow, sanitiseDomainInput, sanitiseAccountInput) — no DOM dependencies
 │   ├── api.js                      # Frontend API helpers (fetchWhois, fetchWebsiteCheck, fetchDkimCheck — throws on non-2xx)
 │   └── ui.js                       # UI helpers (showToast with types, theme toggle with transition, stepper, form progress, age colors, validation display, drag-and-drop)
 ├── styles/
@@ -162,8 +165,9 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
     ├── createCache.test.js         # Tests for generic TTL cache utility (8 cases)
     ├── getClientIp.test.js         # Tests for IP extraction from X-Forwarded-For (6 cases)
     ├── rateLimitInMemory.test.js   # Tests for in-memory rate limiter (6 cases)
-    ├── pureFunctions.test.js       # Tests for pure functions: escapeHtml, parseCsvRow, sanitiseDomainInput, describeReason, parseAgeToDays (20 cases)
-    └── website-check-helpers.test.js # Tests for website-check exported helpers (extractMetaRobots, hasNoindex, isImageOnlyPage, isSpaShell)
+    ├── pureFunctions.test.js       # Tests for pure functions: escapeHtml, parseCsvRow, sanitiseDomainInput, sanitiseAccountInput, describeReason, parseAgeToDays (33 cases)
+    ├── website-check-helpers.test.js # Tests for website-check exported helpers (extractMetaRobots, hasNoindex, isImageOnlyPage, isSpaShell)
+    └── whois-rdap.test.js          # Tests for RDAP response parsing and TLD map coverage (12 cases)
 ```
 
 ---
@@ -172,7 +176,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/whois?domain=` | GET | Returns domain creation date and age |
+| `/api/whois?domain=` | GET | Returns domain creation date and age (RDAP-first with WhoisJSON fallback) |
 | `/api/website-check?domain=` | GET | Returns `verdict`: Valid Website / No website + `reason` |
 | `/api/dkim-check?domain=` | GET | Returns DKIM `status` and `selectors_found` array |
 | `/api/login` | POST | Validates password and sets HMAC-signed auth cookie |
