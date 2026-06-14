@@ -30,6 +30,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Domain age color coding** — age display is colour-coded: red for <30 days, amber for 30–180 days, green for 180+ days
 - **Collapsible result card** — domain lookup results show a summary line by default; click to expand/collapse details
 - **Skeleton shimmer** — pulsing placeholder bars replace "checking…" text while website/DKIM results load
+- **Data source indicator** — domain lookup results show whether the age data was fetched from RDAP or WhoisJSON (fallback)
 
 ### CSV (Bounce Panel)
 - **Drag-and-drop or file picker** upload of `.csv` bounce lists
@@ -176,7 +177,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/whois?domain=` | GET | Returns domain creation date and age (RDAP-first with WhoisJSON fallback) |
+| `/api/whois?domain=` | GET | Returns domain creation date, age, and `source` (`rdap` or `whoisjson`) |
 | `/api/website-check?domain=` | GET | Returns `verdict`: Valid Website / No website + `reason` |
 | `/api/dkim-check?domain=` | GET | Returns DKIM `status` and `selectors_found` array |
 | `/api/login` | POST | Validates password and sets HMAC-signed auth cookie |
@@ -198,7 +199,7 @@ Set these in the **Vercel Dashboard → Settings → Environment Variables**:
 |---|---|---|
 | `APP_PASSWORD` | ✅ | Password used to access the tool via `login.html` |
 | `AUTH_SECRET` | ✅ | Random secret used to HMAC-sign the auth session cookie |
-| `WHOISJSON_API_KEY` | ✅ | API key for [whoisjson.com](https://whoisjson.com) WHOIS lookups |
+| `WHOISJSON_API_KEY` | ⭐ | API key for [whoisjson.com](https://whoisjson.com) WHOIS lookups (optional — used as fallback when RDAP fails) |
 | `APP_ORIGIN` | ✅ | Your deployment URL (e.g. `https://your-app.vercel.app`) — used for CORS |
 | `KV_REST_API_URL` | ⭐ | Vercel KV endpoint for persistent cross-instance rate limiting (optional but recommended) |
 | `KV_REST_API_TOKEN` | ⭐ | Vercel KV token (required if `KV_REST_API_URL` is set) |
@@ -239,8 +240,8 @@ Create a `.env.local` file in the project root:
 ```
 APP_PASSWORD=yourpassword
 AUTH_SECRET=your-random-hex-secret
-WHOISJSON_API_KEY=your-api-key
 APP_ORIGIN=http://localhost:3000
+WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fallback
 ```
 
 > **Note:** Domain lookup, website check, and DKIM check will not work if you open `index.html` directly in a browser — they require the serverless API functions to be running via `vercel dev`.
