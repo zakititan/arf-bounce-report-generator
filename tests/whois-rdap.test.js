@@ -36,6 +36,7 @@ function parseRdapResponse(domain, data) {
     creation_date: creationFormatted,
     domain_age: domainAgeText,
     domain_age_months: totalMonths,
+    source: 'rdap',
   };
 }
 
@@ -52,6 +53,7 @@ describe('parseRdapResponse', () => {
     assert.ok(result.creation_date.includes('1995'));
     assert.ok(result.domain_age.includes('year'));
     assert.ok(result.domain_age_months > 0);
+    assert.equal(result.source, 'rdap');
   });
 
   it('handles response with only registration event', () => {

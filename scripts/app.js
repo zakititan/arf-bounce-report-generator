@@ -569,6 +569,7 @@ async function _doLookup(prefix) {
   const ageEl = document.getElementById(prefix + '-result-age');
   const websiteEl = document.getElementById(prefix + '-result-website');
   const dkimEl = document.getElementById(prefix + '-result-dkim');
+  const sourceEl = document.getElementById(prefix + '-result-source');
 
   state[prefix].lookupInFlight = true;
   setGenerateBtnState(prefix);
@@ -577,12 +578,14 @@ async function _doLookup(prefix) {
   card.classList.remove('visible', 'error', 'open');
   if (websiteEl) websiteEl.innerHTML = '<div class="skeleton skeleton-sm"></div>';
   if (dkimEl) dkimEl.innerHTML = '<div class="skeleton skeleton-sm"></div>';
+  if (sourceEl) sourceEl.textContent = '—';
 
   try {
     const data = await fetchWhois(domain);
-    state[prefix].whois = { creation_date: data.creation_date, domain_age: data.domain_age };
+    state[prefix].whois = { creation_date: data.creation_date, domain_age: data.domain_age, source: data.source };
     createdEl.textContent = data.creation_date;
     ageEl.textContent = data.domain_age || '—';
+    if (sourceEl) sourceEl.textContent = data.source === 'rdap' ? 'RDAP' : 'WhoisJSON';
     card.classList.remove('error');
     card.classList.add('visible', 'open');
     const summaryEl = document.getElementById(prefix + '-result-summary');
@@ -594,6 +597,7 @@ async function _doLookup(prefix) {
     state[prefix].whois = null;
     createdEl.textContent = err.message || 'Lookup failed';
     ageEl.textContent = '—';
+    if (sourceEl) sourceEl.textContent = '—';
     card.classList.add('visible', 'error', 'open');
     const summaryEl = document.getElementById(prefix + '-result-summary');
     if (summaryEl) summaryEl.textContent = err.message || 'Lookup failed';

@@ -76,6 +76,7 @@ export default withMiddleware(async function handler(req, res) {
       creation_date:      creationFormatted,
       domain_age:         domainAgeText,
       domain_age_months:  domainAgeMonths,
+      source:             'whoisjson',
     };
     cache.set(domain, result);
     return res.status(200).json(result);
@@ -152,5 +153,6 @@ function parseRdapResponse(domain, data) {
     creation_date: creationFormatted,
     domain_age: domainAgeText,
     domain_age_months: totalMonths,
+    source: 'rdap',
   };
 }
