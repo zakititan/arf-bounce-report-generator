@@ -16,6 +16,20 @@ export function sanitiseDomainInput(value) {
   return v.toLowerCase().trim();
 }
 
+const MAX_ACCOUNT_LEN = 254;
+
+export function sanitiseAccountInput(value) {
+  let v = (value || '').trim();
+  if (v.length > MAX_ACCOUNT_LEN) v = v.slice(0, MAX_ACCOUNT_LEN);
+  // If it contains @, treat as email — keep as-is (no stripping)
+  if (v.includes('@')) return v;
+  // Domain-only: strip HTML tags, javascript: protocol, control chars
+  v = v.replace(/<[^>]*>/g, '');
+  v = v.replace(/javascript\s*:/gi, '');
+  v = v.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+  return v;
+}
+
 export function parseCsvRow(row) {
   const cols = [];
   let cur = '', inQuotes = false;

@@ -1,6 +1,6 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { escapeHtml, parseCsvRow, sanitiseDomainInput } from '../scripts/pure.js';
+import { escapeHtml, parseCsvRow, sanitiseDomainInput, sanitiseAccountInput } from '../scripts/pure.js';
 import { describeReason, getCached, setCache } from '../scripts/api.js';
 import { parseAgeToDays } from '../scripts/ui.js';
 
@@ -183,5 +183,61 @@ describe('parseAgeToDays', () => {
 
   it('returns null for empty string', () => {
     assert.equal(parseAgeToDays(''), null);
+  });
+});
+
+// ── sanitiseAccountInput ──────────────────────────────────────────────
+describe('sanitiseAccountInput', () => {
+  it('trims whitespace', () => {
+    assert.equal(sanitiseAccountInput('  user@example.com  '), 'user@example.com');
+  });
+
+  it('preserves email as-is', () => {
+    assert.equal(sanitiseAccountInput('user@example.com'), 'user@example.com');
+  });
+
+  it('preserves email with plus addressing', () => {
+    assert.equal(sanitiseAccountInput('user+tag@example.com'), 'user+tag@example.com');
+  });
+
+  it('preserves email with subdomain', () => {
+    assert.equal(sanitiseAccountInput('user@mail.example.com'), 'user@mail.example.com');
+  });
+
+  it('strips HTML tags from domain', () => {
+    assert.equal(sanitiseAccountInput('<b>example.com</b>'), 'example.com');
+  });
+
+  it('strips javascript: protocol from domain', () => {
+    assert.equal(sanitiseAccountInput('javascript:alert(1)'), 'alert(1)');
+  });
+
+  it('strips control characters from domain', () => {
+    assert.equal(sanitiseAccountInput('exam\x00ple.com'), 'example.com');
+  });
+
+  it('limits length to 254 characters', () => {
+    const long = 'a'.repeat(300) + '.com';
+    assert.equal(sanitiseAccountInput(long).length, 254);
+  });
+
+  it('returns empty string for empty input', () => {
+    assert.equal(sanitiseAccountInput(''), '');
+  });
+
+  it('returns empty string for null input', () => {
+    assert.equal(sanitiseAccountInput(null), '');
+  });
+
+  it('returns empty string for undefined input', () => {
+    assert.equal(sanitiseAccountInput(undefined), '');
+  });
+
+  it('preserves domain with hyphens', () => {
+    assert.equal(sanitiseAccountInput('my-domain.com'), 'my-domain.com');
+  });
+
+  it('does not lowercase domain (unlike sanitiseDomainInput)', () => {
+    assert.equal(sanitiseAccountInput('Example.COM'), 'Example.COM');
   });
 });

@@ -15,7 +15,7 @@
  */
 
 import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck } from './api.js';
-import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, parseCsvRow as _parseCsvRow } from './pure.js';
+import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow } from './pure.js';
 import {
   showToast, initThemeToggle,
   clearFieldErrors, showValidationErrors,
@@ -29,6 +29,7 @@ import {
 // ── Re-export pure functions for backward compatibility ──────────────
 export const escapeHtml = _escapeHtml;
 export const sanitiseDomainInput = _sanitiseDomainInput;
+export const sanitiseAccountInput = _sanitiseAccountInput;
 export const parseCsvRow = _parseCsvRow;
 
 // ── Constants ─────────────────────────────────────────────────────────
@@ -134,20 +135,21 @@ function initDomainInputs() {
   const accountInput = document.getElementById(prefix + '-account');
   if (!accountInput) return;
 
-  // On paste: keep raw value in Account, push sanitised domain to Domain input
+  // On paste: sanitise account value, push sanitised domain to Domain input
   accountInput.addEventListener('paste', (e) => {
     e.preventDefault();
     const pasted = (e.clipboardData || window.clipboardData).getData('text');
-    const sanitised = sanitiseDomainInput(pasted);
-    accountInput.value = pasted; // preserve full email in account field
+    const sanitised = sanitiseAccountInput(pasted);
+    accountInput.value = sanitised;
     const domainInput = document.getElementById(prefix + '-domain-input');
-    if (domainInput) domainInput.value = sanitised;
+    if (domainInput) domainInput.value = sanitiseDomainInput(pasted);
     resetWhoisState(prefix);
     lookupDomain(prefix);
   });
 
-  // On input: sync sanitised domain and trigger lookup
+  // On input: sanitise account value, sync sanitised domain and trigger lookup
   accountInput.addEventListener('input', () => {
+    accountInput.value = sanitiseAccountInput(accountInput.value);
     const sanitised = sanitiseDomainInput(accountInput.value);
     const domainInput = document.getElementById(prefix + '-domain-input');
     if (domainInput) domainInput.value = sanitised;
