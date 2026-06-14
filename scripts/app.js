@@ -15,7 +15,7 @@
  */
 
 import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck } from './api.js';
-import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, parseCsvRow as _parseCsvRow } from './pure.js';
+import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow } from './pure.js';
 import {
   showToast, initThemeToggle,
   clearFieldErrors, showValidationErrors,
@@ -29,6 +29,7 @@ import {
 // ── Re-export pure functions for backward compatibility ──────────────
 export const escapeHtml = _escapeHtml;
 export const sanitiseDomainInput = _sanitiseDomainInput;
+export const sanitiseAccountInput = _sanitiseAccountInput;
 export const parseCsvRow = _parseCsvRow;
 
 // ── Constants ─────────────────────────────────────────────────────────
@@ -134,20 +135,21 @@ function initDomainInputs() {
   const accountInput = document.getElementById(prefix + '-account');
   if (!accountInput) return;
 
-  // On paste: keep raw value in Account, push sanitised domain to Domain input
+  // On paste: sanitise account value, push sanitised domain to Domain input
   accountInput.addEventListener('paste', (e) => {
     e.preventDefault();
     const pasted = (e.clipboardData || window.clipboardData).getData('text');
-    const sanitised = sanitiseDomainInput(pasted);
-    accountInput.value = pasted; // preserve full email in account field
+    const sanitised = sanitiseAccountInput(pasted);
+    accountInput.value = sanitised;
     const domainInput = document.getElementById(prefix + '-domain-input');
-    if (domainInput) domainInput.value = sanitised;
+    if (domainInput) domainInput.value = sanitiseDomainInput(pasted);
     resetWhoisState(prefix);
     lookupDomain(prefix);
   });
 
-  // On input: sync sanitised domain and trigger lookup
+  // On input: sanitise account value, sync sanitised domain and trigger lookup
   accountInput.addEventListener('input', () => {
+    accountInput.value = sanitiseAccountInput(accountInput.value);
     const sanitised = sanitiseDomainInput(accountInput.value);
     const domainInput = document.getElementById(prefix + '-domain-input');
     if (domainInput) domainInput.value = sanitised;
@@ -567,6 +569,7 @@ async function _doLookup(prefix) {
   const ageEl = document.getElementById(prefix + '-result-age');
   const websiteEl = document.getElementById(prefix + '-result-website');
   const dkimEl = document.getElementById(prefix + '-result-dkim');
+  const sourceEl = document.getElementById(prefix + '-result-source');
 
   state[prefix].lookupInFlight = true;
   setGenerateBtnState(prefix);
@@ -575,12 +578,14 @@ async function _doLookup(prefix) {
   card.classList.remove('visible', 'error', 'open');
   if (websiteEl) websiteEl.innerHTML = '<div class="skeleton skeleton-sm"></div>';
   if (dkimEl) dkimEl.innerHTML = '<div class="skeleton skeleton-sm"></div>';
+  if (sourceEl) sourceEl.textContent = '—';
 
   try {
     const data = await fetchWhois(domain);
-    state[prefix].whois = { creation_date: data.creation_date, domain_age: data.domain_age };
+    state[prefix].whois = { creation_date: data.creation_date, domain_age: data.domain_age, source: data.source };
     createdEl.textContent = data.creation_date;
     ageEl.textContent = data.domain_age || '—';
+    if (sourceEl) sourceEl.textContent = data.source === 'rdap' ? 'RDAP' : 'WhoisJSON';
     card.classList.remove('error');
     card.classList.add('visible', 'open');
     const summaryEl = document.getElementById(prefix + '-result-summary');
@@ -592,6 +597,7 @@ async function _doLookup(prefix) {
     state[prefix].whois = null;
     createdEl.textContent = err.message || 'Lookup failed';
     ageEl.textContent = '—';
+    if (sourceEl) sourceEl.textContent = '—';
     card.classList.add('visible', 'error', 'open');
     const summaryEl = document.getElementById(prefix + '-result-summary');
     if (summaryEl) summaryEl.textContent = err.message || 'Lookup failed';
