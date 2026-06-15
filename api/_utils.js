@@ -157,7 +157,7 @@ export function withMiddleware(handler) {
     if (req.method === 'OPTIONS') return res.status(204).end();
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
+    const ip = getClientIp(req);
     if (await checkRateLimit(ip)) {
       return res.status(429).json({ error: 'Too many requests — please slow down.' });
     }
