@@ -2,17 +2,11 @@
   "name": "arf-bounce-report-generator",
   "version": "1.0.0",
   "type": "module",
-  "engines": {
-    "node": ">=18"
-  },
+  "engines": { "node": ">=18" },
   "dependencies": {
     "@vercel/kv": "^2.0.0"
   },
   "scripts": {
-    "test": "node --test tests/sanitiseDomain.test.js tests/api-handlers.test.js tests/website-check.test.js tests/withMiddleware.test.js tests/safeEqual.test.js tests/createCache.test.js tests/getClientIp.test.js tests/rateLimitInMemory.test.js tests/pureFunctions.test.js tests/website-check-helpers.test.js tests/whois-rdap.test.js",
-    "pack": "crx3 extension -o extension/releases/arf-bounce-report.crx -p extension/releases/extension.pem"
-  },
-  "devDependencies": {
-    "crx3": "^2.0.0"
+    "test": "node --test tests/sanitiseDomain.test.js tests/api-handlers.test.js tests/website-check.test.js tests/withMiddleware.test.js tests/safeEqual.test.js tests/createCache.test.js tests/getClientIp.test.js tests/rateLimitInMemory.test.js tests/pureFunctions.test.js tests/website-check-helpers.test.js tests/whois-rdap.test.js"
   }
 }

@@ -4,4 +4,3 @@
 .vercel
 node_modules
 *.log
-*.pem
