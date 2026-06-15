@@ -1046,9 +1046,10 @@ function createTaeJira(prefix) {
   // Send report data to browser extension (if installed)
   const outputArea = outputSection.querySelector('.output-area');
   const reportText = (outputArea?.dataset.copyText) || document.getElementById(prefix + '-output-text')?.textContent || '';
-  // Build clean HTML for extension (monospace-wrapped, no raw DOM elements)
-  const reportHtml = '<div style="font-family:DM Mono,Courier New,monospace;font-size:12px;line-height:1.9;">' +
-    escapeHtml(reportText) + '</div>';
+  // Capture the actual rendered HTML including base64 <img> elements
+  const reportHtml = outputArea ? Array.from(outputArea.childNodes)
+    .filter(el => !el.classList?.contains('copy-btn-wrap'))
+    .map(el => el.outerHTML).join('') : '';
   window.postMessage({
     type: 'REPORT_GENERATOR_JIRA',
     text: reportText,
