@@ -1,4 +1,4 @@
-import { describe, it, mock, beforeEach, afterEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { lookupDkim } from '../api/dkim-check.js';
 import { DKIM_FAMILIES, DKIM_INDEXED_RANGE, DKIM_SELECTORS, TIMEOUT_DKIM_MS } from '../api/config.js';

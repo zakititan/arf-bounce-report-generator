@@ -1,6 +1,6 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { sanitiseDomain, checkRateLimit, classifyFetchError, signToken, verifyToken } from '../api/_utils.js';
+import { checkRateLimit, classifyFetchError, signToken, verifyToken } from '../api/_utils.js';
 
 describe('checkRateLimit', () => {
   it('allows requests under the limit', async () => {
