@@ -9,6 +9,7 @@
     "@vercel/kv": "^2.0.0"
   },
   "scripts": {
-    "test": "node --test tests/sanitiseDomain.test.js tests/api-handlers.test.js tests/website-check.test.js tests/withMiddleware.test.js tests/safeEqual.test.js tests/createCache.test.js tests/getClientIp.test.js tests/rateLimitInMemory.test.js tests/pureFunctions.test.js tests/website-check-helpers.test.js tests/whois-rdap.test.js"
+    "test": "node --test tests/sanitiseDomain.test.js tests/api-handlers.test.js tests/website-check.test.js tests/withMiddleware.test.js tests/safeEqual.test.js tests/createCache.test.js tests/getClientIp.test.js tests/rateLimitInMemory.test.js tests/pureFunctions.test.js tests/website-check-helpers.test.js tests/whois-rdap.test.js",
+    "pack-extension": "powershell Compress-Archive -Path extension/manifest.json,extension/background.js,extension/content-webapp.js,extension/content-jira.js,extension/icons -DestinationPath extension/releases/extension.zip -Force"
   }
 }
