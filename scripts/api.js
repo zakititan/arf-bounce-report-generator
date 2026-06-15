@@ -1,6 +1,6 @@
 /**
  * api.js — All fetch calls to backend API endpoints.
- * Exports: fetchWhois, fetchWebsiteCheck, fetchDkimCheck
+ * Exports: fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx
  * Each function creates its own AbortController for timeout/cancellation.
  */
 
@@ -79,4 +79,30 @@ export async function fetchWebsiteCheck(domain) {
 
 export async function fetchDkimCheck(domain) {
   return apiFetch('/api/dkim-check?domain=' + encodeURIComponent(domain));
+}
+
+/**
+ * Look up MX records for a domain via Google DNS-over-HTTPS.
+ * Returns { region: 'na' | 'eu' } based on the MX record.
+ * - mx1.titan.email → 'na'
+ * - mx0101.titan.email → 'eu'
+ * Returns { region: 'na' } as default if lookup fails or MX is unknown.
+ */
+export async function lookupMx(domain) {
+  const url = 'https://dns.google/resolve?name=' + encodeURIComponent(domain) + '&type=MX';
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) return { region: 'na' };
+    const data = await res.json();
+    const answers = data.Answer || [];
+    for (const a of answers) {
+      if (a.type !== 15) continue;
+      const exchange = (a.data || '').split(' ').pop();
+      if (exchange === 'mx0101.titan.email') return { region: 'eu' };
+      if (exchange === 'mx1.titan.email') return { region: 'na' };
+    }
+    return { region: 'na' };
+  } catch {
+    return { region: 'na' };
+  }
 }
