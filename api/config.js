@@ -238,8 +238,10 @@ export const RDAP_TLD_MAP = {
   bet: 'https://rdap.identitydigital.services/rdap/',
   games: 'https://rdap.identitydigital.services/rdap/',
   hockey: 'https://rdap.identitydigital.services/rdap/',
+
   rugby: 'https://rdap.identitydigital.services/rdap/',
   cricket: 'https://rdap.identitydigital.services/rdap/',
+
   football: 'https://rdap.identitydigital.services/rdap/',
   baseball: 'https://rdap.identitydigital.services/rdap/',
   basketball: 'https://rdap.identitydigital.services/rdap/',

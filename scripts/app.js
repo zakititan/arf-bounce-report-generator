@@ -14,7 +14,7 @@
  *  Perf:    10-screenshot cap with warning toast.
  */
 
-import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck } from './api.js';
+import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx } from './api.js';
 import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow } from './pure.js';
 import {
   showToast, initThemeToggle,
@@ -50,6 +50,7 @@ const state = {
     assuranceScreenshots: [],
     whois: null,
     lookupInFlight: false,
+    region: 'na',
   },
   bounce: {
     csvCount: null,
@@ -58,6 +59,7 @@ const state = {
     assuranceScreenshots: [],
     whois: null,
     lookupInFlight: false,
+    region: 'na',
   },
 };
 let lastActivePanel = null; // tracks which panel the user last interacted with (for Ctrl/Cmd+Enter)
@@ -98,6 +100,17 @@ function initKeyboardShortcuts() {
 function resetWhoisState(prefix) {
   state[prefix].whois = null;
   document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
+}
+
+async function detectRegion(prefix, domain) {
+  try {
+    const result = await lookupMx(domain);
+    state[prefix].region = result.region;
+  } catch {
+    state[prefix].region = 'na';
+  }
+  const accountInput = document.getElementById(prefix + '-account');
+  if (accountInput) accountInput.dispatchEvent(new Event('regionchange'));
 }
 
 function initDomainInputs() {
@@ -166,16 +179,18 @@ function initDomainInputs() {
 
   function updateMailboardsHref() {
     const account = accountInput.value.trim();
+    const env = state[prefix].region === 'eu' ? 'euprod' : 'prod';
     if (account) {
       const param = account.includes('@') ? 'email' : 'domain';
-      mailboardsLink.href = 'https://mailboards.ops.titan.email/home?' + param + '=' + encodeURIComponent(account) + '&env=prod';
+      mailboardsLink.href = 'https://mailboards.ops.titan.email/home?' + param + '=' + encodeURIComponent(account) + '&env=' + env;
     } else {
-      mailboardsLink.href = 'https://mailboards.ops.titan.email/home?env=prod';
+      mailboardsLink.href = 'https://mailboards.ops.titan.email/home?env=' + env;
     }
   }
 
   accountInput.addEventListener('input', updateMailboardsHref);
   accountInput.addEventListener('paste', () => setTimeout(updateMailboardsHref, 0));
+  accountInput.addEventListener('regionchange', updateMailboardsHref);
   updateMailboardsHref();
 });
 
@@ -185,13 +200,15 @@ const arfCountLink = document.querySelector('#arf-panel .btn-abusedesk');
 if (arfAccountInput && arfCountLink) {
   function updateArfCountHref() {
     const account = arfAccountInput.value.trim();
+    const region = state.arf.region === 'eu' ? 'eu-central-1' : 'us-east-1';
     arfCountLink.href = account
-      ? 'https://abusedesk.ops.titan.email/history.html?entity=' + encodeURIComponent(account) + '&region=us-east-1'
-      : 'https://abusedesk.ops.titan.email/history.html?entity=&region=us-east-1';
+      ? 'https://abusedesk.ops.titan.email/history.html?entity=' + encodeURIComponent(account) + '&region=' + region
+      : 'https://abusedesk.ops.titan.email/history.html?entity=&region=' + region;
   }
 
   arfAccountInput.addEventListener('input', updateArfCountHref);
   arfAccountInput.addEventListener('paste', () => setTimeout(updateArfCountHref, 0));
+  arfAccountInput.addEventListener('regionchange', updateArfCountHref);
   updateArfCountHref();
 }
 
@@ -203,7 +220,8 @@ function updateUserAgentHref() {
   const account = accountInput.value.trim();
   const fromDate = state.bounce.csvFromDate || '';
   const toDate = state.bounce.csvToDate || '';
-  userAgentLink.href = 'https://mailboards.ops.titan.email/mail_analytics?env=prod&mail_type=outgoing&mail_status=&sender=' +
+  const env = state.bounce.region === 'eu' ? 'euprod' : 'prod';
+  userAgentLink.href = 'https://mailboards.ops.titan.email/mail_analytics?env=' + env + '&mail_type=outgoing&mail_status=&sender=' +
     encodeURIComponent(account) + '&recipient=&from_date=' + encodeURIComponent(fromDate) + '&to_date=' + encodeURIComponent(toDate);
 }
 {
@@ -212,6 +230,7 @@ function updateUserAgentHref() {
   if (uaAccountInput && userAgentLink) {
     uaAccountInput.addEventListener('input', updateUserAgentHref);
     uaAccountInput.addEventListener('paste', () => setTimeout(updateUserAgentHref, 0));
+    uaAccountInput.addEventListener('regionchange', updateUserAgentHref);
     updateUserAgentHref();
   }
 }
@@ -607,6 +626,7 @@ async function _doLookup(prefix) {
     await Promise.allSettled([
       checkWebsite(prefix, domain),
       checkDkim(prefix, domain),
+      detectRegion(prefix, domain),
     ]);
     btn.disabled = false;
     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Lookup';

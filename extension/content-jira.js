@@ -76,6 +76,11 @@
   // ── Paste helpers ─────────────────────────────────────────────────
 
   function pasteHtml(el, html, text) {
+    if (typeof el.dispatchEvent !== 'function') {
+      // TinyMCE Editor object — use execCommand fallback
+      try { el.execCommand('mceInsertContent', false, html); } catch (_) {}
+      return true;
+    }
     const dt = new DataTransfer();
     dt.setData('text/html', html);
     dt.setData('text/plain', text);
@@ -86,6 +91,10 @@
   }
 
   async function pasteImage(el, file) {
+    if (typeof el.dispatchEvent !== 'function') {
+      warn('Cannot dispatch synthetic paste on TinyMCE editor — attach image manually');
+      return false;
+    }
     const dt = new DataTransfer();
     dt.items.add(file);
     const evt = new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt });
@@ -192,7 +201,8 @@
     log('HTML length: ' + (data.html || '').length);
 
     // Step 0: Extract images from HTML
-    const { files, textHtml } = extractImages(data.html);
+    const html = data.html || '';
+    const { files, textHtml } = extractImages(html);
     log('Extracted ' + files.length + ' image(s), text HTML length: ' + textHtml.length);
 
     // Step 1: Wait for textarea

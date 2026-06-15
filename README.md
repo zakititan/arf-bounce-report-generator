@@ -85,18 +85,28 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Check on Mailboards** — a "Check on Mailboards" link sits below the Account field in both ARF and Bounce panels, linking to [mailboards.ops.titan.email](https://mailboards.ops.titan.email)
 - **Smart parameter selection** — if the Account field contains an email address (`@` present), the URL uses `?email=`; otherwise it uses `?domain=`; falls back to bare `?env=prod` when the Account field is empty
 - **Dynamic href updates** — the link URL updates in real-time as the Account field is typed or pasted into; no report generation required
+- **MX-based region detection** — automatically detects account region (NA/EU) via DNS MX lookup; EU accounts use `env=euprod` instead of `env=prod`
 
 ### Abuse Desk Quick Link
-- **Check ARF count** — a "Check on AD" button sits in a 50/50 split row alongside the ARF Complaints field, linking to the Abuse Desk history page (`abusedesk.ops.titan.email/history.html`) with the Account name as the `entity` parameter and `region=us-east-1`
+- **Check ARF count** — a "Check on AD" button sits in a 50/50 split row alongside the ARF Complaints field, linking to the Abuse Desk history page (`abusedesk.ops.titan.email/history.html`) with the Account name as the `entity` parameter
 - **Dynamic href** — the link URL updates in real-time as the Account field is typed or pasted into
+- **MX-based region detection** — EU accounts (MX `mx0101.titan.email`) use `region=eu-central-1`; NA accounts (MX `mx1.titan.email`) use `region=us-east-1`
 
 ### User Agent Quick Link (Bounce Panel)
 - **Check User Agent** — a "Check User Agent" button sits below "Check on Mailboards" in the Bounce panel, linking to [mailboards.ops.titan.email/mail_analytics](https://mailboards.ops.titan.email/mail_analytics) with `sender` set to the Account value and `from_date`/`to_date` extracted from the 1st column of the uploaded CSV
 - **Date extraction** — `from_date` is taken from the last data row's 1st column; `to_date` is taken from the first data row's 1st column; timestamps are truncated to `YYYY-MM-DD`
 - **Dynamic href** — the link URL updates when the Account field changes or a CSV is uploaded/cleared
+- **MX-based region detection** — EU accounts use `env=euprod` instead of `env=prod`
+
+### MX Region Detection (NA/EU)
+- **Automatic region detection** — when a domain lookup is triggered, an MX record query runs in parallel via Google DNS-over-HTTPS
+- **MX-to-region mapping** — `mx1.titan.email` → NA (default); `mx0101.titan.email` → EU
+- **Dynamic link updates** — AD link uses `region=eu-central-1` for EU; Mailboards and User Agent links use `env=euprod` for EU
+- **Graceful fallback** — defaults to NA (`region=us-east-1`, `env=prod`) if MX lookup fails or returns an unknown MX record
+- **Custom event architecture** — region detection dispatches a `regionchange` event on the account input to re-trigger link updaters without causing infinite loops
 
 ### Testing
-- **263 unit tests across 13 files** — covers `sanitiseDomain` (39 edge cases), `checkRateLimit`/`classifyFetchError`/token helpers, website-check helpers, `withMiddleware` CORS/rate-limit middleware, `safeEqual` (10 cases), `createCache` (8 cases including TTL expiry and pruning), `getClientIp` (6 cases), `rateLimitInMemory` (6 cases), pure functions `escapeHtml`/`parseCsvRow`/`sanitiseDomainInput`/`sanitiseAccountInput`/`describeReason`/`parseAgeToDays` (33 cases), website-check-helpers (10 cases), RDAP response parsing (12 cases), DKIM lookup and config (18 cases), API fetch wrappers (15 cases)
+- **307 unit tests across 14 files** — covers `sanitiseDomain` (39 edge cases), `checkRateLimit`/`classifyFetchError`/token helpers, website-check helpers, `withMiddleware` CORS/rate-limit middleware, `safeEqual` (10 cases), `createCache` (8 cases including TTL expiry and pruning), `getClientIp` (6 cases), `rateLimitInMemory` (6 cases), pure functions `escapeHtml`/`parseCsvRow`/`sanitiseDomainInput`/`sanitiseAccountInput`/`describeReason`/`parseAgeToDays` (33 cases), website-check-helpers (10 cases), RDAP response parsing (12 cases), DKIM lookup and config (18 cases), API fetch wrappers (15 cases), MX region detection (11 cases)
 - **Config integrity checks** — all keyword/pattern arrays are verified at test time for empty strings and lowercase consistency
 - **Pure function extraction** — `escapeHtml`, `parseCsvRow`, `sanitiseDomainInput`, `sanitiseAccountInput` extracted to `scripts/pure.js` for testability; `app.js` re-exports from there
 
@@ -106,7 +116,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Constant-time password comparison** — login handler uses an XOR loop (`safeEqual()`) to prevent timing attacks
 - **Login rate limiting** — the `/api/login` endpoint uses the shared rate-limit store to prevent brute-force attacks
 - **CORS** — all API endpoints restrict `Origin` to `APP_ORIGIN` env var; `Vary: Origin` header is set correctly; no wildcard fallback when `APP_ORIGIN` is empty
-- **Rate limiting** — max 20 requests/min per IP on all API endpoints; rate-limit map prunes stale entries above 10,000 to prevent memory leaks
+- **Rate limiting** — max 20 requests/min per IP on all API endpoints; in-memory per-instance store with auto-pruning above 10,000 entries
 - **Session token expiry** — auth cookies carry an 8-hour expiry enforced during signature verification; leaked tokens are automatically rejected after 8 hours
 - **Hardened auth cookie** — `__Host-` cookie prefix enforces `Path=/` + `Secure` at the browser level, preventing subdomain cookie overwrite
 - **Rate-limit spoofing prevention** — IP is taken from the first entry in `X-Forwarded-For` (set by Vercel's trusted edge); falls back to `req.socket.remoteAddress`
@@ -120,7 +130,6 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 
 ### Code Quality & Performance
 - **No theme flash** — inline `<script>` in `<head>` sets dark theme before first paint, preventing flash on dark-mode systems
-- **Cached module imports** — `@vercel/kv` and `APP_ORIGIN` env var are cached at module scope instead of read per-request
 - **Regex constants** — frequently used regexes (`LOCAL_TLD_RE`, `HTML_TAG_RE`, `WHITESPACE_RE`) are module-level constants, not recreated per call
 - **Drag event caching** — `getElementById` results are cached in a `Map` instead of queried on every ~60Hz drag event
 - **Shared utilities** — `safeEqual()`, `getClientIp()`, `escapeHtml()` extracted into reusable helpers; `renderReportOutput()` and `clearPanel()` deduplicate generate/clear logic across ARF and Bounce
@@ -138,6 +147,9 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Account field sanitisation** — `sanitiseAccountInput()` strips HTML tags, `javascript:` protocol, and control characters from pasted domain values while preserving email addresses (detected by `@`) for use with Mailboards and Abuse Desk links
 - **Login error text reset** — `errorText.textContent` is cleared on page load to prevent stale error messages from persisting across refreshes
 - **CSS optimization** — consolidated duplicate selectors, moved shared properties to base rules
+- **Zero production dependencies** — removed Vercel KV; in-memory rate limiting only; `APP_ORIGIN` read at request time for CORS flexibility
+- **DRY IP extraction** — `withMiddleware` delegates to `getClientIp()` instead of duplicating IP extraction logic
+- **DNS trailing dot handling** — MX/DNS lookups strip the FQDN trailing dot (`mx0101.titan.email.` → `mx0101.titan.email`) before comparison
 
 ---
 
@@ -152,7 +164,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ├── package.json                    # Node deps (used for local dev / tests)
 ├── .gitignore
 ├── api/
-│   ├── _utils.js                   # Shared helpers: sanitiseDomain, createCache(ttlMs), checkRateLimit (with KV + in-memory fallback), signToken, verifyToken, safeEqual, getClientIp, CORS headers, classifyFetchError
+│   ├── _utils.js                   # Shared helpers: sanitiseDomain, createCache(ttlMs), checkRateLimit (in-memory Map), signToken, verifyToken, safeEqual, getClientIp, CORS headers, classifyFetchError
 │   ├── config.js                   # Centralised API config (rate limits, DKIM selectors, website-check patterns, parked keywords, RDAP TLD map with 200+ entries)
 │   ├── whois.js                    # WHOIS lookup serverless function (RDAP-first with WhoisJSON fallback, cached 15 min)
 │   ├── website-check.js            # Website reachability & classification (SPA detection, parked/placeholder detection, redirect analysis; cached 15 min)
@@ -162,7 +174,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ├── scripts/
 │   ├── app.js                      # Core app logic (ARF + Bounce generate, domain lookup, CSV, unified state, event delegation)
 │   ├── pure.js                     # Pure functions (escapeHtml, parseCsvRow, sanitiseDomainInput, sanitiseAccountInput) — no DOM dependencies
-│   ├── api.js                      # Frontend API helpers (fetchWhois, fetchWebsiteCheck, fetchDkimCheck — throws on non-2xx)
+│   ├── api.js                      # Frontend API helpers (fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx — throws on non-2xx)
 │   └── ui.js                       # UI helpers (showToast with types, theme toggle with transition, stepper, form progress, age colors, validation display, drag-and-drop)
 ├── styles/
 │   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, responsive)
@@ -186,7 +198,8 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
     ├── website-check-helpers.test.js # Tests for website-check exported helpers (extractMetaRobots, hasNoindex, isImageOnlyPage, isSpaShell)
     ├── whois-rdap.test.js          # Tests for RDAP response parsing and TLD map coverage (12 cases)
     ├── dkim-check.test.js          # Tests for DKIM DNS lookup and config constants (18 cases)
-    └── api-fetch.test.js           # Tests for frontend API fetch wrappers and client-side cache (15 cases)
+    ├── api-fetch.test.js           # Tests for frontend API fetch wrappers and client-side cache (15 cases)
+    └── lookupMx.test.js            # Tests for MX-based region detection (11 cases)
 ```
 
 ---
@@ -202,10 +215,8 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 | `/api/health` | GET | Health-check — probes WhoisJSON and Google DNS, returns `{ status: "ok"|"degraded" }` |
 
 All API endpoints enforce:
-- **CORS** — `Origin` must match `APP_ORIGIN` env var; `Vary: Origin` is set
-- **Rate limiting** — max 20 requests/min per IP; uses Vercel KV when available, falls back to in-memory per-instance store
-
-> **Note on rate limiting:** The in-memory fallback is per-process, not shared across Vercel instances. For strict global enforcement, provision a [Vercel KV](https://vercel.com/docs/storage/vercel-kv) store and set `KV_REST_API_URL` + `KV_REST_API_TOKEN` in your environment variables.
+- **CORS** — `Origin` must match `APP_ORIGIN` env var (read at request time); `Vary: Origin` is set
+- **Rate limiting** — max 20 requests/min per IP; in-memory per-instance store with auto-pruning above 10,000 entries
 
 ---
 
@@ -219,8 +230,6 @@ Set these in the **Vercel Dashboard → Settings → Environment Variables**:
 | `AUTH_SECRET` | ✅ | Random secret used to HMAC-sign the auth session cookie |
 | `WHOISJSON_API_KEY` | ⭐ | API key for [whoisjson.com](https://whoisjson.com) WHOIS lookups (optional — used as fallback when RDAP fails) |
 | `APP_ORIGIN` | ✅ | Your deployment URL (e.g. `https://your-app.vercel.app`) — used for CORS |
-| `KV_REST_API_URL` | ⭐ | Vercel KV endpoint for persistent cross-instance rate limiting (optional but recommended) |
-| `KV_REST_API_TOKEN` | ⭐ | Vercel KV token (required if `KV_REST_API_URL` is set) |
 
 > **Generating `AUTH_SECRET`:** Run `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` or use [generate-secret.vercel.app](https://generate-secret.vercel.app/32).
 
@@ -259,8 +268,7 @@ Create a `.env.local` file in the project root:
 APP_PASSWORD=yourpassword
 AUTH_SECRET=your-random-hex-secret
 APP_ORIGIN=http://localhost:3000
-WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fallback
-```
+WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fallback```
 
 > **Note:** Domain lookup, website check, and DKIM check will not work if you open `index.html` directly in a browser — they require the serverless API functions to be running via `vercel dev`.
 
@@ -303,7 +311,7 @@ WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fal
 - **IP extraction** — uses the first entry in `X-Forwarded-For` (set by Vercel's trusted edge proxy); falls back to `req.socket.remoteAddress`
 - **No default password** — `APP_PASSWORD` must be set as an environment variable; the server returns a 500 error if it's missing
 - **CORS** prevents API calls from unauthorised origins; `Vary: Origin` is set to avoid cache poisoning
-- **Rate limiting** mitigates brute-force and scraping; uses Vercel KV when available with an in-memory fallback; stale entries are pruned to prevent memory leaks
+- **Rate limiting** mitigates brute-force and scraping; in-memory per-instance store with auto-pruning to prevent memory leaks
 - **CSP** includes `base-uri 'self'`, `form-action 'none'`, and `object-src 'none'` directives
 - **HSTS** enforces HTTPS with `max-age=31536000; includeSubDomains; preload`
 - **Middleware URL matching** uses exact path or subpath prefix to prevent `/api/login-staging` from bypassing auth

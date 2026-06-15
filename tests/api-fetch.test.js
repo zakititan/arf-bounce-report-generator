@@ -1,4 +1,4 @@
-import { describe, it, mock, beforeEach, afterEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck, getCached, setCache, describeReason } from '../scripts/api.js';
 
