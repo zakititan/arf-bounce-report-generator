@@ -4,6 +4,10 @@
 window.addEventListener('message', (event) => {
   if (event.source !== window) return;
   if (!event.data || event.data.type !== 'REPORT_GENERATOR_JIRA') return;
+  if (typeof chrome === 'undefined' || !chrome.storage) {
+    console.warn('[Report→JIRA] chrome.storage not available — is the extension installed?');
+    return;
+  }
 
   const { text, html, panel, account, timestamp } = event.data;
   if (!text && !html) return;
