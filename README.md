@@ -71,6 +71,13 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Dynamic labels** — ARF reports get the `ARF_unsuspension` label; Bounce reports get `Bounce_unsuspension`
 - **Rich clipboard paste** — the full report text and embedded screenshots are copied to the clipboard before opening JIRA, so pressing `Ctrl+V` in the Description field pastes everything inline
 - **Safety gate** — the button shows a warning if no report has been generated yet
+- **Browser extension (optional)** — a Chrome extension (`extension/`) auto-pastes reports into JIRA's Description field when the create-issue page loads
+  - The web app sends report HTML (including base64-embedded screenshot images) via `window.postMessage`
+  - The extension stores report data in `chrome.storage.local` (no background service worker relay needed)
+  - On JIRA, it clicks the **Visual** tab, finds the description field's contenteditable editor (Atlassian JEP), and dispatches a synthetic `ClipboardEvent('paste')` with the full HTML in a `DataTransfer` — so JIRA's own paste handler processes images natively
+  - Supports JIRA Server v7.13+ (Atlassian JEP editor); falls back gracefully if the visual editor isn't found
+  - Install by [downloading the extension zip](https://github.com/zakititan/arf-bounce-report-generator/raw/main/extension/releases/extension.zip), unzipping, and loading the folder as an unpacked extension in `chrome://extensions` (Developer mode)
+  - To repackage after changes: `npm run pack-extension`
 
 ### Mailboards Integration
 - **Check on Mailboards** — a "Check on Mailboards" link sits below the Account field in both ARF and Bounce panels, linking to [mailboards.ops.titan.email](https://mailboards.ops.titan.email)
@@ -157,6 +164,12 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 │   └── ui.js                       # UI helpers (showToast with types, theme toggle with transition, stepper, form progress, age colors, validation display, drag-and-drop)
 ├── styles/
 │   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, responsive)
+├── extension/                      # Chrome extension (Manifest V3) for auto-pasting into JIRA
+│   ├── manifest.json               # Extension config: permissions, content scripts for webapp + JIRA
+│   ├── background.js               # Service worker (storage relay, now bypassed by direct storage access)
+│   ├── content-webapp.js           # Content script on Report Generator: captures report HTML via postMessage → chrome.storage.local
+│   ├── content-jira.js             # Content script on JIRA: reads report, clicks Visual tab, injects via synthetic paste event
+│   └── icons/                      # Extension icons (16/48/128px)
 └── tests/
     ├── sanitiseDomain.test.js      # Unit tests for domain sanitisation logic (39 cases)
     ├── api-handlers.test.js        # Tests for checkRateLimit, classifyFetchError, signToken/verifyToken
