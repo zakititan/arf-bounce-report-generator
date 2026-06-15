@@ -9,7 +9,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ### Report Generation
 - **ARF Report** — captures complaint count, email content type, screenshots, and assurances
 - **Bounce Report** — handles CSV bounce list upload, bounce count, domain checks, and assurances
-- **Inline screenshots** — attached images are rendered directly inside the ARF output section and included as labelled filenames in the clipboard copy
+- **Inline screenshots** — attached images are rendered directly inside the output section with divider labels and numbered filenames; included as labelled filenames in the clipboard copy
 - **Assurance screenshots** — separate screenshot upload zones for ARF and Bounce assurance evidence, rendered inline in the output alongside email screenshots
 - **Paste screenshots on hover** — hover over any upload zone and press `Ctrl+V` to paste clipboard images directly into that zone; no click-to-focus required
 - **One-click copy** — copies the full formatted report (including screenshot labels) to clipboard with a "Copied ✓" visual confirmation
@@ -74,7 +74,9 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Browser extension (optional)** — a Chrome extension (`extension/`) auto-pastes reports into JIRA's Description field when the create-issue page loads
   - The web app sends report HTML (including base64-embedded screenshot images) via `window.postMessage`
   - The extension stores report data in `chrome.storage.local` (no background service worker relay needed)
-  - On JIRA, it clicks the **Visual** tab, finds the description field's contenteditable editor (Atlassian JEP), and dispatches a synthetic `ClipboardEvent('paste')` with the full HTML in a `DataTransfer` — so JIRA's own paste handler processes images natively
+  - On JIRA, the extension extracts images from the HTML first (via DOMParser), then pastes text-only into the Visual editor, followed by pasting each image separately as a `File` item in `clipboardData.items` — so JIRA's paste handler processes each image individually as an attachment
+  - 500ms delay between image pastes for TinyMCE processing
+  - Fallback chain: paste → execCommand → textarea
   - Supports JIRA Server v7.13+ (Atlassian JEP editor); falls back gracefully if the visual editor isn't found
   - Install by [downloading the extension zip](https://github.com/zakititan/arf-bounce-report-generator/raw/main/extension/releases/extension.zip), unzipping, and loading the folder as an unpacked extension in `chrome://extensions` (Developer mode)
   - To repackage after changes: `npm run pack-extension`
@@ -94,7 +96,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Dynamic href** — the link URL updates when the Account field changes or a CSV is uploaded/cleared
 
 ### Testing
-- **230 unit tests across 11 files** — covers `sanitiseDomain` (39 edge cases), `checkRateLimit`/`classifyFetchError`/token helpers (25 test cases including expiry, missing claims, non-JSON payload), website-check helpers (~38 test cases), `withMiddleware` CORS/rate-limit middleware (8 test cases), `safeEqual` (10 cases), `createCache` (8 cases including TTL expiry and pruning), `getClientIp` (6 cases), `rateLimitInMemory` (6 cases), pure functions `escapeHtml`/`parseCsvRow`/`sanitiseDomainInput`/`sanitiseAccountInput`/`describeReason`/`parseAgeToDays` (33 cases), website-check-helpers (10 cases), RDAP response parsing (12 cases)
+- **263 unit tests across 13 files** — covers `sanitiseDomain` (39 edge cases), `checkRateLimit`/`classifyFetchError`/token helpers, website-check helpers, `withMiddleware` CORS/rate-limit middleware, `safeEqual` (10 cases), `createCache` (8 cases including TTL expiry and pruning), `getClientIp` (6 cases), `rateLimitInMemory` (6 cases), pure functions `escapeHtml`/`parseCsvRow`/`sanitiseDomainInput`/`sanitiseAccountInput`/`describeReason`/`parseAgeToDays` (33 cases), website-check-helpers (10 cases), RDAP response parsing (12 cases), DKIM lookup and config (18 cases), API fetch wrappers (15 cases)
 - **Config integrity checks** — all keyword/pattern arrays are verified at test time for empty strings and lowercase consistency
 - **Pure function extraction** — `escapeHtml`, `parseCsvRow`, `sanitiseDomainInput`, `sanitiseAccountInput` extracted to `scripts/pure.js` for testability; `app.js` re-exports from there
 
@@ -168,7 +170,8 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 │   ├── manifest.json               # Extension config: permissions, content scripts for webapp + JIRA
 │   ├── background.js               # Service worker (storage relay, now bypassed by direct storage access)
 │   ├── content-webapp.js           # Content script on Report Generator: captures report HTML via postMessage → chrome.storage.local
-│   ├── content-jira.js             # Content script on JIRA: reads report, clicks Visual tab, injects via synthetic paste event
+│   ├── content-jira.js             # Content script on JIRA: reads report, extracts images via DOMParser, pastes text first then images one by one
+│   ├── releases/extension.zip      # Packaged extension for easy distribution
 │   └── icons/                      # Extension icons (16/48/128px)
 └── tests/
     ├── sanitiseDomain.test.js      # Unit tests for domain sanitisation logic (39 cases)
@@ -181,7 +184,9 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
     ├── rateLimitInMemory.test.js   # Tests for in-memory rate limiter (6 cases)
     ├── pureFunctions.test.js       # Tests for pure functions: escapeHtml, parseCsvRow, sanitiseDomainInput, sanitiseAccountInput, describeReason, parseAgeToDays (33 cases)
     ├── website-check-helpers.test.js # Tests for website-check exported helpers (extractMetaRobots, hasNoindex, isImageOnlyPage, isSpaShell)
-    └── whois-rdap.test.js          # Tests for RDAP response parsing and TLD map coverage (12 cases)
+    ├── whois-rdap.test.js          # Tests for RDAP response parsing and TLD map coverage (12 cases)
+    ├── dkim-check.test.js          # Tests for DKIM DNS lookup and config constants (18 cases)
+    └── api-fetch.test.js           # Tests for frontend API fetch wrappers and client-side cache (15 cases)
 ```
 
 ---
