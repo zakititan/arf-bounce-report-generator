@@ -96,7 +96,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Dynamic href** — the link URL updates when the Account field changes or a CSV is uploaded/cleared
 
 ### Testing
-- **116 unit tests across 11 files** — covers `sanitiseDomain` (39 edge cases), `checkRateLimit`/`classifyFetchError`/token helpers, website-check helpers, `withMiddleware` CORS/rate-limit middleware, `safeEqual` (10 cases), `createCache` (8 cases including TTL expiry and pruning), `getClientIp` (6 cases), `rateLimitInMemory` (6 cases), pure functions `escapeHtml`/`parseCsvRow`/`sanitiseDomainInput`/`sanitiseAccountInput`/`describeReason`/`parseAgeToDays` (33 cases), website-check-helpers (10 cases), RDAP response parsing (12 cases)
+- **263 unit tests across 13 files** — covers `sanitiseDomain` (39 edge cases), `checkRateLimit`/`classifyFetchError`/token helpers, website-check helpers, `withMiddleware` CORS/rate-limit middleware, `safeEqual` (10 cases), `createCache` (8 cases including TTL expiry and pruning), `getClientIp` (6 cases), `rateLimitInMemory` (6 cases), pure functions `escapeHtml`/`parseCsvRow`/`sanitiseDomainInput`/`sanitiseAccountInput`/`describeReason`/`parseAgeToDays` (33 cases), website-check-helpers (10 cases), RDAP response parsing (12 cases), DKIM lookup and config (18 cases), API fetch wrappers (15 cases)
 - **Config integrity checks** — all keyword/pattern arrays are verified at test time for empty strings and lowercase consistency
 - **Pure function extraction** — `escapeHtml`, `parseCsvRow`, `sanitiseDomainInput`, `sanitiseAccountInput` extracted to `scripts/pure.js` for testability; `app.js` re-exports from there
 
@@ -184,7 +184,9 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
     ├── rateLimitInMemory.test.js   # Tests for in-memory rate limiter (6 cases)
     ├── pureFunctions.test.js       # Tests for pure functions: escapeHtml, parseCsvRow, sanitiseDomainInput, sanitiseAccountInput, describeReason, parseAgeToDays (33 cases)
     ├── website-check-helpers.test.js # Tests for website-check exported helpers (extractMetaRobots, hasNoindex, isImageOnlyPage, isSpaShell)
-    └── whois-rdap.test.js          # Tests for RDAP response parsing and TLD map coverage (12 cases)
+    ├── whois-rdap.test.js          # Tests for RDAP response parsing and TLD map coverage (12 cases)
+    ├── dkim-check.test.js          # Tests for DKIM DNS lookup and config constants (18 cases)
+    └── api-fetch.test.js           # Tests for frontend API fetch wrappers and client-side cache (15 cases)
 ```
 
 ---
