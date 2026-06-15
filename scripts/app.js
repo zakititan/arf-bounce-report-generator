@@ -109,6 +109,8 @@ async function detectRegion(prefix, domain) {
   } catch {
     state[prefix].region = 'na';
   }
+  const accountInput = document.getElementById(prefix + '-account');
+  if (accountInput) accountInput.dispatchEvent(new Event('input'));
 }
 
 function initDomainInputs() {
