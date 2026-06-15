@@ -110,7 +110,7 @@ async function detectRegion(prefix, domain) {
     state[prefix].region = 'na';
   }
   const accountInput = document.getElementById(prefix + '-account');
-  if (accountInput) accountInput.dispatchEvent(new Event('input'));
+  if (accountInput) accountInput.dispatchEvent(new Event('regionchange'));
 }
 
 function initDomainInputs() {
@@ -190,6 +190,7 @@ function initDomainInputs() {
 
   accountInput.addEventListener('input', updateMailboardsHref);
   accountInput.addEventListener('paste', () => setTimeout(updateMailboardsHref, 0));
+  accountInput.addEventListener('regionchange', updateMailboardsHref);
   updateMailboardsHref();
 });
 
@@ -207,6 +208,7 @@ if (arfAccountInput && arfCountLink) {
 
   arfAccountInput.addEventListener('input', updateArfCountHref);
   arfAccountInput.addEventListener('paste', () => setTimeout(updateArfCountHref, 0));
+  arfAccountInput.addEventListener('regionchange', updateArfCountHref);
   updateArfCountHref();
 }
 
@@ -228,6 +230,7 @@ function updateUserAgentHref() {
   if (uaAccountInput && userAgentLink) {
     uaAccountInput.addEventListener('input', updateUserAgentHref);
     uaAccountInput.addEventListener('paste', () => setTimeout(updateUserAgentHref, 0));
+    uaAccountInput.addEventListener('regionchange', updateUserAgentHref);
     updateUserAgentHref();
   }
 }
