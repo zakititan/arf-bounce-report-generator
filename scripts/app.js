@@ -1043,6 +1043,19 @@ function createTaeJira(prefix) {
   const label = prefix === 'arf' ? 'ARF_unsuspension' : 'Bounce_unsuspension';
   const jiraUrl = 'https://jira.directi.com/secure/CreateIssueDetails!init.jspa?pid=12900&issuetype=10902&priority=10000&labels=' + label + '&summary=' + summary;
 
+  // Send report data to browser extension (if installed)
+  const outputArea = outputSection.querySelector('.output-area');
+  const reportText = (outputArea?.dataset.copyText) || document.getElementById(prefix + '-output-text')?.textContent || '';
+  const reportHtml = outputArea?.innerHTML || '';
+  window.postMessage({
+    type: 'REPORT_GENERATOR_JIRA',
+    text: reportText,
+    html: reportHtml,
+    panel: prefix,
+    account: account,
+    timestamp: Date.now(),
+  }, '*');
+
   window.open(jiraUrl, '_blank');
-  showToast('JIRA opened! Press Ctrl+V in the Description field to paste the report & screenshots.', 'success');
+  showToast('JIRA opened! Report will auto-paste if the extension is installed — or press Ctrl+V manually.', 'success');
 }

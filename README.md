@@ -71,6 +71,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Dynamic labels** — ARF reports get the `ARF_unsuspension` label; Bounce reports get `Bounce_unsuspension`
 - **Rich clipboard paste** — the full report text and embedded screenshots are copied to the clipboard before opening JIRA, so pressing `Ctrl+V` in the Description field pastes everything inline
 - **Safety gate** — the button shows a warning if no report has been generated yet
+- **Browser extension (optional)** — a Chrome extension (`extension/`) auto-pastes reports into JIRA's Description field when the create-issue page loads; the web app sends report data via `window.postMessage`, the extension stores it in `chrome.storage.local`, and injects it into the ProseMirror editor on JIRA
 
 ### Mailboards Integration
 - **Check on Mailboards** — a "Check on Mailboards" link sits below the Account field in both ARF and Bounce panels, linking to [mailboards.ops.titan.email](https://mailboards.ops.titan.email)
@@ -157,6 +158,12 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 │   └── ui.js                       # UI helpers (showToast with types, theme toggle with transition, stepper, form progress, age colors, validation display, drag-and-drop)
 ├── styles/
 │   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, responsive)
+├── extension/                      # Chrome extension (Manifest V3) for auto-pasting into JIRA
+│   ├── manifest.json               # Extension config: permissions, content scripts, service worker
+│   ├── background.js               # Service worker: stores/retrieves report data in chrome.storage.local
+│   ├── content-webapp.js           # Content script on Report Generator: captures report via postMessage
+│   ├── content-jira.js             # Content script on JIRA: injects report into ProseMirror editor
+│   └── icons/                      # Extension icons (16/48/128px)
 └── tests/
     ├── sanitiseDomain.test.js      # Unit tests for domain sanitisation logic (39 cases)
     ├── api-handlers.test.js        # Tests for checkRateLimit, classifyFetchError, signToken/verifyToken

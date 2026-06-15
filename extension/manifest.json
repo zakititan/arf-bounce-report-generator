@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Report Generator → JIRA",
+  "version": "1.0",
+  "description": "Auto-pastes reports from ARF & Bounce Report Generator into JIRA description field",
+  "permissions": ["storage"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://arf-bounce-report-generator.vercel.app/*"],
+      "js": ["content-webapp.js"]
+    },
+    {
+      "matches": ["https://jira.directi.com/*"],
+      "js": ["content-jira.js"]
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
