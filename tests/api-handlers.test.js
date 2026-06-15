@@ -1,49 +1,25 @@
-import { describe, it, before, after, mock } from 'node:test';
+import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { sanitiseDomain, checkRateLimit, classifyFetchError, signToken, verifyToken } from '../api/_utils.js';
 
-// Mock @vercel/kv
-const mockKvState = {};
-const mockKv = {
-  incr: mock.fn((key) => {
-    mockKvState[key] = (mockKvState[key] || 0) + 1;
-    return mockKvState[key];
-  }),
-  expire: mock.fn(() => {}),
-};
-mock.module('@vercel/kv', {
-  namedExports: { kv: mockKv },
-});
-
 describe('checkRateLimit', () => {
-  beforeEach(() => {
-    Object.keys(mockKvState).forEach(k => delete mockKvState[k]);
-    mockKv.incr.mock.resetCalls();
-    mockKv.expire.mock.resetCalls();
-  });
-
   it('allows requests under the limit', async () => {
     for (let i = 0; i < 5; i++) {
-      assert.equal(await checkRateLimit('1.2.3.4'), false, `request ${i + 1} allowed`);
+      assert.equal(await checkRateLimit('test-under-' + i), false, `request ${i + 1} allowed`);
     }
   });
 
   it('rejects requests over the limit', async () => {
-    // RATE_LIMIT_MAX = 20, so 22 calls triggers limit (count > 20)
-    for (let i = 0; i < 22; i++) await checkRateLimit('5.6.7.8');
-    assert.equal(await checkRateLimit('5.6.7.8'), true, '23rd request blocked');
+    const ip = 'test-over-' + Date.now();
+    for (let i = 0; i < 22; i++) await checkRateLimit(ip);
+    assert.equal(await checkRateLimit(ip), true, '23rd request blocked');
   });
 
   it('tracks different IPs independently', async () => {
-    for (let i = 0; i < 22; i++) await checkRateLimit('10.0.0.1');
-    assert.equal(await checkRateLimit('10.0.0.2'), false, 'different IP not blocked');
-  });
-
-  it('calls kv.expire on first request for a new IP', async () => {
-    await checkRateLimit('99.99.99.99');
-    assert.equal(mockKv.expire.mock.calls.length, 1, 'expire called once');
-    await checkRateLimit('99.99.99.99');
-    assert.equal(mockKv.expire.mock.calls.length, 1, 'expire not called again');
+    const ip1 = 'test-ip1-' + Date.now();
+    const ip2 = 'test-ip2-' + Date.now();
+    for (let i = 0; i < 22; i++) await checkRateLimit(ip1);
+    assert.equal(await checkRateLimit(ip2), false, 'different IP not blocked');
   });
 });
 

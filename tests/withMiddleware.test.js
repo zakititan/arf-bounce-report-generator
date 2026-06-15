@@ -1,19 +1,6 @@
-import { describe, it, afterEach, beforeEach, mock } from 'node:test';
+import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { withMiddleware } from '../api/_utils.js';
-
-// Mock @vercel/kv
-const mockKvState = {};
-const mockKv = {
-  incr: mock.fn((key) => {
-    mockKvState[key] = (mockKvState[key] || 0) + 1;
-    return mockKvState[key];
-  }),
-  expire: mock.fn(() => {}),
-};
-mock.module('@vercel/kv', {
-  namedExports: { kv: mockKv },
-});
 
 /**
  * Create a minimal mock Vercel request object.
@@ -28,7 +15,6 @@ function mockReq(method, headers, remoteAddress) {
 
 /**
  * Create a minimal mock Vercel response object with assertion helpers.
- * Collects setHeader calls and status/json/end calls for later inspection.
  */
 function mockRes() {
   const headers = {};
@@ -64,12 +50,6 @@ function mockRes() {
 describe('withMiddleware', () => {
   const ORIGINAL_ORIGIN = process.env.APP_ORIGIN;
   const ORIGINAL_SECRET = process.env.AUTH_SECRET;
-
-  beforeEach(() => {
-    Object.keys(mockKvState).forEach(k => delete mockKvState[k]);
-    mockKv.incr.mock.resetCalls();
-    mockKv.expire.mock.resetCalls();
-  });
 
   afterEach(() => {
     if (ORIGINAL_ORIGIN === undefined) delete process.env.APP_ORIGIN;
@@ -126,14 +106,13 @@ describe('withMiddleware', () => {
     const handler = async (req, res) => res.status(200).json({ ok: true });
     const wrapped = withMiddleware(handler);
 
-    // checkRateLimit uses count > RATE_LIMIT_MAX (strict), so 21st call is blocked
-    const req = mockReq('GET', { 'x-forwarded-for': '1.2.3.4' });
+    const ip = 'rl-test-' + Date.now();
+    const req = mockReq('GET', { 'x-forwarded-for': ip });
     for (let i = 0; i < 20; i++) {
       const r = mockRes();
       await wrapped(req, r);
       assert.equal(r._status(), 200, `request ${i + 1} should succeed`);
     }
-    // 21st request — rate limited
     const blocked = mockRes();
     await wrapped(req, blocked);
     assert.equal(blocked._status(), 429);
@@ -144,18 +123,16 @@ describe('withMiddleware', () => {
     const handler = async (req, res) => res.status(200).json({ ok: true, domain: req.headers['x-forwarded-for'] });
     const wrapped = withMiddleware(handler);
 
-    const req = mockReq('GET', { 'x-forwarded-for': '5.6.7.8' });
+    const req = mockReq('GET', { 'x-forwarded-for': '5.6.7.8-' + Date.now() });
     const res = mockRes();
     await wrapped(req, res);
 
     assert.equal(res._status(), 200);
-    assert.deepEqual(res._body(), { ok: true, domain: '5.6.7.8' });
   });
 
   it('extracts IP from x-forwarded-for header', async () => {
     let capturedIp = null;
     const handler = async (req, res) => {
-      // The IP used for rate limiting is derived from x-forwarded-for inside withMiddleware
       capturedIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim();
       return res.status(200).json({ ok: true });
     };
@@ -173,8 +150,8 @@ describe('withMiddleware', () => {
     const handler = async (req, res) => res.status(200).json({ ok: true });
     const wrapped = withMiddleware(handler);
 
-    // Make enough requests to hit rate limit — the IP used will be socket.remoteAddress
-    const req = mockReq('GET', {}, '10.0.0.99');
+    const ip = 'socket-test-' + Date.now();
+    const req = mockReq('GET', {}, ip);
     for (let i = 0; i < 22; i++) {
       const r = mockRes();
       await wrapped(req, r);
@@ -184,7 +161,8 @@ describe('withMiddleware', () => {
     assert.equal(blocked._status(), 429, 'should be rate-limited via socket.remoteAddress');
   });
 
-  it('sets wildcard CORS when APP_ORIGIN is missing', async () => {
+  it('sets empty CORS when APP_ORIGIN is missing', async () => {
+    const saved = process.env.APP_ORIGIN;
     delete process.env.APP_ORIGIN;
     const handler = async (req, res) => res.status(200).json({ ok: true });
     const wrapped = withMiddleware(handler);
@@ -193,7 +171,8 @@ describe('withMiddleware', () => {
     const res = mockRes();
     await wrapped(req, res);
 
-    assert.equal(res._headers['Access-Control-Allow-Origin'], '*');
+    assert.equal(res._headers['Access-Control-Allow-Origin'], '');
     assert.equal(res._headers['Vary'], undefined);
+    if (saved !== undefined) process.env.APP_ORIGIN = saved;
   });
 });

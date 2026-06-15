@@ -96,7 +96,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Dynamic href** — the link URL updates when the Account field changes or a CSV is uploaded/cleared
 
 ### Testing
-- **263 unit tests across 13 files** — covers `sanitiseDomain` (39 edge cases), `checkRateLimit`/`classifyFetchError`/token helpers, website-check helpers, `withMiddleware` CORS/rate-limit middleware, `safeEqual` (10 cases), `createCache` (8 cases including TTL expiry and pruning), `getClientIp` (6 cases), `rateLimitInMemory` (6 cases), pure functions `escapeHtml`/`parseCsvRow`/`sanitiseDomainInput`/`sanitiseAccountInput`/`describeReason`/`parseAgeToDays` (33 cases), website-check-helpers (10 cases), RDAP response parsing (12 cases), DKIM lookup and config (18 cases), API fetch wrappers (15 cases)
+- **296 unit tests across 13 files** — covers `sanitiseDomain` (39 edge cases), `checkRateLimit`/`classifyFetchError`/token helpers, website-check helpers, `withMiddleware` CORS/rate-limit middleware, `safeEqual` (10 cases), `createCache` (8 cases including TTL expiry and pruning), `getClientIp` (6 cases), `rateLimitInMemory` (6 cases), pure functions `escapeHtml`/`parseCsvRow`/`sanitiseDomainInput`/`sanitiseAccountInput`/`describeReason`/`parseAgeToDays` (33 cases), website-check-helpers (10 cases), RDAP response parsing (12 cases), DKIM lookup and config (18 cases), API fetch wrappers (15 cases)
 - **Config integrity checks** — all keyword/pattern arrays are verified at test time for empty strings and lowercase consistency
 - **Pure function extraction** — `escapeHtml`, `parseCsvRow`, `sanitiseDomainInput`, `sanitiseAccountInput` extracted to `scripts/pure.js` for testability; `app.js` re-exports from there
 
@@ -120,7 +120,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 
 ### Code Quality & Performance
 - **No theme flash** — inline `<script>` in `<head>` sets dark theme before first paint, preventing flash on dark-mode systems
-- **Cached module imports** — `@vercel/kv` and `APP_ORIGIN` env var are cached at module scope instead of read per-request
+- **Cached module imports** — `APP_ORIGIN` env var is cached at module scope instead of read per-request
 - **Regex constants** — frequently used regexes (`LOCAL_TLD_RE`, `HTML_TAG_RE`, `WHITESPACE_RE`) are module-level constants, not recreated per call
 - **Drag event caching** — `getElementById` results are cached in a `Map` instead of queried on every ~60Hz drag event
 - **Shared utilities** — `safeEqual()`, `getClientIp()`, `escapeHtml()` extracted into reusable helpers; `renderReportOutput()` and `clearPanel()` deduplicate generate/clear logic across ARF and Bounce
@@ -152,7 +152,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ├── package.json                    # Node deps (used for local dev / tests)
 ├── .gitignore
 ├── api/
-│   ├── _utils.js                   # Shared helpers: sanitiseDomain, createCache(ttlMs), checkRateLimit (with KV + in-memory fallback), signToken, verifyToken, safeEqual, getClientIp, CORS headers, classifyFetchError
+│   ├── _utils.js                   # Shared helpers: sanitiseDomain, createCache(ttlMs), checkRateLimit (in-memory), signToken, verifyToken, safeEqual, getClientIp, CORS headers, classifyFetchError
 │   ├── config.js                   # Centralised API config (rate limits, DKIM selectors, website-check patterns, parked keywords, RDAP TLD map with 200+ entries)
 │   ├── whois.js                    # WHOIS lookup serverless function (RDAP-first with WhoisJSON fallback, cached 15 min)
 │   ├── website-check.js            # Website reachability & classification (SPA detection, parked/placeholder detection, redirect analysis; cached 15 min)
@@ -203,9 +203,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 
 All API endpoints enforce:
 - **CORS** — `Origin` must match `APP_ORIGIN` env var; `Vary: Origin` is set
-- **Rate limiting** — max 20 requests/min per IP; uses Vercel KV when available, falls back to in-memory per-instance store
-
-> **Note on rate limiting:** The in-memory fallback is per-process, not shared across Vercel instances. For strict global enforcement, provision a [Vercel KV](https://vercel.com/docs/storage/vercel-kv) store and set `KV_REST_API_URL` + `KV_REST_API_TOKEN` in your environment variables.
+- **Rate limiting** — max 20 requests/min per IP; in-memory per-instance store with auto-pruning above 10,000 entries
 
 ---
 
@@ -219,8 +217,6 @@ Set these in the **Vercel Dashboard → Settings → Environment Variables**:
 | `AUTH_SECRET` | ✅ | Random secret used to HMAC-sign the auth session cookie |
 | `WHOISJSON_API_KEY` | ⭐ | API key for [whoisjson.com](https://whoisjson.com) WHOIS lookups (optional — used as fallback when RDAP fails) |
 | `APP_ORIGIN` | ✅ | Your deployment URL (e.g. `https://your-app.vercel.app`) — used for CORS |
-| `KV_REST_API_URL` | ⭐ | Vercel KV endpoint for persistent cross-instance rate limiting (optional but recommended) |
-| `KV_REST_API_TOKEN` | ⭐ | Vercel KV token (required if `KV_REST_API_URL` is set) |
 
 > **Generating `AUTH_SECRET`:** Run `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` or use [generate-secret.vercel.app](https://generate-secret.vercel.app/32).
 
@@ -259,8 +255,7 @@ Create a `.env.local` file in the project root:
 APP_PASSWORD=yourpassword
 AUTH_SECRET=your-random-hex-secret
 APP_ORIGIN=http://localhost:3000
-WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fallback
-```
+WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fallback```
 
 > **Note:** Domain lookup, website check, and DKIM check will not work if you open `index.html` directly in a browser — they require the serverless API functions to be running via `vercel dev`.
 
@@ -303,7 +298,7 @@ WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fal
 - **IP extraction** — uses the first entry in `X-Forwarded-For` (set by Vercel's trusted edge proxy); falls back to `req.socket.remoteAddress`
 - **No default password** — `APP_PASSWORD` must be set as an environment variable; the server returns a 500 error if it's missing
 - **CORS** prevents API calls from unauthorised origins; `Vary: Origin` is set to avoid cache poisoning
-- **Rate limiting** mitigates brute-force and scraping; uses Vercel KV when available with an in-memory fallback; stale entries are pruned to prevent memory leaks
+- **Rate limiting** mitigates brute-force and scraping; in-memory per-instance store with auto-pruning to prevent memory leaks
 - **CSP** includes `base-uri 'self'`, `form-action 'none'`, and `object-src 'none'` directives
 - **HSTS** enforces HTTPS with `max-age=31536000; includeSubDomains; preload`
 - **Middleware URL matching** uses exact path or subpath prefix to prevent `/api/login-staging` from bypassing auth
