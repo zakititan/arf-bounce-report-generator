@@ -63,17 +63,24 @@
     return { visualTab, textTab };
   }
 
-  // Debug: log all contenteditable elements and iframes on the page
+  // Debug: log all contenteditable elements and their parent containers
   function debugDomState() {
     const ces = document.querySelectorAll('[contenteditable]');
     log('Contenteditable elements: ' + ces.length);
     ces.forEach((el, i) => {
-      log('  [' + i + '] ' + el.tagName + '#' + el.id + ' class="' + el.className + '" ce=' + el.contentEditable + ' visible=' + (el.offsetParent !== null));
+      const parent = el.closest('[id]');
+      const grandparent = parent?.parentElement?.closest('[id]');
+      log('  [' + i + '] ' + el.tagName + '#' + el.id + ' ce=' + el.contentEditable +
+        ' visible=' + (el.offsetParent !== null) +
+        ' parent=' + (parent ? parent.tagName + '#' + parent.id : 'none') +
+        ' grandparent=' + (grandparent ? grandparent.tagName + '#' + grandparent.id : 'none'));
     });
-    const iframes = document.querySelectorAll('iframe');
-    log('Iframes: ' + iframes.length);
-    iframes.forEach((el, i) => {
-      log('  [' + i + '] id=' + el.id + ' class="' + el.className + '" src=' + (el.src || '').substring(0, 80));
+    // Also check description containers
+    const descContainers = document.querySelectorAll('[id*="description"]');
+    log('Description-related containers: ' + descContainers.length);
+    descContainers.forEach((el, i) => {
+      const ceInside = el.querySelector('[contenteditable="true"]');
+      log('  [' + i + '] ' + el.tagName + '#' + el.id + ' hasContenteditable=' + !!ceInside);
     });
   }
 
@@ -98,24 +105,49 @@
     return accepted;
   }
 
-  // After clicking Visual, wait for ANY contenteditable to appear
-  function waitForAnyContentEditable(maxMs) {
+  // After clicking Visual, wait for the DESCRIPTION field's contenteditable to appear
+  function waitForDescriptionEditor(maxMs) {
     return new Promise((resolve) => {
       const start = Date.now();
       const poll = setInterval(() => {
-        // Any visible contenteditable
-        const all = document.querySelectorAll('[contenteditable="true"]');
-        for (const el of all) {
-          if (el.offsetParent !== null) {
+        // 1. Look inside the description field container specifically
+        const descContainer = document.querySelector('#description-wiki-edit') ||
+                              document.querySelector('#description-field') ||
+                              document.querySelector('[id*="description"][class*="field-group"]') ||
+                              document.querySelector('.field-group:has(textarea#description)');
+        if (descContainer) {
+          const ce = descContainer.querySelector('[contenteditable="true"]');
+          if (ce && ce.offsetParent !== null) {
             clearInterval(poll);
-            resolve(el);
+            resolve(ce);
             return;
           }
         }
-        // TinyMCE
+        // 2. TinyMCE
         if (typeof tinymce !== 'undefined') {
           const ed = tinymce?.get?.('description');
           if (ed) { clearInterval(poll); resolve(ed); return; }
+        }
+        // 3. Iframe inside description container
+        if (descContainer) {
+          const iframe = descContainer.querySelector('iframe');
+          if (iframe?.contentDocument?.body) {
+            clearInterval(poll);
+            resolve(iframe.contentDocument.body);
+            return;
+          }
+        }
+        // 4. Any contenteditable whose closest parent has 'description' in its id
+        const all = document.querySelectorAll('[contenteditable="true"]');
+        for (const el of all) {
+          if (el.offsetParent !== null) {
+            const ancestor = el.closest('[id*="description"], [class*="description"]');
+            if (ancestor) {
+              clearInterval(poll);
+              resolve(el);
+              return;
+            }
+          }
         }
         if (Date.now() - start > maxMs) { clearInterval(poll); resolve(null); }
       }, POLL_INTERVAL);
@@ -156,20 +188,21 @@
     // Step 2: Debug DOM state
     debugDomState();
 
-    // Step 3: Try to find any contenteditable element and dispatch paste
-    const ce = await waitForAnyContentEditable(5000);
+    // Step 3: Try to find the DESCRIPTION contenteditable and dispatch paste
+    const ce = await waitForDescriptionEditor(5000);
     if (ce) {
-      log('Found contenteditable: ' + ce.tagName + '#' + ce.id + ' class=' + ce.className);
+      log('Found description editor: ' + ce.tagName + '#' + ce.id + ' class=' + ce.className);
       ce.focus();
-      // Small delay to ensure focus is set
       await new Promise(r => setTimeout(r, 200));
       const pasted = dispatchPaste(ce, data.html, data.text);
       if (pasted) {
         clearReportData();
         showToast('Report pasted with images ✓');
-        log('Done via paste event on contenteditable');
+        log('Done via paste event on description editor');
         return;
       }
+    } else {
+      warn('Description contenteditable not found');
     }
 
     // Step 4: Try dispatching paste on the document body or active element
