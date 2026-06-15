@@ -66,8 +66,14 @@
       const file = dataUrlToFile(img.src, filename);
       files.push(file);
       log('Extracted image: ' + filename + ' (' + file.type + ', ' + file.size + ' bytes)');
-      img.remove();
+      // Remove the entire screenshot item wrapper, not just the img
+      const wrapper = img.closest('.output-screenshot-item');
+      if (wrapper) wrapper.remove();
+      else img.remove();
     });
+
+    // Remove screenshot divider labels (── Screenshots ──, ── Assurance Screenshots ──)
+    doc.querySelectorAll('.output-inline-divider, .output-screenshots-inline').forEach(el => el.remove());
 
     const textHtml = doc.body.innerHTML;
     return { files, textHtml };
