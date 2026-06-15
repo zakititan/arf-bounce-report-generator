@@ -1,8 +1,8 @@
 // ── Content script: JIRA create issue page ────────────────────────────
 // Reads stored report data directly from chrome.storage.local
 // and injects into the JIRA Visual editor.
-// Strategy: click Visual tab → write HTML to clipboard → dispatch paste event
-// so JIRA's own paste handler processes images as attachments.
+// Strategy: paste text first, then paste images one by one so JIRA's
+// paste handler processes each image as an attachment.
 
 (() => {
   const POLL_INTERVAL = 300;
@@ -44,6 +44,57 @@
 
   function clearReportData() { chrome.storage.local.remove('reportData'); }
 
+  // ── Image extraction ──────────────────────────────────────────────
+
+  function dataUrlToFile(dataUrl, filename) {
+    const [header, base64] = dataUrl.split(',');
+    const mime = header.match(/:(.*?);/)[1];
+    const binary = atob(base64);
+    const array = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) array[i] = binary.charCodeAt(i);
+    return new File([array], filename, { type: mime });
+  }
+
+  function extractImages(html) {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const imgs = doc.querySelectorAll('img[src^="data:"]');
+    if (imgs.length === 0) return { files: [], textHtml: html };
+
+    const files = [];
+    imgs.forEach((img, i) => {
+      const filename = img.alt || ('screenshot-' + (i + 1) + '.png');
+      const file = dataUrlToFile(img.src, filename);
+      files.push(file);
+      log('Extracted image: ' + filename + ' (' + file.type + ', ' + file.size + ' bytes)');
+      img.remove();
+    });
+
+    const textHtml = doc.body.innerHTML;
+    return { files, textHtml };
+  }
+
+  // ── Paste helpers ─────────────────────────────────────────────────
+
+  function pasteHtml(el, html, text) {
+    const dt = new DataTransfer();
+    dt.setData('text/html', html);
+    dt.setData('text/plain', text);
+    const evt = new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt });
+    const accepted = !el.dispatchEvent(evt);
+    log('Paste text on ' + el.tagName + '#' + el.id + ' — ' + (accepted ? 'accepted' : 'not handled'));
+    return accepted;
+  }
+
+  async function pasteImage(el, file) {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    const evt = new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt });
+    el.focus();
+    const accepted = !el.dispatchEvent(evt);
+    log('Paste image ' + file.name + ' — ' + (accepted ? 'accepted' : 'not handled'));
+    return accepted;
+  }
+
   function findTextarea() { return document.querySelector('textarea#description'); }
 
   function findTabs() {
@@ -82,27 +133,6 @@
       const ceInside = el.querySelector('[contenteditable="true"]');
       log('  [' + i + '] ' + el.tagName + '#' + el.id + ' hasContenteditable=' + !!ceInside);
     });
-  }
-
-  // Build DataTransfer with HTML + plain text (for synthetic paste event)
-  function createPasteDataTransfer(html, text) {
-    const dt = new DataTransfer();
-    dt.setData('text/html', html);
-    dt.setData('text/plain', text);
-    return dt;
-  }
-
-  // Dispatch a synthetic paste event with HTML data onto an element
-  function dispatchPaste(el, html, text) {
-    const dt = createPasteDataTransfer(html, text);
-    const pasteEvent = new ClipboardEvent('paste', {
-      bubbles: true,
-      cancelable: true,
-      clipboardData: dt,
-    });
-    const accepted = !el.dispatchEvent(pasteEvent);
-    log('Dispatched paste event on ' + el.tagName + '#' + el.id + ' — ' + (accepted ? 'accepted (prevented default)' : 'not handled'));
-    return accepted;
   }
 
   // After clicking Visual, wait for the DESCRIPTION field's contenteditable to appear
@@ -159,9 +189,13 @@
     if (!data) { log('No report data'); return; }
 
     log('Report found: panel=' + data.panel + ', account=' + data.account);
-    log('HTML length: ' + (data.html || '').length + ', Text length: ' + (data.text || '').length);
+    log('HTML length: ' + (data.html || '').length);
 
-    // Wait for textarea
+    // Step 0: Extract images from HTML
+    const { files, textHtml } = extractImages(data.html);
+    log('Extracted ' + files.length + ' image(s), text HTML length: ' + textHtml.length);
+
+    // Step 1: Wait for textarea
     const ta = await new Promise((resolve) => {
       const start = Date.now();
       const poll = setInterval(() => {
@@ -174,7 +208,7 @@
     if (!ta) { warn('Textarea not found'); showToast('Report ready — paste manually'); return; }
     log('Found textarea#description');
 
-    // Step 1: Click Visual tab
+    // Step 2: Click Visual tab
     const { visualTab } = findTabs();
     if (visualTab) {
       log('Clicking Visual tab');
@@ -185,62 +219,69 @@
       warn('Visual tab not found');
     }
 
-    // Step 2: Debug DOM state
+    // Step 3: Debug DOM state
     debugDomState();
 
-    // Step 3: Try to find the DESCRIPTION contenteditable and dispatch paste
+    // Step 4: Find description editor
     const ce = await waitForDescriptionEditor(5000);
-    if (ce) {
-      log('Found description editor: ' + ce.tagName + '#' + ce.id + ' class=' + ce.className);
-      ce.focus();
-      await new Promise(r => setTimeout(r, 200));
-      const pasted = dispatchPaste(ce, data.html, data.text);
-      if (pasted) {
-        clearReportData();
-        showToast('Report pasted with images ✓');
-        log('Done via paste event on description editor');
-        return;
-      }
-    } else {
+    if (!ce) {
       warn('Description contenteditable not found');
-    }
-
-    // Step 4: Try dispatching paste on the document body or active element
-    log('Trying paste on active element: ' + document.activeElement?.tagName + '#' + document.activeElement?.id);
-    const target = document.activeElement || document.body;
-    target.focus();
-    await new Promise(r => setTimeout(r, 200));
-    const pasted = dispatchPaste(target, data.html, data.text);
-    if (pasted) {
+      // Fallback: try textarea
+      ta.value = data.text || textHtml.replace(/<[^>]+>/g, '');
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
       clearReportData();
-      showToast('Report pasted with images ✓');
-      log('Done via paste event on active element');
+      showToast('Report in Text mode — switch to Visual to see');
+      log('Done (textarea fallback — no editor)');
       return;
     }
 
-    // Step 5: Last resort — try document.execCommand
-    log('Trying execCommand insertHTML');
-    try {
-      const ok = document.execCommand('insertHTML', false, data.html);
-      log('execCommand result: ' + ok);
-      if (ok) {
+    log('Found description editor: ' + ce.tagName + '#' + ce.id + ' class=' + ce.className);
+    ce.focus();
+    await new Promise(r => setTimeout(r, 200));
+
+    // Step 5: Paste text only (no images)
+    log('Pasting text only...');
+    const textPasted = pasteHtml(ce, textHtml, data.text || '');
+    if (!textPasted) {
+      warn('Text paste not accepted, trying execCommand');
+      try {
+        document.execCommand('insertHTML', false, textHtml);
+        log('Text inserted via execCommand');
+      } catch (e) {
+        warn('execCommand failed: ' + e.message);
+        // Last resort — textarea
+        ta.value = data.text || textHtml.replace(/<[^>]+>/g, '');
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
         clearReportData();
-        showToast('Report pasted with images ✓');
-        log('Done via execCommand');
+        showToast('Report in Text mode — switch to Visual to see');
+        log('Done (textarea fallback — paste rejected)');
         return;
       }
-    } catch (e) {
-      warn('execCommand failed: ' + e.message);
     }
 
-    // Step 6: Final fallback — textarea only
-    warn('All injection methods failed, falling back to textarea');
-    ta.value = data.text;
-    ta.dispatchEvent(new Event('input', { bubbles: true }));
-    ta.dispatchEvent(new Event('change', { bubbles: true }));
-    clearReportData();
-    showToast('Report in Text mode — switch to Visual to see');
-    log('Done (textarea fallback)');
+    // Step 6: Paste images one by one
+    if (files.length > 0) {
+      log('Pasting ' + files.length + ' image(s) one by one...');
+      showToast('Pasting report with ' + files.length + ' image(s)...');
+      let imagesPasted = 0;
+      for (let i = 0; i < files.length; i++) {
+        await new Promise(r => setTimeout(r, 500));
+        const ok = await pasteImage(ce, files[i]);
+        if (ok) imagesPasted++;
+      }
+      log('Images pasted: ' + imagesPasted + '/' + files.length);
+      clearReportData();
+      if (imagesPasted > 0) {
+        showToast('Report pasted with ' + imagesPasted + ' image(s)');
+      } else {
+        showToast('Report pasted — attach images manually');
+      }
+    } else {
+      clearReportData();
+      showToast('Report pasted');
+    }
+
+    log('Done!');
   }
 
   if (document.readyState === 'loading') {
