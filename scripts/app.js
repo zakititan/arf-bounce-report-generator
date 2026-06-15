@@ -878,6 +878,7 @@ function generateARF() {
     const assurances = getActiveAssurances('arf');
     const whois = state.arf.whois;
     const hasScreenshots = state.arf.screenshots.length > 0;
+    const hasAssuranceSs = state.arf.assuranceScreenshots.length > 0;
 
     const lines = [
       '#ARF',
@@ -893,7 +894,18 @@ function generateARF() {
       'Assurances : ' + (assurances.length > 0 ? assurances.join(', ') : '-'),
     ];
 
-    const fullCopyText = lines.join('\n\n');
+    const copyLines = [...lines];
+    if (hasScreenshots) {
+      copyLines.push('');
+      copyLines.push('── Screenshots ──');
+      state.arf.screenshots.forEach((s, i) => copyLines.push((i + 1) + '. ' + s.name));
+    }
+    if (hasAssuranceSs) {
+      copyLines.push('');
+      copyLines.push('── Assurance Screenshots ──');
+      state.arf.assuranceScreenshots.forEach((s, i) => copyLines.push((i + 1) + '. ' + s.name));
+    }
+    const fullCopyText = copyLines.join('\n\n');
 
     renderReportOutput('arf', lines, fullCopyText, [
       { screenshots: state.arf.screenshots, label: '── Screenshots ──' },
@@ -972,6 +984,7 @@ function generateBounce() {
     const countDisplay = count !== null ? ' (' + count + ')' : '';
     const assurances = getActiveAssurances('bounce');
     const whois = state.bounce.whois;
+    const hasAssuranceSs = state.bounce.assuranceScreenshots.length > 0;
     const lines = [
       '#Bounce',
       'Previous unblock request for the same account : ' + (v('bounce-prev-unblock') || '-'),
@@ -987,7 +1000,13 @@ function generateBounce() {
       'Assurances : ' + (assurances.length > 0 ? assurances.join(', ') : '-')
     );
 
-    const fullCopyText = lines.join('\n\n');
+    const copyLines = [...lines];
+    if (hasAssuranceSs) {
+      copyLines.push('');
+      copyLines.push('── Assurance Screenshots ──');
+      state.bounce.assuranceScreenshots.forEach((s, i) => copyLines.push((i + 1) + '. ' + s.name));
+    }
+    const fullCopyText = copyLines.join('\n\n');
 
     renderReportOutput('bounce', lines, fullCopyText, [
       { screenshots: state.bounce.assuranceScreenshots, label: '── Assurance Screenshots ──' },
