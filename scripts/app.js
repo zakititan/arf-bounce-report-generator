@@ -1046,7 +1046,9 @@ function createTaeJira(prefix) {
   // Send report data to browser extension (if installed)
   const outputArea = outputSection.querySelector('.output-area');
   const reportText = (outputArea?.dataset.copyText) || document.getElementById(prefix + '-output-text')?.textContent || '';
-  const reportHtml = outputArea?.innerHTML || '';
+  // Build clean HTML for extension (monospace-wrapped, no raw DOM elements)
+  const reportHtml = '<div style="font-family:DM Mono,Courier New,monospace;font-size:12px;line-height:1.9;">' +
+    escapeHtml(reportText) + '</div>';
   window.postMessage({
     type: 'REPORT_GENERATOR_JIRA',
     text: reportText,

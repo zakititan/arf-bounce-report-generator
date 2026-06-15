@@ -9,7 +9,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://arf-bounce-report-generator.vercel.app/*"],
+      "matches": ["https://arf-bounce-report-generator*.vercel.app/*"],
       "js": ["content-webapp.js"]
     },
     {
