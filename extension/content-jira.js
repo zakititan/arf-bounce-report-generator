@@ -84,11 +84,32 @@
     });
   }
 
-  // Build DataTransfer with HTML + plain text (for synthetic paste event)
+  // Convert a base64 data URL to a File object
+  function dataUrlToFile(dataUrl, filename) {
+    const [header, base64] = dataUrl.split(',');
+    const mime = header.match(/:(.*?);/)[1];
+    const binary = atob(base64);
+    const array = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) array[i] = binary.charCodeAt(i);
+    return new File([array], filename, { type: mime });
+  }
+
+  // Build DataTransfer with HTML + plain text + binary image File items
   function createPasteDataTransfer(html, text) {
     const dt = new DataTransfer();
     dt.setData('text/html', html);
     dt.setData('text/plain', text);
+
+    // Extract data-URL images and add as File items
+    // This triggers JIRA's image upload path instead of its broken data-URI handling
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const imgs = doc.querySelectorAll('img[src^="data:"]');
+    imgs.forEach((img, i) => {
+      const file = dataUrlToFile(img.src, img.alt || ('screenshot-' + (i + 1) + '.png'));
+      dt.items.add(file);
+      log('Added image File item: ' + file.name + ' (' + file.type + ', ' + file.size + ' bytes)');
+    });
+    log('DataTransfer created: text/html + text/plain + ' + imgs.length + ' image file(s)');
     return dt;
   }
 
