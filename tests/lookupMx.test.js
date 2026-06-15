@@ -29,6 +29,17 @@ describe('lookupMx', () => {
     assert.deepStrictEqual(result, { region: 'eu' });
   });
 
+  it('strips trailing dot from DNS response', async () => {
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        Answer: [{ type: 15, data: '10 mx0101.titan.email.' }]
+      })
+    });
+    const result = await lookupMx('example.com');
+    assert.deepStrictEqual(result, { region: 'eu' });
+  });
+
   it('strips MX priority prefix', async () => {
     globalThis.fetch = async () => ({
       ok: true,

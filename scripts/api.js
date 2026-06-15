@@ -97,7 +97,7 @@ export async function lookupMx(domain) {
     const answers = data.Answer || [];
     for (const a of answers) {
       if (a.type !== 15) continue;
-      const exchange = (a.data || '').split(' ').pop();
+      const exchange = (a.data || '').split(' ').pop().replace(/\.$/, '');
       if (exchange === 'mx0101.titan.email') return { region: 'eu' };
       if (exchange === 'mx1.titan.email') return { region: 'na' };
     }
