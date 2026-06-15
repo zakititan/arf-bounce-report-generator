@@ -46,7 +46,7 @@ export default withMiddleware(async function handler(req, res) {
   return res.status(200).json(result);
 });
 
-async function lookupDkim(selector, domain) {
+export async function lookupDkim(selector, domain) {
   const hostname = `${selector}._domainkey.${domain}`;
   const url = `https://dns.google/resolve?name=${encodeURIComponent(hostname)}&type=TXT`;
   try {
