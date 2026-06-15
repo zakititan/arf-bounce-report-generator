@@ -1,7 +1,7 @@
 // ── Content script: JIRA create issue page ────────────────────────────
 // Reads stored report data and injects into the JIRA description editor.
-// Supports JIRA Cloud (ProseMirror), JIRA Server (textarea/wiki markup),
-// and generic contenteditable editors.
+// Supports JIRA Cloud (ProseMirror), JIRA Server 7.x (TinyMCE + Visual/Text tabs),
+// and generic contenteditable / textarea editors.
 
 (() => {
   const POLL_INTERVAL = 200;
@@ -32,30 +32,32 @@
     }, 4000);
   }
 
-  // Try multiple selectors to find the description editor
   function findEditor() {
-    // 1. JIRA Cloud — ProseMirror editor
+    // 1. JIRA Cloud — ProseMirror
     let el = document.querySelector('.ProseMirror[contenteditable="true"]');
     if (el) return { type: 'prosemirror', element: el };
 
-    // 2. JIRA Server — wiki markup textarea
-    el = document.querySelector('textarea#description');
-    if (el) return { type: 'textarea', element: el };
+    // 2. JIRA Server 7.x — TinyMCE visual editor
+    if (typeof tinymce !== 'undefined' && tinymce.get) {
+      const ed = tinymce.get('description');
+      if (ed) return { type: 'tinymce', editor: ed };
+    }
 
-    // 3. JIRA Server — rich text editor wrapper
-    el = document.querySelector('#description-wiki-edit .user-input-block');
-    if (el) return { type: 'contenteditable', element: el };
+    // 3. JIRA Server — visible textarea (Text mode already active)
+    const ta = document.querySelector('textarea#description');
+    if (ta && ta.offsetParent !== null) return { type: 'textarea', element: ta };
 
-    // 4. Generic — data-field attribute
+    // 4. JIRA Server — hidden textarea (Visual mode active, need to switch)
+    if (ta) return { type: 'textarea-hidden', element: ta };
+
+    // 5. Generic contenteditable
     el = document.querySelector('[data-field-id="description"][contenteditable="true"]');
     if (el) return { type: 'contenteditable', element: el };
 
-    // 5. JIRA Server — Atlassian editor in ADF mode
-    el = document.querySelector('.ak-editor-content-area .ProseMirror');
-    if (el) return { type: 'prosemirror', element: el };
-
-    // 6. Any contenteditable inside the description field area
     el = document.querySelector('#description-val[contenteditable="true"]');
+    if (el) return { type: 'contenteditable', element: el };
+
+    el = document.querySelector('#description-wiki-edit .user-input-block');
     if (el) return { type: 'contenteditable', element: el };
 
     return null;
@@ -77,33 +79,62 @@
     });
   }
 
-  function injectReport(editorInfo, html, text) {
-    const { type, element } = editorInfo;
+  function switchToTextMode() {
+    // JIRA Server: click the "Text" tab to switch from Visual to wiki markup
+    const tabs = document.querySelectorAll('#description-wiki-edit .tabs a, #description-wiki-edit .tab, .wiki-edit-renderer');
+    for (const tab of tabs) {
+      if (tab.textContent.trim().toLowerCase() === 'text') {
+        tab.click();
+        return true;
+      }
+    }
+    // Fallback: try data-mode attribute
+    const textTab = document.querySelector('#description-wiki-edit a[data-mode="text"], #description-wiki-edit [data-mode="wiki"]');
+    if (textTab) { textTab.click(); return true; }
+    return false;
+  }
 
-    if (type === 'textarea') {
-      // JIRA Server wiki markup — set value and dispatch events
-      element.value = text;
-      element.dispatchEvent(new Event('input', { bubbles: true }));
-      element.dispatchEvent(new Event('change', { bubbles: true }));
+  function injectReport(editorInfo, html, text) {
+    const { type } = editorInfo;
+
+    if (type === 'tinymce') {
+      // JIRA Server TinyMCE — use API to set content
+      const ed = editorInfo.editor;
+      ed.setContent(text);
+      ed.fire('change');
+    } else if (type === 'textarea') {
+      // Text mode — set value directly
+      editorInfo.element.value = text;
+      editorInfo.element.dispatchEvent(new Event('input', { bubbles: true }));
+      editorInfo.element.dispatchEvent(new Event('change', { bubbles: true }));
+    } else if (type === 'textarea-hidden') {
+      // Visual mode active — switch to Text mode first
+      switchToTextMode();
+      // Wait for mode switch, then set value
+      setTimeout(() => {
+        const ta = document.querySelector('textarea#description');
+        if (ta) {
+          ta.value = text;
+          ta.dispatchEvent(new Event('input', { bubbles: true }));
+          ta.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }, 200);
     } else if (type === 'prosemirror') {
-      // JIRA Cloud / ADF — set innerHTML and dispatch InputEvent
-      element.focus();
-      element.innerHTML = html;
-      element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
+      // JIRA Cloud — set innerHTML
+      editorInfo.element.focus();
+      editorInfo.element.innerHTML = html;
+      editorInfo.element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
     } else {
-      // Generic contenteditable — set innerHTML and dispatch events
-      element.focus();
-      element.innerHTML = html;
-      element.dispatchEvent(new Event('input', { bubbles: true }));
+      // Generic contenteditable
+      editorInfo.element.focus();
+      editorInfo.element.innerHTML = html;
+      editorInfo.element.dispatchEvent(new Event('input', { bubbles: true }));
     }
   }
 
   function run() {
     chrome.runtime.sendMessage({ action: 'get-report' }, async (response) => {
-      if (chrome.runtime.lastError) {
-        // Extension context invalidated or no response — do nothing
-        return;
-      }
+      if (chrome.runtime.lastError) return;
       if (!response || !response.found || !response.data) return;
 
       try {
@@ -117,7 +148,6 @@
     });
   }
 
-  // Run when DOM is ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', run);
   } else {
