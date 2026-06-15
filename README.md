@@ -76,7 +76,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
   - The extension stores report data in `chrome.storage.local` (no background service worker relay needed)
   - On JIRA, it clicks the **Visual** tab, finds the description field's contenteditable editor (Atlassian JEP), and dispatches a synthetic `ClipboardEvent('paste')` with the full HTML in a `DataTransfer` — so JIRA's own paste handler processes images natively
   - Supports JIRA Server v7.13+ (Atlassian JEP editor); falls back gracefully if the visual editor isn't found
-  - Install by loading the `extension/` folder as an unpacked extension in `chrome://extensions` (Developer mode), or distribute the `.crx` file
+  - Install by loading the `extension/` folder as an unpacked extension in `chrome://extensions` (Developer mode)
 
 ### Mailboards Integration
 - **Check on Mailboards** — a "Check on Mailboards" link sits below the Account field in both ARF and Bounce panels, linking to [mailboards.ops.titan.email](https://mailboards.ops.titan.email)
