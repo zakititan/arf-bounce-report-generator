@@ -1,5 +1,5 @@
 // ── Content script: Report Generator web app ─────────────────────────
-// Listens for report data from the page and forwards to background.
+// Listens for report data from the page and stores directly in chrome.storage.local.
 
 window.addEventListener('message', (event) => {
   if (event.source !== window) return;
@@ -8,15 +8,13 @@ window.addEventListener('message', (event) => {
   const { text, html, panel, account, timestamp } = event.data;
   if (!text && !html) return;
 
-  chrome.runtime.sendMessage(
-    {
-      action: 'store-report',
-      data: { text, html, panel, account, timestamp },
-    },
-    (response) => {
-      if (chrome.runtime.lastError) {
-        console.warn('[Report→JIRA] Failed to store report:', chrome.runtime.lastError.message);
-      }
+  const reportData = { text, html, panel, account, timestamp: timestamp || Date.now() };
+
+  chrome.storage.local.set({ reportData }, () => {
+    if (chrome.runtime.lastError) {
+      console.warn('[Report→JIRA] Storage write failed:', chrome.runtime.lastError.message);
+    } else {
+      console.log('[Report→JIRA] Report stored successfully');
     }
-  );
+  });
 });

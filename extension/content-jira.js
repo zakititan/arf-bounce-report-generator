@@ -1,11 +1,16 @@
 // ── Content script: JIRA create issue page ────────────────────────────
-// Reads stored report data and injects into the JIRA description editor.
-// Supports JIRA Cloud (ProseMirror), JIRA Server 7.x (TinyMCE + Visual/Text tabs),
+// Reads stored report data directly from chrome.storage.local
+// and injects into the JIRA description editor.
+// Supports JIRA Cloud (ProseMirror), JIRA Server 7.x (TinyMCE / wiki markup),
 // and generic contenteditable / textarea editors.
 
 (() => {
-  const POLL_INTERVAL = 200;
+  const POLL_INTERVAL = 300;
   const MAX_WAIT_MS = 15000;
+  const EXPIRY_MS = 10 * 60 * 1000;
+
+  function log(msg) { console.log('[Report→JIRA] ' + msg); }
+  function warn(msg) { console.warn('[Report→JIRA] ' + msg); }
 
   function showToast(message) {
     const toast = document.createElement('div');
@@ -32,33 +37,73 @@
     }, 4000);
   }
 
-  function findEditor() {
-    // 1. JIRA Cloud — ProseMirror
-    let el = document.querySelector('.ProseMirror[contenteditable="true"]');
-    if (el) return { type: 'prosemirror', element: el };
+  // Read report data directly from chrome.storage.local
+  function getReportData() {
+    return new Promise((resolve) => {
+      chrome.storage.local.get('reportData', (result) => {
+        if (chrome.runtime.lastError) {
+          warn('Storage read failed: ' + chrome.runtime.lastError.message);
+          resolve(null);
+          return;
+        }
+        const data = result.reportData;
+        if (!data) {
+          resolve(null);
+          return;
+        }
+        // Check expiry
+        if (Date.now() - (data.timestamp || 0) > EXPIRY_MS) {
+          log('Report data expired, discarding');
+          chrome.storage.local.remove('reportData');
+          resolve(null);
+          return;
+        }
+        resolve(data);
+      });
+    });
+  }
 
-    // 2. JIRA Server 7.x — TinyMCE visual editor
+  // Delete report data from storage (one-shot)
+  function clearReportData() {
+    chrome.storage.local.remove('reportData');
+  }
+
+  function findEditor() {
+    // 1. JIRA Server — TinyMCE visual editor
     if (typeof tinymce !== 'undefined' && tinymce.get) {
       const ed = tinymce.get('description');
-      if (ed) return { type: 'tinymce', editor: ed };
+      if (ed) { log('Found TinyMCE editor'); return { type: 'tinymce', editor: ed }; }
     }
 
-    // 3. JIRA Server — visible textarea (Text mode already active)
+    // 2. JIRA Server — visible textarea (Text mode active)
     const ta = document.querySelector('textarea#description');
-    if (ta && ta.offsetParent !== null) return { type: 'textarea', element: ta };
+    if (ta && ta.offsetParent !== null) {
+      log('Found visible textarea (Text mode)');
+      return { type: 'textarea', element: ta };
+    }
 
-    // 4. JIRA Server — hidden textarea (Visual mode active, need to switch)
-    if (ta) return { type: 'textarea-hidden', element: ta };
+    // 3. JIRA Server — hidden textarea (Visual mode active)
+    if (ta) {
+      log('Found hidden textarea (Visual mode)');
+      return { type: 'textarea-hidden', element: ta };
+    }
 
-    // 5. Generic contenteditable
-    el = document.querySelector('[data-field-id="description"][contenteditable="true"]');
-    if (el) return { type: 'contenteditable', element: el };
+    // 4. JIRA Cloud — ProseMirror
+    let el = document.querySelector('.ProseMirror[contenteditable="true"]');
+    if (el) { log('Found ProseMirror editor'); return { type: 'prosemirror', element: el }; }
 
+    // 5. Any visible contenteditable
+    const edits = document.querySelectorAll('[contenteditable="true"]');
+    for (const e of edits) {
+      if (e.offsetParent !== null && e.id && e.id.toLowerCase().includes('description')) {
+        log('Found contenteditable: #' + e.id);
+        return { type: 'contenteditable', element: e };
+      }
+    }
+
+    // 6. Generic contenteditable fallback
     el = document.querySelector('#description-val[contenteditable="true"]');
-    if (el) return { type: 'contenteditable', element: el };
-
-    el = document.querySelector('#description-wiki-edit .user-input-block');
-    if (el) return { type: 'contenteditable', element: el };
+    if (el) { log('Found #description-val'); return { type: 'contenteditable', element: el }; }
 
     return null;
   }
@@ -73,6 +118,12 @@
           resolve(editor);
         } else if (Date.now() - start > MAX_WAIT_MS) {
           clearInterval(poll);
+          // Last resort: dump DOM info for debugging
+          const textareas = document.querySelectorAll('textarea');
+          const editables = document.querySelectorAll('[contenteditable]');
+          warn('Editor not found. Textareas: ' + textareas.length + ', contenteditables: ' + editables.length);
+          textareas.forEach(t => warn('  textarea: #' + t.id + ' class=' + t.className));
+          editables.forEach(e => warn('  contenteditable: #' + e.id + ' class=' + e.className));
           reject(new Error('Editor not found within timeout'));
         }
       }, POLL_INTERVAL);
@@ -80,74 +131,106 @@
   }
 
   function switchToTextMode() {
-    // JIRA Server: click the "Text" tab to switch from Visual to wiki markup
-    const tabs = document.querySelectorAll('#description-wiki-edit .tabs a, #description-wiki-edit .tab, .wiki-edit-renderer');
-    for (const tab of tabs) {
-      if (tab.textContent.trim().toLowerCase() === 'text') {
-        tab.click();
+    // JIRA Server: find and click the "Text" tab near the description field
+    const container = document.querySelector('#description-wiki-edit') ||
+                      document.querySelector('#description-field');
+    if (!container) {
+      warn('No description container found for tab switching');
+      return false;
+    }
+
+    // Look for tab links inside the container
+    const allLinks = container.querySelectorAll('a, button, span, div');
+    for (const el of allLinks) {
+      const txt = el.textContent.trim().toLowerCase();
+      if (txt === 'text' || txt === 'wiki' || txt === 'source') {
+        log('Clicking tab: ' + el.textContent.trim());
+        el.click();
         return true;
       }
     }
-    // Fallback: try data-mode attribute
-    const textTab = document.querySelector('#description-wiki-edit a[data-mode="text"], #description-wiki-edit [data-mode="wiki"]');
-    if (textTab) { textTab.click(); return true; }
+
+    // Fallback: try data-mode attributes
+    const modeTab = container.querySelector('[data-mode="text"], [data-mode="wiki"], [data-mode="source"]');
+    if (modeTab) {
+      log('Clicking data-mode tab');
+      modeTab.click();
+      return true;
+    }
+
+    warn('Could not find Text tab to click');
     return false;
   }
 
-  function injectReport(editorInfo, html, text) {
+  function injectReport(editorInfo, text) {
     const { type } = editorInfo;
 
     if (type === 'tinymce') {
-      // JIRA Server TinyMCE — use API to set content
       const ed = editorInfo.editor;
-      ed.setContent(text);
+      ed.setContent('<p>' + text.replace(/\n/g, '</p><p>') + '</p>');
       ed.fire('change');
+      ed.fire('input');
+      log('Injected via TinyMCE.setContent()');
     } else if (type === 'textarea') {
-      // Text mode — set value directly
       editorInfo.element.value = text;
       editorInfo.element.dispatchEvent(new Event('input', { bubbles: true }));
       editorInfo.element.dispatchEvent(new Event('change', { bubbles: true }));
+      log('Injected via textarea.value');
     } else if (type === 'textarea-hidden') {
-      // Visual mode active — switch to Text mode first
-      switchToTextMode();
-      // Wait for mode switch, then set value
-      setTimeout(() => {
-        const ta = document.querySelector('textarea#description');
-        if (ta) {
-          ta.value = text;
-          ta.dispatchEvent(new Event('input', { bubbles: true }));
-          ta.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-      }, 200);
+      const switched = switchToTextMode();
+      if (switched) {
+        setTimeout(() => {
+          const ta = document.querySelector('textarea#description');
+          if (ta) {
+            ta.value = text;
+            ta.dispatchEvent(new Event('input', { bubbles: true }));
+            ta.dispatchEvent(new Event('change', { bubbles: true }));
+            log('Injected via textarea after mode switch');
+          }
+        }, 300);
+      } else {
+        // Can't switch — try setting hidden textarea directly
+        editorInfo.element.value = text;
+        editorInfo.element.dispatchEvent(new Event('change', { bubbles: true }));
+        log('Set hidden textarea value (mode switch failed)');
+      }
     } else if (type === 'prosemirror') {
-      // JIRA Cloud — set innerHTML
-      editorInfo.element.focus();
+      const html = '<p>' + text.replace(/\n/g, '</p><p>') + '</p>';
       editorInfo.element.innerHTML = html;
       editorInfo.element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
-    } else {
-      // Generic contenteditable
-      editorInfo.element.focus();
+      log('Injected via ProseMirror innerHTML');
+    } else if (type === 'contenteditable') {
+      const html = '<p>' + text.replace(/\n/g, '</p><p>') + '</p>';
       editorInfo.element.innerHTML = html;
       editorInfo.element.dispatchEvent(new Event('input', { bubbles: true }));
+      log('Injected via contenteditable innerHTML');
     }
   }
 
-  function run() {
-    chrome.runtime.sendMessage({ action: 'get-report' }, async (response) => {
-      if (chrome.runtime.lastError) return;
-      if (!response || !response.found || !response.data) return;
+  async function run() {
+    log('Content script loaded on: ' + window.location.href);
 
-      try {
-        const editorInfo = await waitForEditor();
-        injectReport(editorInfo, response.data.html, response.data.text);
-        showToast('Report auto-pasted from Report Generator ✓');
-      } catch (err) {
-        console.warn('[Report→JIRA]', err.message);
-        showToast('Report ready — paste manually with Ctrl+V');
-      }
-    });
+    const data = await getReportData();
+    if (!data) {
+      log('No report data found in storage');
+      return;
+    }
+
+    log('Report data found (panel=' + data.panel + ', account=' + data.account + ')');
+
+    try {
+      const editorInfo = await waitForEditor();
+      injectReport(editorInfo, data.text);
+      clearReportData();
+      showToast('Report auto-pasted from Report Generator ✓');
+      log('Done!');
+    } catch (err) {
+      warn(err.message);
+      showToast('Report ready — paste manually with Ctrl+V');
+    }
   }
 
+  // Run when DOM is ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', run);
   } else {
