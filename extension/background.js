@@ -145,7 +145,7 @@ async function markDone(issueKey) {
     );
 
     if (transPostResp.ok) {
-      await fetch(
+      const commentResp = await fetch(
         `https://jira.directi.com/rest/api/2/issue/${issueKey}/comment`,
         {
           method: 'POST',
@@ -154,6 +154,10 @@ async function markDone(issueKey) {
           body: JSON.stringify({ body: 'Unsuspended' })
         }
       );
+      if (!commentResp.ok) {
+        const err = await commentResp.text();
+        console.warn('[Report→JIRA] comment failed:', commentResp.status, err);
+      }
     }
   } catch (e) {
     console.warn('[Report→JIRA] markDone failed:', e.message);
