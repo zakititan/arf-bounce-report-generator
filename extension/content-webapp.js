@@ -18,40 +18,56 @@
 
   window.addEventListener('message', function (event) {
     if (event.source !== window) return;
-    if (!event.data || event.data.type !== 'REPORT_GENERATOR_JIRA') return;
+    if (!event.data) return;
     if (typeof chrome === 'undefined' || !chrome.storage) {
       console.warn('[Report→JIRA] chrome.storage not available — is the extension installed?');
       return;
     }
 
-    var data = event.data;
-    var text = data.text;
-    var html = data.html;
-    var panel = data.panel;
-    var account = data.account;
-    var zdLink = data.zdLink;
+    if (event.data.type === 'REPORT_GENERATOR_JIRA') {
+      var data = event.data;
+      var text = data.text;
+      var html = data.html;
+      var panel = data.panel;
+      var account = data.account;
+      var zdLink = data.zdLink;
 
-    if (!text && !html) return;
+      if (!text && !html) return;
 
-    chrome.runtime.sendMessage(
-      { action: 'create-jira', data: { text: text, html: html, panel: panel, account: account, zdLink: zdLink } },
-      function (response) {
-        if (chrome.runtime.lastError) {
-          fallbackToStorage(text, html, panel, account);
-          return;
-        }
-
-        if (response && response.success === true) {
-          var msg = '<span>JIRA <a href="' + response.issueUrl + '" target="_blank" style="color:#5b9bd5;text-decoration:underline;">' + response.issueKey + '</a> created</span>';
-          if (response.imagesUploaded < response.imagesTotal) {
-            msg += ' — ' + response.imagesUploaded + '/' + response.imagesTotal + ' images attached';
+      chrome.runtime.sendMessage(
+        { action: 'create-jira', data: { text: text, html: html, panel: panel, account: account, zdLink: zdLink } },
+        function (response) {
+          if (chrome.runtime.lastError) {
+            fallbackToStorage(text, html, panel, account);
+            return;
           }
-          showToast(msg);
-        } else {
-          fallbackToStorage(text, html, panel, account);
+
+          if (response && response.success === true) {
+            var msg = '<span>JIRA <a href="' + response.issueUrl + '" target="_blank" style="color:#5b9bd5;text-decoration:underline;">' + response.issueKey + '</a> created</span>';
+            if (response.imagesUploaded < response.imagesTotal) {
+              msg += ' — ' + response.imagesUploaded + '/' + response.imagesTotal + ' images attached';
+            }
+            showToast(msg);
+          } else {
+            fallbackToStorage(text, html, panel, account);
+          }
         }
-      }
-    );
+      );
+    }
+
+    if (event.data.type === 'REPORT_GENERATOR_UNSUSPEND') {
+      var unsuspendData = event.data;
+      var abuseDeskUrl = 'https://abusedesk.ops.titan.email/blocked_users.html?entity=' +
+        encodeURIComponent(unsuspendData.account) + '&region=' + unsuspendData.region;
+
+      chrome.storage.local.set({
+        unsuspendReason: unsuspendData.reason,
+        unsuspendAccount: unsuspendData.account
+      }, function () {
+        window.open(abuseDeskUrl, '_blank');
+        showToast('Abuse Desk opened — extension will complete unsuspend');
+      });
+    }
   });
 
   function fallbackToStorage(text, html, panel, account) {

@@ -337,6 +337,9 @@ function initEventDelegation() {
       case 'create-jira':
         createTaeJira(panel);
         break;
+      case 'unsuspend':
+        unsuspendAccount(panel);
+        break;
       case 'copy': {
         const copyTarget = target.getAttribute('data-target');
         if (copyTarget) copyOutputWithFeedback(copyTarget);
@@ -1082,4 +1085,31 @@ function createTaeJira(prefix) {
   }, '*');
 
   showToast('Creating JIRA ticket...', 'info');
+}
+
+function unsuspendAccount(prefix) {
+  const outputSection = document.getElementById(prefix + '-output-section');
+  if (!outputSection || outputSection.style.display === 'none') {
+    showToast('Please generate the report first.', 'warning');
+    return;
+  }
+
+  const account = document.getElementById(prefix + '-account')?.value.trim() || '';
+  if (!account) {
+    showToast('Please enter an account name.', 'warning');
+    return;
+  }
+
+  const zdLink = document.getElementById(prefix + '-zd-link')?.value.trim() || '';
+  const region = (prefix === 'arf' ? state.arf : state.bounce).region === 'eu' ? 'eu-central-1' : 'us-east-1';
+  const reason = zdLink || 'Unsuspension requested via Report Generator';
+
+  window.postMessage({
+    type: 'REPORT_GENERATOR_UNSUSPEND',
+    account: account,
+    region: region,
+    reason: reason,
+  }, '*');
+
+  showToast('Opening Abuse Desk to unsuspend ' + account + '...', 'info');
 }

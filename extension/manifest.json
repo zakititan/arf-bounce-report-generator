@@ -16,6 +16,10 @@
     {
       "matches": ["https://jira.directi.com/*"],
       "js": ["content-jira.js"]
+    },
+    {
+      "matches": ["https://abusedesk.ops.titan.email/*"],
+      "js": ["content-abusedesk.js"]
     }
   ],
   "icons": {
