@@ -23,102 +23,112 @@
 
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
-  function findButtonByPartialText(text) {
-    var all = document.querySelectorAll(
-      'button, a, input[type="button"], input[type="submit"], span[role="button"], div[role="button"], [onclick]'
-    );
-    for (var i = 0; i < all.length; i++) {
-      var el = all[i];
-      var content = (el.value || el.textContent || '').trim();
-      if (content.includes(text)) return el;
-    }
-    return null;
-  }
-
-  function waitForButton(text, maxMs) {
-    return new Promise(function (resolve) {
-      var start = Date.now();
-      var poll = setInterval(function () {
-        var btn = findButtonByPartialText(text);
-        if (btn) { clearInterval(poll); resolve(btn); return; }
-        if (Date.now() - start > maxMs) { clearInterval(poll); resolve(null); }
-      }, POLL_INTERVAL);
-    });
+  function simulateClick(el) {
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    el.click();
   }
 
   async function run() {
     chrome.storage.local.get(['unsuspendReason', 'unsuspendAccount'], async function (result) {
       var reason = result.unsuspendReason;
       var account = result.unsuspendAccount;
-      if (!reason) { log('No unsuspend reason in storage — page loaded normally, not via extension'); return; }
+      if (!reason) { log('No unsuspend reason in storage'); return; }
 
       chrome.storage.local.remove(['unsuspendReason', 'unsuspendAccount']);
       log('Starting unsuspend automation for ' + account);
 
-      var unblockBtn = await waitForButton('Unblock', MAX_WAIT_MS);
+      await sleep(2000);
+
+      log('Scanning page for all clickable elements...');
+      var allEls = document.querySelectorAll('*');
+      var buttons = [];
+      for (var i = 0; i < allEls.length; i++) {
+        var el = allEls[i];
+        var tag = el.tagName.toLowerCase();
+        if (tag === 'button' || tag === 'a' || tag === 'input' || el.getAttribute('role') === 'button') {
+          var txt = (el.value || el.textContent || '').trim().substring(0, 80);
+          if (txt) buttons.push({ tag: tag, class: el.className, text: txt, visible: el.offsetParent !== null });
+        }
+      }
+      log('Found ' + buttons.length + ' buttons: ' + JSON.stringify(buttons.slice(0, 30)));
+
+      var unblockBtn = null;
+      for (var i = 0; i < allEls.length; i++) {
+        var txt = (allEls[i].value || allEls[i].textContent || '').trim();
+        if (txt === 'Unblock' || txt.includes('Unblock')) {
+          unblockBtn = allEls[i];
+          break;
+        }
+      }
+
       if (!unblockBtn) {
         log('Unblock button not found');
         showToast('Could not find Unblock button');
         return;
       }
       log('Clicking Unblock');
-      unblockBtn.click();
+      simulateClick(unblockBtn);
 
-      var textarea = await waitForElement('textarea', MAX_WAIT_MS);
+      await sleep(1000);
+
+      var textarea = document.querySelector('textarea');
       if (!textarea) {
         log('Reason textarea not found');
         showToast('Could not find reason textarea');
         return;
       }
       log('Pasting reason into textarea');
-
       textarea.focus();
       textarea.value = reason;
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
       textarea.dispatchEvent(new Event('change', { bubbles: true }));
 
-      log('Waiting for framework to process textarea change...');
-      await sleep(1000);
+      await sleep(1500);
 
-      log('Searching for Save button...');
-      var saveBtn = await waitForButton('Save reason and proceed', MAX_WAIT_MS);
+      log('Scanning for Save button after textarea fill...');
+      var allEls2 = document.querySelectorAll('*');
+      var saveBtn = null;
+      for (var i = 0; i < allEls2.length; i++) {
+        var el = allEls2[i];
+        var txt = (el.value || el.textContent || '').trim();
+        if (txt.includes('Save reason and proceed')) {
+          saveBtn = el;
+          log('Found Save button: <' + el.tagName + '> class="' + el.className + '"');
+          break;
+        }
+      }
 
       if (!saveBtn) {
-        log('Initial search failed — scanning ALL elements on page...');
-        var allEls = document.querySelectorAll('*');
-        for (var i = 0; i < allEls.length; i++) {
-          var el = allEls[i];
-          var txt = (el.value || el.textContent || '').trim();
-          if (txt.includes('Save reason') || txt === 'Save' || txt === 'Save reason and proceed') {
-            log('Found match: <' + el.tagName + '> class="' + el.className + '" text="' + txt.substring(0, 50) + '"');
-            saveBtn = el;
-            break;
+        log('Save button not found — trying to click any green/blue button in modal...');
+        var modal = document.querySelector('.modal, .modal-content, [role="dialog"], .popup, .overlay');
+        if (modal) {
+          log('Found modal container: <' + modal.tagName + '>');
+          var modalBtns = modal.querySelectorAll('button, a, input[type="button"], input[type="submit"]');
+          log('Modal has ' + modalBtns.length + ' buttons');
+          for (var i = 0; i < modalBtns.length; i++) {
+            var b = modalBtns[i];
+            var btxt = (b.value || b.textContent || '').trim();
+            log('  Button[' + i + ']: "' + btxt.substring(0, 60) + '"');
+            if (btxt.includes('Save') || btxt.includes('Proceed') || btxt.includes('Confirm')) {
+              saveBtn = b;
+              break;
+            }
           }
         }
       }
 
       if (!saveBtn) {
-        log('Save button NOT found after full scan');
+        log('Save button NOT found — showing all buttons on page');
         showToast('Could not find Save button — check console');
         return;
       }
 
-      log('Clicking Save: <' + saveBtn.tagName + '>');
-      saveBtn.click();
+      log('Clicking Save button');
+      simulateClick(saveBtn);
 
+      await sleep(500);
       showToast('Unsuspend completed for ' + account);
       log('Automation complete for ' + account);
-    });
-  }
-
-  function waitForElement(selector, maxMs) {
-    return new Promise(function (resolve) {
-      var start = Date.now();
-      var poll = setInterval(function () {
-        var el = document.querySelector(selector);
-        if (el) { clearInterval(poll); resolve(el); return; }
-        if (Date.now() - start > maxMs) { clearInterval(poll); resolve(null); }
-      }, POLL_INTERVAL);
     });
   }
 
