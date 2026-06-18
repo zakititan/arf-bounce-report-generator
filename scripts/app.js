@@ -1079,6 +1079,5 @@ function createTaeJira(prefix) {
     timestamp: Date.now(),
   }, '*');
 
-  window.open(jiraUrl, '_blank');
-  showToast('JIRA opened! Report will auto-paste if the extension is installed — or press Ctrl+V manually.', 'success');
+  showToast('Creating JIRA ticket...', 'info');
 }

@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Report Generator → JIRA",
-  "version": "1.0",
-  "description": "Auto-pastes reports from ARF & Bounce Report Generator into JIRA description field",
+  "version": "2.0",
+  "description": "Auto-creates JIRA tickets from ARF & Bounce Report Generator",
   "permissions": ["storage"],
+  "host_permissions": ["https://jira.directi.com/*"],
   "background": {
     "service_worker": "background.js"
   },
