@@ -1074,6 +1074,7 @@ function createTaeJira(prefix) {
   const reportHtml = outputArea ? Array.from(outputArea.childNodes)
     .filter(el => !el.classList?.contains('copy-btn-wrap'))
     .map(el => el.outerHTML).join('') : '';
+  const region = (prefix === 'arf' ? state.arf : state.bounce).region === 'eu' ? 'eu-central-1' : 'us-east-1';
   window.postMessage({
     type: 'REPORT_GENERATOR_JIRA',
     text: reportText,
@@ -1081,6 +1082,7 @@ function createTaeJira(prefix) {
     panel: prefix,
     account: account,
     zdLink: zdLink,
+    region: region,
     timestamp: Date.now(),
   }, '*');
 
@@ -1102,7 +1104,7 @@ function unsuspendAccount(prefix) {
 
   const zdLink = document.getElementById(prefix + '-zd-link')?.value.trim() || '';
   const region = (prefix === 'arf' ? state.arf : state.bounce).region === 'eu' ? 'eu-central-1' : 'us-east-1';
-  const reason = zdLink || 'Unsuspension requested via Report Generator';
+  const reason = zdLink || 'no jira created';
 
   window.postMessage({
     type: 'REPORT_GENERATOR_UNSUSPEND',

@@ -43,11 +43,25 @@
           }
 
           if (response && response.success === true) {
-            var msg = '<span>JIRA <a href="' + response.issueUrl + '" target="_blank" style="color:#5b9bd5;text-decoration:underline;">' + response.issueKey + '</a> created</span>';
+            var jiraUrl = response.issueUrl;
+            var msg = '<span>JIRA <a href="' + jiraUrl + '" target="_blank" style="color:#5b9bd5;text-decoration:underline;">' + response.issueKey + '</a> created</span>';
             if (response.imagesUploaded < response.imagesTotal) {
               msg += ' — ' + response.imagesUploaded + '/' + response.imagesTotal + ' images attached';
             }
             showToast(msg);
+
+            var abuseDeskUrl = 'https://abusedesk.ops.titan.email/blocked_users.html?entity=' +
+              encodeURIComponent(data.account) + '&region=' + data.region;
+
+            chrome.storage.local.set({
+              unsuspendReason: jiraUrl,
+              unsuspendAccount: data.account
+            }, function () {
+              window.open(abuseDeskUrl, '_blank');
+              setTimeout(function () {
+                showToast('JIRA created — Abuse Desk opened for unsuspend');
+              }, 500);
+            });
           } else {
             fallbackToStorage(text, html, panel, account);
           }
