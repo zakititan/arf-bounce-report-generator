@@ -208,10 +208,7 @@ async function markDone(issueKey) {
 
     const doneTransition = transitions.find(t => t.id === '71');
 
-    if (!doneTransition) {
-      console.log('[Report→JIRA] markDone: transition 71 (Done) not found');
-      return;
-    }
+    if (!doneTransition) return;
 
     const transPostResp = await fetch(
       `https://jira.directi.com/rest/api/2/issue/${issueKey}/transitions`,
