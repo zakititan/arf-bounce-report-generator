@@ -14,7 +14,6 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Paste screenshots on hover** — hover over any upload zone and press `Ctrl+V` to paste clipboard images directly into that zone; no click-to-focus required
 - **One-click copy** — copies the full formatted report (including screenshot labels) to clipboard with a "Copied ✓" visual confirmation
 - **Rich clipboard with images** — copies both `text/plain` and `text/html` to the clipboard; the HTML version uses monospace font (`DM Mono`) so pasting into email clients, Word, or Google Docs renders the report in monospace; when screenshots are attached, embedded `<img>` tags are included
-- **Bottom copy button** — an additional Copy to Clipboard button at the end of the output area for convenience
 - **Report type pill + timestamp** — each generated report shows a coloured report type badge (ARF/Bounce) and a "Generated:" timestamp
 - **Keyboard shortcut** — `Ctrl`/`Cmd` + `Enter` generates the report for whichever panel is currently active
 - **Confirm before clear** — clearing either panel requires confirmation to prevent accidental data loss
@@ -43,7 +42,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Email → domain sanitisation** — pasting or typing a full email address (`user@example.com`) in the domain field automatically strips the local-part to `example.com`; also strips `http(s)://`, trailing paths, and ports
 - **Account field sanitisation** — the Account field sanitises pasted input: domain-like values get HTML/protocol stripping and control char removal; email addresses (containing `@`) pass through untouched
 - **Auto-lookup on paste** — pasting a domain or email into either panel's domain field automatically fires the WHOIS/Website/DKIM lookup without needing to click the Lookup button
-- **Form state persistence** — all 15 field values are saved to `localStorage` on every change and restored on next visit
+- **Form state persistence** — all field values are saved to `localStorage` on every change and restored on next visit
 - **Dark / Light theme** — respects system preference with a manual toggle; preference is persisted to `localStorage` with a smooth 250ms crossfade transition
 - **Required field validation** — all required fields are highlighted with inline error messages before generation is allowed
 - **Error resilience** — generate functions are wrapped in `try/catch` so unexpected errors surface as a user-facing toast instead of silently failing
@@ -51,7 +50,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Toast type differentiation** — toasts carry a `data-type` attribute (success, error, warning, info) for coloured styling
 - **Accessible assurance buttons** — assurance toggle buttons use `aria-pressed` to reflect active state for screen readers
 - **Decorative SVG hiding** — all decorative icons carry `aria-hidden="true"` to prevent screen reader noise
-- **Required field markup** — 13 form fields include `aria-required="true"` for assistive technology
+- **Required field markup** — form fields include `aria-required="true"` for assistive technology
 - **XSS-safe validation** — validation error messages use `textContent` instead of `innerHTML` to prevent HTML injection
 - **Clipboard API guard** — shows a warning toast if `navigator.clipboard` is unavailable (non-HTTPS or insecure context)
 - **Combined age calculation** — `parseAgeToDays` accumulates all units (years + months + days) instead of returning only the first non-null match
@@ -66,20 +65,35 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Vercel Analytics & Speed Insights** — page view tracking and Core Web Vitals monitoring
 
 ### JIRA Integration
-- **Create TAE JIRA** — a "Create TAE JIRA" button appears next to the Copy button in both ARF and Bounce output sections
-- **Prefilled fields** — clicking the button opens JIRA's create issue page with Project (TAE), Issue Type (Task), Priority (P3), and Summary pre-filled from the report
+- **Create TAE JIRA** — a "Create TAE JIRA" button appears in both ARF and Bounce output sections
+- **REST API creation** — creates JIRA tickets directly via `POST /rest/api/2/issue` using the browser's authenticated session cookies; no API key required
+- **Image attachments** — screenshot images are decoded from base64 and uploaded as individual attachments via JIRA's attachment API (`POST /rest/api/2/issue/{key}/attachments`)
+- **Prefilled fields** — Project (TAE, `pid=12900`), Issue Type (Task, `id=10902`), Priority (P3, `id=10000`), Summary, Description, Labels, and Zendesk link (`customfield_12211`) are all set automatically
 - **Dynamic labels** — ARF reports get the `ARF_unsuspension` label; Bounce reports get `Bounce_unsuspension`
-- **Rich clipboard paste** — the full report text and embedded screenshots are copied to the clipboard before opening JIRA, so pressing `Ctrl+V` in the Description field pastes everything inline
+- **Zendesk ticket link** — a "Zendesk Ticket Link" input field appears below Account in both panels; the URL is passed as `customfield_12211` in the JIRA payload
+- **Fallback to paste** — if the REST API call fails (auth expired, network error), the report is stored in `chrome.storage.local` and the user is redirected to JIRA's create page for manual paste
+- **Clickable JIRA link** — on success, a toast displays the created JIRA issue key as a clickable link to the ticket
 - **Safety gate** — the button shows a warning if no report has been generated yet
-- **Browser extension (optional)** — a Chrome extension (`extension/`) auto-pastes reports into JIRA's Description field when the create-issue page loads
+- **Browser extension (optional)** — a Chrome extension (`extension/`) handles JIRA creation and auto-pasting
   - The web app sends report HTML (including base64-embedded screenshot images) via `window.postMessage`
-  - The extension stores report data in `chrome.storage.local` (no background service worker relay needed)
-  - On JIRA, the extension extracts images from the HTML first (via DOMParser), then pastes text-only into the Visual editor, followed by pasting each image separately as a `File` item in `clipboardData.items` — so JIRA's paste handler processes each image individually as an attachment
+  - The content script forwards the message to the background service worker, which creates the JIRA ticket via REST API
+  - On JIRA, the extension extracts images from the HTML first (via DOMParser), then pastes text-only into the Visual editor, followed by pasting each image separately as a `File` item in `clipboardData.items`
   - 500ms delay between image pastes for TinyMCE processing
   - Fallback chain: paste → execCommand → textarea
   - Supports JIRA Server v7.13+ (Atlassian JEP editor); falls back gracefully if the visual editor isn't found
   - Install by [downloading the extension zip](https://github.com/zakititan/arf-bounce-report-generator/raw/main/extension/releases/extension.zip), unzipping, and loading the folder as an unpacked extension in `chrome://extensions` (Developer mode)
   - To repackage after changes: `npm run pack-extension`
+
+### Unsuspend (Abuse Desk Integration)
+- **Unsuspend button** — an "Unsuspend" button appears next to "Create TAE JIRA" in both output sections
+- **One-click flow** — clicking "Create TAE JIRA" automatically triggers unsuspend after JIRA creation; the JIRA ticket URL is pasted as the reason in the Abuse Desk modal
+- **Abuse Desk automation** — the extension's content script on `abusedesk.ops.titan.email` automatically:
+  1. Clicks the **Unblock** button
+  2. Pastes the reason (JIRA URL or ZD link) into the textarea
+  3. Clicks **Save reason and proceed**
+- **Manual unsuspend** — clicking the "Unsuspend" button directly opens Abuse Desk with the account and region pre-filled; uses ZD link as reason, or "no jira created" if no ZD link is provided
+- **Region-aware URL** — Abuse Desk URL includes the correct `region` parameter (`us-east-1` for NA, `eu-central-1` for EU) based on MX-based region detection
+- **Fallback toast** — shows success/failure toast notifications at each step for user feedback
 
 ### Mailboards Integration
 - **Check on Mailboards** — a "Check on Mailboards" link sits below the Account field in both ARF and Bounce panels, linking to [mailboards.ops.titan.email](https://mailboards.ops.titan.email)
@@ -127,6 +141,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **XSS prevention** — API response values (verdict, DKIM selectors) and validation error labels are set via `textContent` instead of `innerHTML` to prevent HTML injection
 - **Login redirect removed** — successful login always redirects to `/`; the `redirect` query parameter is no longer accepted, preventing open redirect and `javascript:` injection
 - **API error resilience** — all fetch calls are wrapped in a centralized `apiFetch()` helper that safely handles network errors and non-JSON responses instead of crashing
+- **Extension host permissions** — Chrome extension declares `host_permissions` for `https://jira.directi.com/*` to enable authenticated REST API calls using browser session cookies
 
 ### Code Quality & Performance
 - **No theme flash** — inline `<script>` in `<head>` sets dark theme before first paint, preventing flash on dark-mode systems
@@ -178,11 +193,12 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 │   └── ui.js                       # UI helpers (showToast with types, theme toggle with transition, stepper, form progress, age colors, validation display, drag-and-drop)
 ├── styles/
 │   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, responsive)
-├── extension/                      # Chrome extension (Manifest V3) for auto-pasting into JIRA
-│   ├── manifest.json               # Extension config: permissions, content scripts for webapp + JIRA
-│   ├── background.js               # Service worker (storage relay, now bypassed by direct storage access)
-│   ├── content-webapp.js           # Content script on Report Generator: captures report HTML via postMessage → chrome.storage.local
-│   ├── content-jira.js             # Content script on JIRA: reads report, extracts images via DOMParser, pastes text first then images one by one
+├── extension/                      # Chrome extension (Manifest V3) for JIRA integration and Abuse Desk automation
+│   ├── manifest.json               # Extension config: v2.0, permissions, content scripts for webapp, JIRA, and Abuse Desk
+│   ├── background.js               # Service worker: create-jira (REST API + image upload), store/get report
+│   ├── content-webapp.js           # Content script on Report Generator: handles JIRA creation + auto-unsuspend chain
+│   ├── content-jira.js             # Content script on JIRA: fallback paste strategy (text first, images one by one)
+│   ├── content-abusedesk.js        # Content script on Abuse Desk: auto-clicks Unblock, pastes reason, clicks Save
 │   ├── releases/extension.zip      # Packaged extension for easy distribution
 │   └── icons/                      # Extension icons (16/48/128px)
 └── tests/
@@ -268,7 +284,8 @@ Create a `.env.local` file in the project root:
 APP_PASSWORD=yourpassword
 AUTH_SECRET=your-random-hex-secret
 APP_ORIGIN=http://localhost:3000
-WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fallback```
+WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fallback
+```
 
 > **Note:** Domain lookup, website check, and DKIM check will not work if you open `index.html` directly in a browser — they require the serverless API functions to be running via `vercel dev`.
 
@@ -284,7 +301,10 @@ WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fal
    - The progress stepper (1 → 2 → 3) tracks WHOIS, Website, and DKIM completion
    - Domain age is colour-coded (red <30d, amber 30–180d, green 180d+)
 4. Select active assurances (organised into Email Hygiene and Technical subgroups)
-5. Click **Generate ARF Report** (or press `Ctrl`/`Cmd` + `Enter`) → screenshots appear inline; click **Copy** or the bottom **Copy to Clipboard** button to copy the full report
+5. Click **Generate ARF Report** (or press `Ctrl`/`Cmd` + `Enter`) → screenshots appear inline
+6. Click **Copy** to copy the full report to clipboard
+7. Optionally enter a Zendesk ticket link in the "Zendesk Ticket Link" field
+8. Click **Create TAE JIRA** → JIRA ticket is created via REST API → Abuse Desk opens automatically for unsuspend
 
 ### Bounce Report
 1. Select previous unblock status
@@ -294,6 +314,8 @@ WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fal
 3. Fill in remaining domain details (website and DKIM are auto-populated from the lookup)
 4. Select active assurances
 5. Click **Generate Bounce Report** (or press `Ctrl`/`Cmd` + `Enter`) → copy the output
+6. Optionally enter a Zendesk ticket link in the "Zendesk Ticket Link" field
+7. Click **Create TAE JIRA** → JIRA ticket is created via REST API → Abuse Desk opens automatically for unsuspend
 
 > **Tip:** All form fields are saved automatically — refreshing the page restores your last session.
 
@@ -317,6 +339,7 @@ WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fal
 - **Middleware URL matching** uses exact path or subpath prefix to prevent `/api/login-staging` from bypassing auth
 - **`AUTH_SECRET`** and **`APP_PASSWORD`** are never committed to the repo — always set via environment variables
 - **Hostname validation** rejects IPv4/IPv6 addresses, localhost names, `.localhost`/`.local`/`.internal` TLDs (SSRF prevention), consecutive dots, hyphen-leading labels, and email local-parts
+- **Extension host permissions** — declares `host_permissions` for `https://jira.directi.com/*` to enable authenticated REST API calls using browser session cookies
 
 ---
 
