@@ -836,10 +836,11 @@ function clearAssurances(prefix) {
 function v(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
 
 function validateARF() {
-  const fieldIds = ['arf-account','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim'];
+  const fieldIds = ['arf-account','arf-zd-link','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim'];
   clearFieldErrors(fieldIds);
   const errors = [];
   if (!v('arf-account')) errors.push({ id: 'arf-account', label: 'Account' });
+  if (!v('arf-zd-link')) errors.push({ id: 'arf-zd-link', label: 'Zendesk Ticket Link' });
   if (!v('arf-complaints'))   errors.push({ id: 'arf-complaints',   label: 'No. of ARF Complaints' });
   if (!v('arf-prev-unblock')) errors.push({ id: 'arf-prev-unblock', label: 'Previous Unblock Request' });
   if (!v('arf-blocked-lt2'))  errors.push({ id: 'arf-blocked-lt2',  label: 'Blocked Email Accounts < 2' });
@@ -853,10 +854,11 @@ function validateARF() {
 }
 
 function validateBounce() {
-  const fieldIds = ['bounce-account','bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-other-blocked-detail'];
+  const fieldIds = ['bounce-account','bounce-zd-link','bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-other-blocked-detail'];
   clearFieldErrors(fieldIds);
   const errors = [];
   if (!v('bounce-account')) errors.push({ id: 'bounce-account', label: 'Account' });
+  if (!v('bounce-zd-link')) errors.push({ id: 'bounce-zd-link', label: 'Zendesk Ticket Link' });
   if (!v('bounce-prev-unblock'))  errors.push({ id: 'bounce-prev-unblock',  label: 'Previous Unblock Request' });
   if (state.bounce.csvCount === null) errors.push({ id: null,               label: 'Bounce List CSV (upload a CSV file)' });
   if (!v('bounce-other-blocked')) errors.push({ id: 'bounce-other-blocked', label: 'Other Blocked Email in Domain' });
@@ -1106,11 +1108,21 @@ function unsuspendAccount(prefix) {
   const region = (prefix === 'arf' ? state.arf : state.bounce).region === 'eu' ? 'eu-central-1' : 'us-east-1';
   const reason = zdLink || 'no jira created';
 
+  const outputArea = outputSection.querySelector('.output-area');
+  const reportText = (outputArea?.dataset.copyText) || document.getElementById(prefix + '-output-text')?.textContent || '';
+  const reportHtml = outputArea ? Array.from(outputArea.childNodes)
+    .filter(el => !el.classList?.contains('copy-btn-wrap'))
+    .map(el => el.outerHTML).join('') : '';
+
   window.postMessage({
     type: 'REPORT_GENERATOR_UNSUSPEND',
     account: account,
     region: region,
     reason: reason,
+    text: reportText,
+    html: reportHtml,
+    panel: prefix,
+    zdLink: zdLink,
   }, '*');
 
   showToast('Opening Abuse Desk to unsuspend ' + account + '...', 'info');

@@ -192,6 +192,7 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 /* CSV Upload */
 .csv-upload-field { display: flex; flex-direction: column; gap: var(--space-2); }
 .csv-upload-field label { font-size: var(--text-sm); font-weight: 500; color: var(--color-text-muted); }
+.csv-upload-field label span.req { color: var(--color-error); font-size: var(--text-sm); margin-left: 2px; }
 .csv-drop-zone {
   position: relative; display: flex; align-items: center; gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
