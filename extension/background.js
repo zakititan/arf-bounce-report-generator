@@ -128,20 +128,26 @@ async function markDone(issueKey) {
     const transitions = transData.transitions;
     console.log('[Report→JIRA] markDone transitions:', JSON.stringify(transitions.map(t => ({ id: t.id, name: t.name, toName: t.to?.name }))));
 
-    // Match by name first to avoid picking "Duplicate" / "Won't Fix"
-    const doneTransition = transitions.find(
-      t => t.name === 'Done' || t.name === 'Close' || t.name === 'Close Issue'
-    ) || transitions.find(
-      t => t.to?.statusCategory?.key === 'done' && !/duplicate|won.t fix|cannot reproduce/i.test(t.name)
+    console.log('[Report→JIRA] markDone available:', transitions.map(t => t.name + ' -> ' + t.to?.name + ' [' + t.to?.statusCategory?.key + ']'));
+
+    // 1. Exact name match on Done/Close
+    let doneTransition = transitions.find(
+      t => /^(done|close|close issue)$/i.test(t.name)
     );
+    // 2. Target status is "Done" category but NOT Duplicate/Won't Fix
+    if (!doneTransition) {
+      doneTransition = transitions.find(
+        t => t.to?.statusCategory?.key === 'done' && !/duplicate|won.t fix|cannot reproduce/i.test(t.to?.name || '')
+      );
+    }
 
     if (!doneTransition) {
       console.log('[Report→JIRA] markDone: no Done transition found');
       return;
     }
-    console.log('[Report→JIRA] markDone: using transition', doneTransition.id, doneTransition.name);
+    console.log('[Report→JIRA] markDone: posting transition id=' + doneTransition.id + ' "' + doneTransition.name + '" -> ' + doneTransition.to?.name);
 
-    await fetch(
+    const transPostResp = await fetch(
       `https://jira.directi.com/rest/api/2/issue/${issueKey}/transitions`,
       {
         method: 'POST',
@@ -150,9 +156,10 @@ async function markDone(issueKey) {
         body: JSON.stringify({ transition: { id: doneTransition.id } })
       }
     );
+    console.log('[Report→JIRA] markDone transition response:', transPostResp.status);
 
-    // Add comment separately (transition endpoint may not support update.comment)
-    await fetch(
+    // Add comment separately
+    const commentResp = await fetch(
       `https://jira.directi.com/rest/api/2/issue/${issueKey}/comment`,
       {
         method: 'POST',
@@ -161,6 +168,7 @@ async function markDone(issueKey) {
         body: JSON.stringify({ body: 'Unsuspended' })
       }
     );
+    console.log('[Report→JIRA] markDone comment response:', commentResp.status);
   } catch (e) {
     console.warn('[Report→JIRA] markDone failed:', e.message);
   }
