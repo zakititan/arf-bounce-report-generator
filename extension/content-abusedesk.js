@@ -1,7 +1,4 @@
 (function () {
-  var POLL_INTERVAL = 500;
-  var MAX_WAIT_MS = 20000;
-
   function log(msg) { console.log('[Report→AbuseDesk] ' + msg); }
 
   function showToast(message) {
@@ -39,91 +36,32 @@
 
       await sleep(2000);
 
-      log('Scanning page for all clickable elements...');
-      var allEls = document.querySelectorAll('*');
-      var buttons = [];
-      for (var i = 0; i < allEls.length; i++) {
-        var el = allEls[i];
-        var tag = el.tagName.toLowerCase();
-        if (tag === 'button' || tag === 'a' || tag === 'input' || el.getAttribute('role') === 'button') {
-          var txt = (el.value || el.textContent || '').trim().substring(0, 80);
-          if (txt) buttons.push({ tag: tag, class: el.className, text: txt, visible: el.offsetParent !== null });
-        }
-      }
-      log('Found ' + buttons.length + ' buttons: ' + JSON.stringify(buttons.slice(0, 30)));
-
-      var unblockBtn = null;
-      for (var i = 0; i < allEls.length; i++) {
-        var txt = (allEls[i].value || allEls[i].textContent || '').trim();
-        if (txt === 'Unblock' || txt.includes('Unblock')) {
-          unblockBtn = allEls[i];
-          break;
-        }
-      }
-
+      var unblockBtn = document.getElementById('unblockBtn');
       if (!unblockBtn) {
-        log('Unblock button not found');
-        showToast('Could not find Unblock button');
-        return;
+        var btns = document.querySelectorAll('button');
+        for (var i = 0; i < btns.length; i++) {
+          if (btns[i].textContent.trim() === 'Unblock') { unblockBtn = btns[i]; break; }
+        }
       }
+      if (!unblockBtn) { log('Unblock button not found'); showToast('Unblock button not found'); return; }
       log('Clicking Unblock');
       simulateClick(unblockBtn);
 
-      await sleep(1000);
+      await sleep(1500);
 
       var textarea = document.querySelector('textarea');
-      if (!textarea) {
-        log('Reason textarea not found');
-        showToast('Could not find reason textarea');
-        return;
-      }
-      log('Pasting reason into textarea');
+      if (!textarea) { log('Textarea not found'); showToast('Textarea not found'); return; }
+      log('Pasting reason');
       textarea.focus();
       textarea.value = reason;
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
       textarea.dispatchEvent(new Event('change', { bubbles: true }));
 
-      await sleep(1500);
+      await sleep(1000);
 
-      log('Scanning for Save button after textarea fill...');
-      var allEls2 = document.querySelectorAll('*');
-      var saveBtn = null;
-      for (var i = 0; i < allEls2.length; i++) {
-        var el = allEls2[i];
-        var txt = (el.value || el.textContent || '').trim();
-        if (txt.includes('Save reason and proceed')) {
-          saveBtn = el;
-          log('Found Save button: <' + el.tagName + '> class="' + el.className + '"');
-          break;
-        }
-      }
-
-      if (!saveBtn) {
-        log('Save button not found — trying to click any green/blue button in modal...');
-        var modal = document.querySelector('.modal, .modal-content, [role="dialog"], .popup, .overlay');
-        if (modal) {
-          log('Found modal container: <' + modal.tagName + '>');
-          var modalBtns = modal.querySelectorAll('button, a, input[type="button"], input[type="submit"]');
-          log('Modal has ' + modalBtns.length + ' buttons');
-          for (var i = 0; i < modalBtns.length; i++) {
-            var b = modalBtns[i];
-            var btxt = (b.value || b.textContent || '').trim();
-            log('  Button[' + i + ']: "' + btxt.substring(0, 60) + '"');
-            if (btxt.includes('Save') || btxt.includes('Proceed') || btxt.includes('Confirm')) {
-              saveBtn = b;
-              break;
-            }
-          }
-        }
-      }
-
-      if (!saveBtn) {
-        log('Save button NOT found — showing all buttons on page');
-        showToast('Could not find Save button — check console');
-        return;
-      }
-
-      log('Clicking Save button');
+      var saveBtn = document.getElementById('submitBtn');
+      if (!saveBtn) { log('submitBtn not found'); showToast('Save button not found'); return; }
+      log('Clicking Save');
       simulateClick(saveBtn);
 
       await sleep(500);
