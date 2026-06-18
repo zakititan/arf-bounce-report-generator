@@ -107,12 +107,12 @@ a, button, input, select, textarea { transition: color var(--transition-interact
 .field { display: flex; flex-direction: column; gap: var(--space-2); }
 .field label { font-size: var(--text-sm); font-weight: 500; color: var(--color-text-muted); }
 .field label span.req { color: var(--color-error); margin-left: 2px; }
-input[type="text"], input[type="number"], select, textarea {
+input[type="text"], input[type="number"], input[type="url"], select, textarea {
   width: 100%; padding: var(--space-2) var(--space-3);
   background: var(--color-surface-2); border: 1px solid var(--color-border);
   border-radius: var(--radius-md); font-size: var(--text-sm); color: var(--color-text);
 }
-input[type="text"]:focus, input[type="number"]:focus, select:focus, textarea:focus {
+input[type="text"]:focus, input[type="number"]:focus, input[type="url"]:focus, select:focus, textarea:focus {
   outline: none; border-color: var(--color-primary);
   box-shadow: 0 0 0 3px oklch(from var(--color-primary) l c h / 0.15);
 }
