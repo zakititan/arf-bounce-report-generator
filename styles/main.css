@@ -107,12 +107,12 @@ a, button, input, select, textarea { transition: color var(--transition-interact
 .field { display: flex; flex-direction: column; gap: var(--space-2); }
 .field label { font-size: var(--text-sm); font-weight: 500; color: var(--color-text-muted); }
 .field label span.req { color: var(--color-error); margin-left: 2px; }
-input[type="text"], input[type="number"], select, textarea {
+input[type="text"], input[type="number"], input[type="url"], select, textarea {
   width: 100%; padding: var(--space-2) var(--space-3);
   background: var(--color-surface-2); border: 1px solid var(--color-border);
   border-radius: var(--radius-md); font-size: var(--text-sm); color: var(--color-text);
 }
-input[type="text"]:focus, input[type="number"]:focus, select:focus, textarea:focus {
+input[type="text"]:focus, input[type="number"]:focus, input[type="url"]:focus, select:focus, textarea:focus {
   outline: none; border-color: var(--color-primary);
   box-shadow: 0 0 0 3px oklch(from var(--color-primary) l c h / 0.15);
 }
@@ -471,7 +471,6 @@ html.theme-transitioning, html.theme-transitioning * { transition: background 25
 
 /* Buttons */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); padding: var(--space-2) var(--space-5); border-radius: var(--radius-md); font-size: var(--text-sm); font-weight: 500; min-height: 44px; }
-.btn-copy-bottom { margin: 0; align-self: auto; }
 .output-bottom-actions { display: flex; gap: var(--space-2); margin-top: var(--space-3); justify-content: flex-end; align-items: center; }
 .btn-jira { background: transparent; color: var(--color-text-muted); border: 1px solid var(--color-border); }
 .btn-jira:hover { background: var(--color-surface-offset); border-color: var(--color-primary); color: var(--color-primary); }
@@ -594,7 +593,6 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
   .progress-stepper { flex-direction: column; align-items: stretch; gap: 0; padding: var(--space-3); }
   .stepper-step { gap: var(--space-2); }
   .stepper-connector { min-width: 3px; min-height: 14px; width: 3px; margin-left: 12.5px; }
-  .btn-copy-bottom { width: 100%; }
   .output-bottom-actions { flex-direction: column; }
   .output-bottom-actions .btn { width: 100%; }
 }

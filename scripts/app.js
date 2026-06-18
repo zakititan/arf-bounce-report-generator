@@ -337,6 +337,9 @@ function initEventDelegation() {
       case 'create-jira':
         createTaeJira(panel);
         break;
+      case 'unsuspend':
+        unsuspendAccount(panel);
+        break;
       case 'copy': {
         const copyTarget = target.getAttribute('data-target');
         if (copyTarget) copyOutputWithFeedback(copyTarget);
@@ -1058,6 +1061,7 @@ function createTaeJira(prefix) {
   copyOutputWithFeedback(prefix + '-output-text');
 
   const account = document.getElementById(prefix + '-account')?.value.trim() || '';
+  const zdLink = document.getElementById(prefix + '-zd-link')?.value.trim() || '';
   const typeLabel = prefix === 'arf' ? 'ARF' : 'Bounce';
   const summary = encodeURIComponent(typeLabel + ' unsuspension request: ' + account);
   const label = prefix === 'arf' ? 'ARF_unsuspension' : 'Bounce_unsuspension';
@@ -1070,15 +1074,44 @@ function createTaeJira(prefix) {
   const reportHtml = outputArea ? Array.from(outputArea.childNodes)
     .filter(el => !el.classList?.contains('copy-btn-wrap'))
     .map(el => el.outerHTML).join('') : '';
+  const region = (prefix === 'arf' ? state.arf : state.bounce).region === 'eu' ? 'eu-central-1' : 'us-east-1';
   window.postMessage({
     type: 'REPORT_GENERATOR_JIRA',
     text: reportText,
     html: reportHtml,
     panel: prefix,
     account: account,
+    zdLink: zdLink,
+    region: region,
     timestamp: Date.now(),
   }, '*');
 
-  window.open(jiraUrl, '_blank');
-  showToast('JIRA opened! Report will auto-paste if the extension is installed — or press Ctrl+V manually.', 'success');
+  showToast('Creating JIRA ticket...', 'info');
+}
+
+function unsuspendAccount(prefix) {
+  const outputSection = document.getElementById(prefix + '-output-section');
+  if (!outputSection || outputSection.style.display === 'none') {
+    showToast('Please generate the report first.', 'warning');
+    return;
+  }
+
+  const account = document.getElementById(prefix + '-account')?.value.trim() || '';
+  if (!account) {
+    showToast('Please enter an account name.', 'warning');
+    return;
+  }
+
+  const zdLink = document.getElementById(prefix + '-zd-link')?.value.trim() || '';
+  const region = (prefix === 'arf' ? state.arf : state.bounce).region === 'eu' ? 'eu-central-1' : 'us-east-1';
+  const reason = zdLink || 'no jira created';
+
+  window.postMessage({
+    type: 'REPORT_GENERATOR_UNSUSPEND',
+    account: account,
+    region: region,
+    reason: reason,
+  }, '*');
+
+  showToast('Opening Abuse Desk to unsuspend ' + account + '...', 'info');
 }

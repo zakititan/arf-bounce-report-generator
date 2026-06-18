@@ -68,6 +68,10 @@
           <input type="text" id="arf-account" aria-required="true" placeholder="e.g. user@example.com or example.com">
           <a class="btn btn-secondary btn-tool-link btn-mailboards" href="https://mailboards.ops.titan.email/home?env=prod" target="_blank" rel="noopener noreferrer">Check on Mailboards</a>
         </div>
+        <div class="field">
+          <label for="arf-zd-link">Zendesk Ticket Link</label>
+          <input type="url" id="arf-zd-link" placeholder="e.g. https://flockhelp.zendesk.com/agent/tickets/12345">
+        </div>
         <div class="field-row">
           <div class="field">
             <label for="arf-complaints">No. of ARF Complaints<span class="req">*</span></label>
@@ -190,8 +194,8 @@
           <div id="arf-output-images"></div>
         </div>
         <div class="output-bottom-actions">
-          <button class="btn btn-secondary btn-copy-bottom" data-action="copy" data-target="arf-output-text">Copy to Clipboard</button>
-          <button class="btn btn-secondary btn-jira" data-action="create-jira" data-panel="arf"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><polyline points="8,11 5,8 11,8 8,11"/></svg> Create TAE JIRA</button>
+          <button class="btn btn-secondary btn-jira" data-action="create-jira" data-panel="arf">Create TAE JIRA</button>
+          <button class="btn btn-secondary btn-unsuspend" data-action="unsuspend" data-panel="arf">Unsuspend</button>
         </div>
       </div>
     </section>
@@ -218,6 +222,10 @@
           <input type="text" id="bounce-account" aria-required="true" placeholder="e.g. user@example.com or example.com">
           <a class="btn btn-secondary btn-tool-link btn-mailboards" href="https://mailboards.ops.titan.email/home?env=prod" target="_blank" rel="noopener noreferrer">Check on Mailboards</a>
           <a class="btn btn-secondary btn-tool-link btn-user-agent" href="https://mailboards.ops.titan.email/mail_analytics?env=prod&mail_type=outgoing&mail_status=&sender=&recipient=&from_date=&to_date=" target="_blank" rel="noopener noreferrer">Check User Agent</a>
+        </div>
+        <div class="field">
+          <label for="bounce-zd-link">Zendesk Ticket Link</label>
+          <input type="url" id="bounce-zd-link" placeholder="e.g. https://flockhelp.zendesk.com/agent/tickets/12345">
         </div>
         <div class="field">
           <label for="bounce-prev-unblock">Previous Unblock Request?<span class="req">*</span></label>
@@ -354,8 +362,8 @@
           <pre id="bounce-output-text" class="output-text"></pre>
         </div>
         <div class="output-bottom-actions">
-          <button class="btn btn-secondary btn-copy-bottom" data-action="copy" data-target="bounce-output-text">Copy to Clipboard</button>
-          <button class="btn btn-secondary btn-jira" data-action="create-jira" data-panel="bounce"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><polyline points="8,11 5,8 11,8 8,11"/></svg> Create TAE JIRA</button>
+          <button class="btn btn-secondary btn-jira" data-action="create-jira" data-panel="bounce">Create TAE JIRA</button>
+          <button class="btn btn-secondary btn-unsuspend" data-action="unsuspend" data-panel="bounce">Unsuspend</button>
         </div>
       </div>
     </section>
