@@ -21,24 +21,16 @@
     }, 5000);
   }
 
-  function waitForElement(selector, maxMs) {
-    return new Promise(function (resolve) {
-      var start = Date.now();
-      var poll = setInterval(function () {
-        var el = document.querySelector(selector);
-        if (el) { clearInterval(poll); resolve(el); return; }
-        if (Date.now() - start > maxMs) { clearInterval(poll); resolve(null); }
-      }, POLL_INTERVAL);
-    });
-  }
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
   function findButtonByPartialText(text) {
     var all = document.querySelectorAll(
       'button, a, input[type="button"], input[type="submit"], span[role="button"], div[role="button"], [onclick]'
     );
     for (var i = 0; i < all.length; i++) {
-      var content = (all[i].value || all[i].textContent || '').trim();
-      if (content.includes(text)) return all[i];
+      var el = all[i];
+      var content = (el.value || el.textContent || '').trim();
+      if (content.includes(text)) return el;
     }
     return null;
   }
@@ -84,25 +76,30 @@
       textarea.value = reason;
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
       textarea.dispatchEvent(new Event('change', { bubbles: true }));
-      textarea.dispatchEvent(new Event('keyup', { bubbles: true }));
 
+      log('Waiting for framework to process textarea change...');
+      await sleep(1000);
+
+      log('Searching for Save button...');
       var saveBtn = await waitForButton('Save reason and proceed', MAX_WAIT_MS);
+
       if (!saveBtn) {
-        log('Save button not found — scanning all elements...');
+        log('Initial search failed — scanning ALL elements on page...');
         var allEls = document.querySelectorAll('*');
         for (var i = 0; i < allEls.length; i++) {
-          var txt = allEls[i].textContent.trim();
-          if (txt === 'Save reason and proceed' || txt === 'Save') {
-            log('Found fallback match: <' + allEls[i].tagName + '> "' + txt + '"');
-            saveBtn = allEls[i];
+          var el = allEls[i];
+          var txt = (el.value || el.textContent || '').trim();
+          if (txt.includes('Save reason') || txt === 'Save' || txt === 'Save reason and proceed') {
+            log('Found match: <' + el.tagName + '> class="' + el.className + '" text="' + txt.substring(0, 50) + '"');
+            saveBtn = el;
             break;
           }
         }
       }
 
       if (!saveBtn) {
-        log('Save button not found after full scan');
-        showToast('Could not find Save button');
+        log('Save button NOT found after full scan');
+        showToast('Could not find Save button — check console');
         return;
       }
 
@@ -111,6 +108,17 @@
 
       showToast('Unsuspend completed for ' + account);
       log('Automation complete for ' + account);
+    });
+  }
+
+  function waitForElement(selector, maxMs) {
+    return new Promise(function (resolve) {
+      var start = Date.now();
+      var poll = setInterval(function () {
+        var el = document.querySelector(selector);
+        if (el) { clearInterval(poll); resolve(el); return; }
+        if (Date.now() - start > maxMs) { clearInterval(poll); resolve(null); }
+      }, POLL_INTERVAL);
     });
   }
 
