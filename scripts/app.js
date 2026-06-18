@@ -1108,11 +1108,21 @@ function unsuspendAccount(prefix) {
   const region = (prefix === 'arf' ? state.arf : state.bounce).region === 'eu' ? 'eu-central-1' : 'us-east-1';
   const reason = zdLink || 'no jira created';
 
+  const outputArea = outputSection.querySelector('.output-area');
+  const reportText = (outputArea?.dataset.copyText) || document.getElementById(prefix + '-output-text')?.textContent || '';
+  const reportHtml = outputArea ? Array.from(outputArea.childNodes)
+    .filter(el => !el.classList?.contains('copy-btn-wrap'))
+    .map(el => el.outerHTML).join('') : '';
+
   window.postMessage({
     type: 'REPORT_GENERATOR_UNSUSPEND',
     account: account,
     region: region,
     reason: reason,
+    text: reportText,
+    html: reportHtml,
+    panel: prefix,
+    zdLink: zdLink,
   }, '*');
 
   showToast('Opening Abuse Desk to unsuspend ' + account + '...', 'info');

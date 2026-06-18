@@ -50,18 +50,7 @@
             }
             showToast(msg);
 
-            var abuseDeskUrl = 'https://abusedesk.ops.titan.email/blocked_users.html?entity=' +
-              encodeURIComponent(data.account) + '&region=' + data.region;
-
-            chrome.storage.local.set({
-              unsuspendReason: jiraUrl,
-              unsuspendAccount: data.account
-            }, function () {
-              window.open(abuseDeskUrl, '_blank');
-              setTimeout(function () {
-                showToast('JIRA created — Abuse Desk opened for unsuspend');
-              }, 500);
-            });
+            chrome.storage.local.set({ lastJiraUrl: jiraUrl });
           } else {
             fallbackToStorage(text, html, panel, account);
           }
@@ -71,16 +60,37 @@
 
     if (event.data.type === 'REPORT_GENERATOR_UNSUSPEND') {
       var unsuspendData = event.data;
-      var abuseDeskUrl = 'https://abusedesk.ops.titan.email/blocked_users.html?entity=' +
-        encodeURIComponent(unsuspendData.account) + '&region=' + unsuspendData.region;
 
-      chrome.storage.local.set({
-        unsuspendReason: unsuspendData.reason,
-        unsuspendAccount: unsuspendData.account
-      }, function () {
-        window.open(abuseDeskUrl, '_blank');
-        showToast('Abuse Desk opened — extension will complete unsuspend');
-      });
+      chrome.runtime.sendMessage(
+        { action: 'create-jira-and-done', data: {
+          text: unsuspendData.text || '',
+          html: unsuspendData.html || '',
+          panel: unsuspendData.panel || '',
+          account: unsuspendData.account || '',
+          zdLink: unsuspendData.zdLink || ''
+        }},
+        function (response) {
+          if (chrome.runtime.lastError || !response || !response.success) {
+            var err = (response && response.error) || (chrome.runtime.lastError && chrome.runtime.lastError.message) || 'JIRA creation failed';
+            showToast('Failed to create JIRA: ' + err);
+            return;
+          }
+
+          var jiraUrl = response.issueUrl;
+
+          var abuseDeskUrl = 'https://abusedesk.ops.titan.email/blocked_users.html?entity=' +
+            encodeURIComponent(unsuspendData.account) + '&region=' + unsuspendData.region;
+
+          chrome.storage.local.set({
+            unsuspendReason: jiraUrl,
+            unsuspendAccount: unsuspendData.account
+          }, function () {
+            window.open(abuseDeskUrl, '_blank');
+            var msg = '<span>JIRA <a href="' + jiraUrl + '" target="_blank" style="color:#5b9bd5;text-decoration:underline;">' + response.issueKey + '</a> created — opening Abuse Desk</span>';
+            showToast(msg);
+          });
+        }
+      );
     }
   });
 

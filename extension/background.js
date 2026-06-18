@@ -39,9 +39,88 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleCreateJira(message.data, sendResponse);
     return true;
   }
+
+  if (message.action === 'create-jira-and-done') {
+    handleCreateJiraAndDone(message.data, sendResponse);
+    return true;
+  }
 });
 
 async function handleCreateJira(data, sendResponse) {
+  try {
+    const { text, html, panel, account, zdLink } = data;
+    const typeLabel = panel === 'arf' ? 'ARF' : 'Bounce';
+    const label = panel === 'arf' ? 'ARF_unsuspension' : 'Bounce_unsuspension';
+    const summary = `${typeLabel} unsuspension request: ${account}`;
+
+    const images = extractImages(html);
+
+    const issueBody = {
+      fields: {
+        project: { id: "12900" },
+        issuetype: { id: "10902" },
+        priority: { id: "10000" },
+        summary,
+        description: text,
+        labels: [label],
+        ...(zdLink ? { customfield_12211: zdLink } : {})
+      }
+    };
+
+    const issueResponse = await fetch('https://jira.directi.com/rest/api/2/issue', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(issueBody)
+    });
+
+    if (!issueResponse.ok) {
+      const errorText = await issueResponse.text();
+      sendResponse({ success: false, error: errorText, status: issueResponse.status });
+      return;
+    }
+
+    const issueData = await issueResponse.json();
+    const issueKey = issueData.key;
+    const issueUrl = `https://jira.directi.com/browse/${issueKey}`;
+
+    let imagesUploaded = 0;
+    for (const image of images) {
+      try {
+        const binary = atob(image.base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], { type: image.mimeType });
+        const formData = new FormData();
+        formData.append('file', blob, image.filename);
+
+        await fetch(`https://jira.directi.com/rest/api/2/issue/${issueKey}/attachments`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'X-Atlassian-Token': 'no-check' },
+          body: formData
+        });
+        imagesUploaded++;
+      } catch (e) {
+        // Continue with other images
+      }
+    }
+
+    sendResponse({
+      success: true,
+      issueKey,
+      issueUrl,
+      imagesUploaded,
+      imagesTotal: images.length
+    });
+  } catch (error) {
+    sendResponse({ success: false, error: error.message, status: 0 });
+  }
+}
+
+async function handleCreateJiraAndDone(data, sendResponse) {
   try {
     const { text, html, panel, account, zdLink } = data;
     const typeLabel = panel === 'arf' ? 'ARF' : 'Bounce';
