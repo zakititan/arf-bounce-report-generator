@@ -61,13 +61,13 @@
       chrome.storage.local.remove(['unsuspendReason', 'unsuspendAccount']);
       log('Starting unsuspend automation for ' + account);
 
-      var unblockBtn = await waitForButton('UnsuspendCustomer', MAX_WAIT_MS);
+      var unblockBtn = await waitForButton('Unblock', MAX_WAIT_MS);
       if (!unblockBtn) {
-        log('UnsuspendCustomer button not found');
-        showToast('Could not find UnsuspendCustomer button');
+        log('Unblock button not found');
+        showToast('Could not find Unblock button');
         return;
       }
-      log('Clicking UnsuspendCustomer');
+      log('Clicking Unblock');
       unblockBtn.click();
 
       var textarea = await waitForElement('textarea', MAX_WAIT_MS);
