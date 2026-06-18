@@ -33,9 +33,11 @@
   }
 
   function findButtonByPartialText(text) {
-    var all = document.querySelectorAll('button, a, input[type="button"], span[role="button"], div[role="button"]');
+    var all = document.querySelectorAll(
+      'button, a, input[type="button"], input[type="submit"], span[role="button"], div[role="button"], [onclick]'
+    );
     for (var i = 0; i < all.length; i++) {
-      var content = all[i].textContent.trim();
+      var content = (all[i].value || all[i].textContent || '').trim();
       if (content.includes(text)) return all[i];
     }
     return null;
@@ -78,18 +80,33 @@
       }
       log('Pasting reason into textarea');
 
-      var nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
-      nativeInputValueSetter.call(textarea, reason);
+      textarea.focus();
+      textarea.value = reason;
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
       textarea.dispatchEvent(new Event('change', { bubbles: true }));
+      textarea.dispatchEvent(new Event('keyup', { bubbles: true }));
 
       var saveBtn = await waitForButton('Save reason and proceed', MAX_WAIT_MS);
       if (!saveBtn) {
-        log('Save button not found');
+        log('Save button not found — scanning all elements...');
+        var allEls = document.querySelectorAll('*');
+        for (var i = 0; i < allEls.length; i++) {
+          var txt = allEls[i].textContent.trim();
+          if (txt === 'Save reason and proceed' || txt === 'Save') {
+            log('Found fallback match: <' + allEls[i].tagName + '> "' + txt + '"');
+            saveBtn = allEls[i];
+            break;
+          }
+        }
+      }
+
+      if (!saveBtn) {
+        log('Save button not found after full scan');
         showToast('Could not find Save button');
         return;
       }
-      log('Clicking Save reason and proceed');
+
+      log('Clicking Save: <' + saveBtn.tagName + '>');
       saveBtn.click();
 
       showToast('Unsuspend completed for ' + account);
