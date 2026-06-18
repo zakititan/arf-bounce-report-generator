@@ -65,12 +65,14 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Vercel Analytics & Speed Insights** — page view tracking and Core Web Vitals monitoring
 
 ### JIRA Integration
-- **Create TAE JIRA** — a "Create TAE JIRA" button appears in both ARF and Bounce output sections
+- **Create TAE JIRA** — a "Create TAE JIRA" button appears in both ARF and Bounce output sections; creates the JIRA only (no status change, no Abuse Desk)
+- **Create TAE JIRA and Unsuspend** — a second button that creates the JIRA, transitions it to **Done** (transition ID `71`), adds a comment "Unsuspended", then opens Abuse Desk to complete the unsuspend
 - **REST API creation** — creates JIRA tickets directly via `POST /rest/api/2/issue` using the browser's authenticated session cookies; no API key required
 - **Image attachments** — screenshot images are decoded from base64 and uploaded as individual attachments via JIRA's attachment API (`POST /rest/api/2/issue/{key}/attachments`)
 - **Prefilled fields** — Project (TAE, `pid=12900`), Issue Type (Task, `id=10902`), Priority (P3, `id=10000`), Summary, Description, Labels, and Zendesk link (`customfield_12211`) are all set automatically
 - **Dynamic labels** — ARF reports get the `ARF_unsuspension` label; Bounce reports get `Bounce_unsuspension`
-- **Zendesk ticket link** — a "Zendesk Ticket Link" input field appears below Account in both panels; the URL is passed as `customfield_12211` in the JIRA payload
+- **Zendesk ticket link (required)** — a "Zendesk Ticket Link" input field appears below Account in both panels; the URL is passed as `customfield_12211` in the JIRA payload; report generation is blocked if empty
+- **Auto-transition to Done** — the "Unsuspend" flow transitions the JIRA to Done status via `POST /rest/api/2/issue/{key}/transitions` with ID `71`, then adds a "Unsuspended" comment via `POST /rest/api/2/issue/{key}/comment`
 - **Fallback to paste** — if the REST API call fails (auth expired, network error), the report is stored in `chrome.storage.local` and the user is redirected to JIRA's create page for manual paste
 - **Clickable JIRA link** — on success, a toast displays the created JIRA issue key as a clickable link to the ticket
 - **Safety gate** — the button shows a warning if no report has been generated yet
@@ -85,13 +87,11 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
   - To repackage after changes: `npm run pack-extension`
 
 ### Unsuspend (Abuse Desk Integration)
-- **Unsuspend button** — an "Unsuspend" button appears next to "Create TAE JIRA" in both output sections
-- **One-click flow** — clicking "Create TAE JIRA" automatically triggers unsuspend after JIRA creation; the JIRA ticket URL is pasted as the reason in the Abuse Desk modal
+- **"Create TAE JIRA and Unsuspend" button** — creates JIRA → transitions to Done → adds "Unsuspended" comment → opens Abuse Desk
 - **Abuse Desk automation** — the extension's content script on `abusedesk.ops.titan.email` automatically:
   1. Clicks the **Unblock** button
-  2. Pastes the reason (JIRA URL or ZD link) into the textarea
+  2. Pastes the JIRA URL as the reason into the textarea
   3. Clicks **Save reason and proceed**
-- **Manual unsuspend** — clicking the "Unsuspend" button directly opens Abuse Desk with the account and region pre-filled; uses ZD link as reason, or "no jira created" if no ZD link is provided
 - **Region-aware URL** — Abuse Desk URL includes the correct `region` parameter (`us-east-1` for NA, `eu-central-1` for EU) based on MX-based region detection
 - **Fallback toast** — shows success/failure toast notifications at each step for user feedback
 
@@ -194,9 +194,9 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ├── styles/
 │   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, responsive)
 ├── extension/                      # Chrome extension (Manifest V3) for JIRA integration and Abuse Desk automation
-│   ├── manifest.json               # Extension config: v2.0, permissions, content scripts for webapp, JIRA, and Abuse Desk
-│   ├── background.js               # Service worker: create-jira (REST API + image upload), store/get report
-│   ├── content-webapp.js           # Content script on Report Generator: handles JIRA creation + auto-unsuspend chain
+│   ├── manifest.json               # Extension config: v2.1, permissions, content scripts for webapp, JIRA, Abuse Desk, and Google Sheets
+│   ├── background.js               # Service worker: create-jira, create-jira-and-done (JIRA + markDone + comment), store/get report
+│   ├── content-webapp.js           # Content script on Report Generator: handles JIRA creation, Unsuspend (create + markDone + AD), and sheet logging
 │   ├── content-jira.js             # Content script on JIRA: fallback paste strategy (text first, images one by one)
 │   ├── content-abusedesk.js        # Content script on Abuse Desk: auto-clicks Unblock, pastes reason, clicks Save
 │   ├── releases/extension.zip      # Packaged extension for easy distribution
@@ -303,8 +303,9 @@ WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fal
 4. Select active assurances (organised into Email Hygiene and Technical subgroups)
 5. Click **Generate ARF Report** (or press `Ctrl`/`Cmd` + `Enter`) → screenshots appear inline
 6. Click **Copy** to copy the full report to clipboard
-7. Optionally enter a Zendesk ticket link in the "Zendesk Ticket Link" field
-8. Click **Create TAE JIRA** → JIRA ticket is created via REST API → Abuse Desk opens automatically for unsuspend
+7. Enter a Zendesk ticket link in the "Zendesk Ticket Link" field (required)
+8. Click **Create TAE JIRA** → JIRA ticket is created via REST API
+9. Or click **Create TAE JIRA and Unsuspend** → JIRA created + marked Done + "Unsuspended" comment + Abuse Desk opens
 
 ### Bounce Report
 1. Select previous unblock status
@@ -314,8 +315,9 @@ WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fal
 3. Fill in remaining domain details (website and DKIM are auto-populated from the lookup)
 4. Select active assurances
 5. Click **Generate Bounce Report** (or press `Ctrl`/`Cmd` + `Enter`) → copy the output
-6. Optionally enter a Zendesk ticket link in the "Zendesk Ticket Link" field
-7. Click **Create TAE JIRA** → JIRA ticket is created via REST API → Abuse Desk opens automatically for unsuspend
+6. Enter a Zendesk ticket link in the "Zendesk Ticket Link" field (required)
+7. Click **Create TAE JIRA** → JIRA ticket is created via REST API
+8. Or click **Create TAE JIRA and Unsuspend** → JIRA created + marked Done + "Unsuspended" comment + Abuse Desk opens
 
 > **Tip:** All form fields are saved automatically — refreshing the page restores your last session.
 
