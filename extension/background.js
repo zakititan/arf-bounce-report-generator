@@ -123,35 +123,44 @@ async function markDone(issueKey) {
       `https://jira.directi.com/rest/api/2/issue/${issueKey}/transitions`,
       { method: 'GET', credentials: 'include', headers: { 'Accept': 'application/json' } }
     );
-    console.log('[Report→JIRA] markDone transitions status:', transResp.status);
-    if (!transResp.ok) {
-      const errText = await transResp.text();
-      console.log('[Report→JIRA] markDone transitions error:', errText);
-      return;
-    }
+    if (!transResp.ok) return;
     const transData = await transResp.json();
-    console.log('[Report→JIRA] markDone available transitions:', JSON.stringify(transData.transitions.map(t => ({ id: t.id, name: t.name, toName: t.to?.name, toCategory: t.to?.statusCategory?.key }))));
-    const doneTransition = transData.transitions.find(
-      t => t.to?.statusCategory?.key === 'done' || t.name === 'Done'
+    const transitions = transData.transitions;
+    console.log('[Report→JIRA] markDone transitions:', JSON.stringify(transitions.map(t => ({ id: t.id, name: t.name, toName: t.to?.name }))));
+
+    // Match by name first to avoid picking "Duplicate" / "Won't Fix"
+    const doneTransition = transitions.find(
+      t => t.name === 'Done' || t.name === 'Close' || t.name === 'Close Issue'
+    ) || transitions.find(
+      t => t.to?.statusCategory?.key === 'done' && !/duplicate|won.t fix|cannot reproduce/i.test(t.name)
     );
+
     if (!doneTransition) {
       console.log('[Report→JIRA] markDone: no Done transition found');
       return;
     }
     console.log('[Report→JIRA] markDone: using transition', doneTransition.id, doneTransition.name);
-    const doResp = await fetch(
+
+    await fetch(
       `https://jira.directi.com/rest/api/2/issue/${issueKey}/transitions`,
       {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          transition: { id: doneTransition.id },
-          update: { comment: [{ add: { body: 'Unsuspended' } }] }
-        })
+        body: JSON.stringify({ transition: { id: doneTransition.id } })
       }
     );
-    console.log('[Report→JIRA] markDone transition response:', doResp.status);
+
+    // Add comment separately (transition endpoint may not support update.comment)
+    await fetch(
+      `https://jira.directi.com/rest/api/2/issue/${issueKey}/comment`,
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: 'Unsuspended' })
+      }
+    );
   } catch (e) {
     console.warn('[Report→JIRA] markDone failed:', e.message);
   }
