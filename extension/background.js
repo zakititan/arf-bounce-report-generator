@@ -123,13 +123,23 @@ async function markDone(issueKey) {
       `https://jira.directi.com/rest/api/2/issue/${issueKey}/transitions`,
       { method: 'GET', credentials: 'include', headers: { 'Accept': 'application/json' } }
     );
-    if (!transResp.ok) return;
+    console.log('[Report→JIRA] markDone transitions status:', transResp.status);
+    if (!transResp.ok) {
+      const errText = await transResp.text();
+      console.log('[Report→JIRA] markDone transitions error:', errText);
+      return;
+    }
     const transData = await transResp.json();
+    console.log('[Report→JIRA] markDone available transitions:', JSON.stringify(transData.transitions.map(t => ({ id: t.id, name: t.name, toName: t.to?.name, toCategory: t.to?.statusCategory?.key }))));
     const doneTransition = transData.transitions.find(
       t => t.to?.statusCategory?.key === 'done' || t.name === 'Done'
     );
-    if (!doneTransition) return;
-    await fetch(
+    if (!doneTransition) {
+      console.log('[Report→JIRA] markDone: no Done transition found');
+      return;
+    }
+    console.log('[Report→JIRA] markDone: using transition', doneTransition.id, doneTransition.name);
+    const doResp = await fetch(
       `https://jira.directi.com/rest/api/2/issue/${issueKey}/transitions`,
       {
         method: 'POST',
@@ -141,6 +151,7 @@ async function markDone(issueKey) {
         })
       }
     );
+    console.log('[Report→JIRA] markDone transition response:', doResp.status);
   } catch (e) {
     console.warn('[Report→JIRA] markDone failed:', e.message);
   }
