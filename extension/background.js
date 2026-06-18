@@ -103,6 +103,8 @@ async function handleCreateJira(data, sendResponse) {
       }
     }
 
+    await markDone(issueKey);
+
     sendResponse({
       success: true,
       issueKey,
@@ -112,6 +114,35 @@ async function handleCreateJira(data, sendResponse) {
     });
   } catch (error) {
     sendResponse({ success: false, error: error.message, status: 0 });
+  }
+}
+
+async function markDone(issueKey) {
+  try {
+    const transResp = await fetch(
+      `https://jira.directi.com/rest/api/2/issue/${issueKey}/transitions`,
+      { method: 'GET', credentials: 'include', headers: { 'Accept': 'application/json' } }
+    );
+    if (!transResp.ok) return;
+    const transData = await transResp.json();
+    const doneTransition = transData.transitions.find(
+      t => t.to?.statusCategory?.key === 'done' || t.name === 'Done'
+    );
+    if (!doneTransition) return;
+    await fetch(
+      `https://jira.directi.com/rest/api/2/issue/${issueKey}/transitions`,
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transition: { id: doneTransition.id },
+          update: { comment: [{ add: { body: 'Unsuspended' } }] }
+        })
+      }
+    );
+  } catch (e) {
+    console.warn('[Report→JIRA] markDone failed:', e.message);
   }
 }
 
