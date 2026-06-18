@@ -43,7 +43,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 async function handleCreateJira(data, sendResponse) {
   try {
-    const { text, html, panel, account } = data;
+    const { text, html, panel, account, zdLink } = data;
     const typeLabel = panel === 'arf' ? 'ARF' : 'Bounce';
     const label = panel === 'arf' ? 'ARF_unsuspension' : 'Bounce_unsuspension';
     const summary = `${typeLabel} unsuspension request: ${account}`;
@@ -57,7 +57,8 @@ async function handleCreateJira(data, sendResponse) {
         priority: { id: "10000" },
         summary,
         description: text,
-        labels: [label]
+        labels: [label],
+        ...(zdLink ? { customfield_12211: zdLink } : {})
       }
     };
 

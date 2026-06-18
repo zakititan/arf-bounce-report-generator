@@ -29,11 +29,12 @@
     var html = data.html;
     var panel = data.panel;
     var account = data.account;
+    var zdLink = data.zdLink;
 
     if (!text && !html) return;
 
     chrome.runtime.sendMessage(
-      { action: 'create-jira', data: { text: text, html: html, panel: panel, account: account } },
+      { action: 'create-jira', data: { text: text, html: html, panel: panel, account: account, zdLink: zdLink } },
       function (response) {
         if (chrome.runtime.lastError) {
           fallbackToStorage(text, html, panel, account);

@@ -1058,6 +1058,7 @@ function createTaeJira(prefix) {
   copyOutputWithFeedback(prefix + '-output-text');
 
   const account = document.getElementById(prefix + '-account')?.value.trim() || '';
+  const zdLink = document.getElementById(prefix + '-zd-link')?.value.trim() || '';
   const typeLabel = prefix === 'arf' ? 'ARF' : 'Bounce';
   const summary = encodeURIComponent(typeLabel + ' unsuspension request: ' + account);
   const label = prefix === 'arf' ? 'ARF_unsuspension' : 'Bounce_unsuspension';
@@ -1076,6 +1077,7 @@ function createTaeJira(prefix) {
     html: reportHtml,
     panel: prefix,
     account: account,
+    zdLink: zdLink,
     timestamp: Date.now(),
   }, '*');
 
