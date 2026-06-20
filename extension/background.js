@@ -22,27 +22,49 @@ function waitForTabLoad(tabId, maxMs) {
 
 async function openSheetAndLog(rowData) {
   try {
+    console.log('[Report→Sheet] openSheetAndLog called', rowData);
     var tabs = await new Promise(function(resolve) {
       chrome.tabs.query({ url: 'https://docs.google.com/spreadsheets/d/*' }, resolve);
     });
     var tab = tabs && tabs.find(function(t) { return t.url && t.url.indexOf(SHEET_ID) !== -1; });
     if (!tab) {
+      console.log('[Report→Sheet] No sheet tab found, creating...');
       tab = await new Promise(function(resolve) {
         chrome.tabs.create({ url: SHEET_URL, active: false }, resolve);
       });
-      await waitForTabLoad(tab.id, 10000);
+      var loaded = await waitForTabLoad(tab.id, 15000);
+      console.log('[Report→Sheet] Tab loaded:', loaded);
     } else if (tab.status !== 'complete') {
-      await waitForTabLoad(tab.id, 5000);
+      var loaded = await waitForTabLoad(tab.id, 8000);
+      console.log('[Report→Sheet] Existing tab loaded:', loaded);
     }
-    await sleep(1500);
-    var response = await new Promise(function(resolve) {
-      chrome.tabs.sendMessage(tab.id, { action: 'append-sheet-row', data: rowData }, function(r) {
-        resolve(chrome.runtime.lastError ? null : r);
+    await sleep(4000);
+    console.log('[Report→Sheet] Sending message to tab', tab.id);
+
+    var attempts = 0;
+    var response = null;
+    while (attempts < 3) {
+      attempts++;
+      response = await new Promise(function(resolve) {
+        chrome.tabs.sendMessage(tab.id, { action: 'append-sheet-row', data: rowData }, function(r) {
+          if (chrome.runtime.lastError) {
+            console.warn('[Report→Sheet] sendMessage error (attempt ' + attempts + '):', chrome.runtime.lastError.message);
+            resolve(null);
+          } else {
+            console.log('[Report→Sheet] Response (attempt ' + attempts + '):', r);
+            resolve(r);
+          }
+        });
       });
-    });
+      if (response && response.success) return true;
+      if (response) break;
+      console.log('[Report→Sheet] Retrying in 3s...');
+      await sleep(3000);
+    }
+    console.warn('[Report→Sheet] All attempts failed, response:', response);
     return response && response.success;
   } catch (e) {
-    console.warn('[Report→Sheet]', e.message);
+    console.warn('[Report→Sheet] Exception:', e.message);
     return false;
   }
 }

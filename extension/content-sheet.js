@@ -9,13 +9,19 @@
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action !== 'append-sheet-row') return;
+    console.log('[Report->Sheet] Received message with data:', message.data);
     appendRow(message.data).then(function(ok) {
+      console.log('[Report->Sheet] appendRow result:', ok);
       sendResponse({ success: ok });
+    }).catch(function(err) {
+      console.log('[Report->Sheet] appendRow error:', err);
+      sendResponse({ success: false, error: err.message });
     });
     return true;
   });
 
   async function getNextEmptyRow() {
+    log('getNextEmptyRow called');
     log('Finding next empty row...');
     try {
       var nameBox = document.querySelector('#t-name-box-input, #t-name-box, .docs-name-box-input, [aria-label="Name Box"]');
