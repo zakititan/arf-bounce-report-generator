@@ -201,19 +201,11 @@
           await sleep(200);
         }
 
-        // Tab to next (or Enter after last)
-        if (i < values.length - 1) {
-          if (document.activeElement) {
-            document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {
-              key: 'Tab', code: 'Tab', keyCode: 9, which: 9, bubbles: true
-            }));
-          }
-        } else {
-          if (document.activeElement) {
-            document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {
-              key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true
-            }));
-          }
+        // Tab to next column (including after last value to save it)
+        if (document.activeElement) {
+          document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Tab', code: 'Tab', keyCode: 9, which: 9, bubbles: true
+          }));
         }
         await sleep(200);
       }
