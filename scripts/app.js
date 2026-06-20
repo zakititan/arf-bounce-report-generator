@@ -340,6 +340,9 @@ function initEventDelegation() {
       case 'unsuspend':
         unsuspendAccount(panel);
         break;
+      case 'log-sheet':
+        if (panel) logToSheet(panel);
+        break;
       case 'copy': {
         const copyTarget = target.getAttribute('data-target');
         if (copyTarget) copyOutputWithFeedback(copyTarget);
@@ -891,6 +894,8 @@ function renderReportOutput(prefix, lines, fullCopyText, inlineScreenshots) {
     renderInlineScreenshots(outputArea, screenshots, label);
   });
   outputSection.style.display = 'block';
+  const logSheetBtn = outputSection.querySelector('.btn-log-sheet');
+  if (logSheetBtn) logSheetBtn.disabled = false;
   outputSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
@@ -970,6 +975,8 @@ function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, af
 
   const outputSection = document.getElementById(prefix + '-output-section');
   outputSection.style.display = 'none';
+  const logSheetBtn = outputSection.querySelector('.btn-log-sheet');
+  if (logSheetBtn) logSheetBtn.disabled = true;
   const outputArea = outputSection.querySelector('.output-area');
   const copyBtn = outputArea.querySelector('.copy-btn-wrap');
   outputArea.innerHTML = '';
@@ -1126,4 +1133,34 @@ function unsuspendAccount(prefix) {
   }, '*');
 
   showToast('Opening Abuse Desk to unsuspend ' + account + '...', 'info');
+}
+
+function logToSheet(prefix) {
+  const outputSection = document.getElementById(prefix + '-output-section');
+  if (!outputSection || outputSection.style.display === 'none') {
+    showToast('Please generate the report first.', 'warning');
+    return;
+  }
+
+  const account   = document.getElementById(prefix + '-account')?.value.trim() || '';
+  const zdLink    = document.getElementById(prefix + '-zd-link')?.value.trim() || '';
+  const outputArea = outputSection.querySelector('.output-area');
+  const reportText = (outputArea?.dataset.copyText) ||
+                     document.getElementById(prefix + '-output-text')?.textContent || '';
+  const type = prefix === 'arf' ? 'ARF' : 'BOUNCE';
+  const date = new Date().toLocaleDateString('en-US');
+
+  const PLACEHOLDER_JIRA = 'https://jira.directi.com/browse/TAE-10024';
+
+  window.postMessage({
+    type: 'REPORT_GENERATOR_LOG_SHEET',
+    date,
+    zdLink,
+    domainEmail: account,
+    reportType: type,
+    reason: reportText,
+    fallbackJiraLink: PLACEHOLDER_JIRA,
+  }, '*');
+
+  showToast('Logging to Sheet…');
 }

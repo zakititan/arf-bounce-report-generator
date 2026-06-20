@@ -92,6 +92,30 @@
         }
       );
     }
+
+    if (event.data.type === 'REPORT_GENERATOR_LOG_SHEET') {
+      var logData = event.data;
+
+      chrome.storage.local.get('lastJiraUrl', function(result) {
+        var jiraLink = result.lastJiraUrl || logData.fallbackJiraLink;
+
+        chrome.runtime.sendMessage({
+          action: 'log-to-sheet',
+          data: {
+            date:        logData.date,
+            zdLink:      logData.zdLink,
+            jiraLink:    jiraLink,
+            domainEmail: logData.domainEmail,
+            type:        logData.reportType,
+            reason:      logData.reason,
+          }
+        }, function(response) {
+          if (chrome.runtime.lastError || !response || !response.success) {
+            console.warn('[Report→Sheet] Failed:', chrome.runtime.lastError?.message);
+          }
+        });
+      });
+    }
   });
 
   function fallbackToStorage(text, html, panel, account) {

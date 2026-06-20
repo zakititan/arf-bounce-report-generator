@@ -3,8 +3,8 @@
   "name": "Report Generator → JIRA",
   "version": "2.0",
   "description": "Auto-creates JIRA tickets from ARF & Bounce Report Generator",
-  "permissions": ["storage"],
-  "host_permissions": ["https://jira.directi.com/*"],
+  "permissions": ["storage", "tabs"],
+  "host_permissions": ["https://jira.directi.com/*", "https://docs.google.com/*"],
   "background": {
     "service_worker": "background.js"
   },
@@ -20,6 +20,11 @@
     {
       "matches": ["https://abusedesk.ops.titan.email/*"],
       "js": ["content-abusedesk.js"]
+    },
+    {
+      "matches": ["https://docs.google.com/spreadsheets/*"],
+      "js": ["content-sheet.js"],
+      "run_at": "document_idle"
     }
   ],
   "icons": {

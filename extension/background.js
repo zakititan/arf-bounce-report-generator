@@ -1,4 +1,51 @@
 const EXPIRY_MS = 10 * 60 * 1000;
+const SHEET_ID = '1JFSPIvXUfenWkOT5M7yNt4kMfssxCPFezkU6Mgx0Vkc';
+const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`;
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function waitForTabLoad(tabId, maxMs) {
+  return new Promise(resolve => {
+    const listener = function(tabId_, changeInfo) {
+      if (tabId_ === tabId && changeInfo.status === 'complete') {
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve(true);
+      }
+    };
+    chrome.tabs.onUpdated.addListener(listener);
+    setTimeout(() => {
+      chrome.tabs.onUpdated.removeListener(listener);
+      resolve(false);
+    }, maxMs);
+  });
+}
+
+async function openSheetAndLog(rowData) {
+  try {
+    var tabs = await new Promise(function(resolve) {
+      chrome.tabs.query({ url: 'https://docs.google.com/spreadsheets/d/*' }, resolve);
+    });
+    var tab = tabs && tabs.find(function(t) { return t.url && t.url.indexOf(SHEET_ID) !== -1; });
+    if (!tab) {
+      tab = await new Promise(function(resolve) {
+        chrome.tabs.create({ url: SHEET_URL, active: false }, resolve);
+      });
+      await waitForTabLoad(tab.id, 10000);
+    } else if (tab.status !== 'complete') {
+      await waitForTabLoad(tab.id, 5000);
+    }
+    await sleep(1500);
+    var response = await new Promise(function(resolve) {
+      chrome.tabs.sendMessage(tab.id, { action: 'append-sheet-row', data: rowData }, function(r) {
+        resolve(chrome.runtime.lastError ? null : r);
+      });
+    });
+    return response && response.success;
+  } catch (e) {
+    console.warn('[Report→Sheet]', e.message);
+    return false;
+  }
+}
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'store-report') {
@@ -37,6 +84,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === 'create-jira') {
     handleCreateJira(message.data, sendResponse);
+    return true;
+  }
+
+  if (message.action === 'log-to-sheet') {
+    openSheetAndLog(message.data)
+      .then(success => sendResponse({ success }))
+      .catch(() => sendResponse({ success: false }));
     return true;
   }
 
