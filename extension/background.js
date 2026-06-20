@@ -1,6 +1,5 @@
 const EXPIRY_MS = 10 * 60 * 1000;
-const SHEET_ID = '10YgqLp3L66K27jx2KNumtfwe5sKl1VjFzXwQX5pGE3k';
-const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`;
+const DEFAULT_SHEET_ID = '10YgqLp3L66K27jx2KNumtfwe5sKl1VjFzXwQX5pGE3k';
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -22,16 +21,19 @@ function waitForTabLoad(tabId, maxMs) {
 
 async function openSheetAndLog(rowData) {
   try {
+    var sheetId = rowData.sheetId || DEFAULT_SHEET_ID;
+    var sheetUrl = 'https://docs.google.com/spreadsheets/d/' + sheetId + '/edit';
     console.log('[Report→Sheet] openSheetAndLog called', rowData);
+
     var tabs = await new Promise(function(resolve) {
       chrome.tabs.query({ url: 'https://docs.google.com/spreadsheets/d/*' }, resolve);
     });
-    var tab = tabs && tabs.find(function(t) { return t.url && t.url.indexOf(SHEET_ID) !== -1; });
+    var tab = tabs && tabs.find(function(t) { return t.url && t.url.indexOf(sheetId) !== -1; });
     var isNew = false;
     if (!tab) {
       console.log('[Report→Sheet] No sheet tab found, creating...');
       tab = await new Promise(function(resolve) {
-        chrome.tabs.create({ url: SHEET_URL, active: false }, resolve);
+        chrome.tabs.create({ url: sheetUrl, active: false }, resolve);
       });
       isNew = true;
     }

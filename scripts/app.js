@@ -63,6 +63,7 @@ const state = {
   },
 };
 let lastActivePanel = null; // tracks which panel the user last interacted with (for Ctrl/Cmd+Enter)
+let sheetConfig = { sheetId: '' };
 
 // ── Init ──────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -81,6 +82,9 @@ document.addEventListener('DOMContentLoaded', () => {
   renderPreviews('arf', 'screenshots');
   renderPreviews('arf', 'assuranceScreenshots');
   renderPreviews('bounce', 'assuranceScreenshots');
+  fetch('/api/sheet-config').then(r => r.json()).then(d => {
+    if (d.sheetId) sheetConfig.sheetId = d.sheetId;
+  }).catch(() => {});
 });
 
 // ── Keyboard shortcuts (Ctrl/Cmd + Enter) ─────────────────────────────
@@ -1160,6 +1164,7 @@ function logToSheet(prefix) {
     reportType: type,
     reason: reportText,
     fallbackJiraLink: PLACEHOLDER_JIRA,
+    sheetId: sheetConfig.sheetId,
   }, '*');
 
   showToast('Logging to Sheet…');

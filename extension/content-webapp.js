@@ -108,6 +108,7 @@
             domainEmail: logData.domainEmail,
             type:        logData.reportType,
             reason:      logData.reason,
+            sheetId:     logData.sheetId || '',
           }
         }, function(response) {
           if (chrome.runtime.lastError || !response || !response.success) {
