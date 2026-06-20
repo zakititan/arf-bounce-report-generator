@@ -25,8 +25,35 @@
     nameBox.dispatchEvent(new KeyboardEvent('keydown', {
       key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true
     }));
-    await sleep(100);
-    return formulaBar ? formulaBar.value.trim() : '';
+    await sleep(250);
+
+    if (formulaBar) {
+      var val = formulaBar.value.trim();
+      if (val) return val;
+    }
+
+    // Fallback: try reading from the formula bar input inside the iframe
+    try {
+      var fbInput = document.querySelector('input[id*="formula-bar"], input[class*="formula"], .waffle-formula-bar-input');
+      if (fbInput) {
+        var val2 = fbInput.value.trim();
+        log('readCell fallback fbInput: "' + val2 + '"');
+        return val2;
+      }
+    } catch (e) {}
+
+    // Fallback: read active element value
+    try {
+      var active = document.activeElement;
+      if (active && active !== nameBox && active.value) {
+        var val3 = active.value.trim();
+        log('readCell fallback activeEl: "' + val3 + '"');
+        return val3;
+      }
+    } catch (e) {}
+
+    log('readCell: no value found for ' + cellRef);
+    return '';
   }
 
   async function getNextEmptyRow() {
@@ -36,12 +63,18 @@
       '#t-name-box-input, #t-name-box, .docs-name-box-input, [aria-label="Name Box"]'
     );
     var formulaBar = document.querySelector(
-      '#t-formula-bar-input, .docs-bar-formula-input, [aria-label="Formula bar"]'
+      '#t-formula-bar-input, .docs-bar-formula-input, [aria-label="Formula bar"], input[id*="formula-bar"], input[class*="formula"], .waffle-formula-bar-input'
     );
 
     if (!nameBox) {
       log('Name Box not found - defaulting to row 3');
       return 3;
+    }
+
+    if (!formulaBar) {
+      log('WARNING: Formula bar not found - readCell will try fallbacks');
+    } else {
+      log('Formula bar found: ' + formulaBar.tagName + '#' + formulaBar.id + '.' + formulaBar.className);
     }
 
     var today = new Date().toLocaleDateString('en-US');
