@@ -1,5 +1,5 @@
 const EXPIRY_MS = 10 * 60 * 1000;
-const SHEET_ID = '1JFSPIvXUfenWkOT5M7yNt4kMfssxCPFezkU6Mgx0Vkc';
+const SHEET_ID = '10YgqLp3L66K27jx2KNumtfwe5sKl1VjFzXwQX5pGE3k';
 const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`;
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }

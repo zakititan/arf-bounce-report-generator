@@ -96,7 +96,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Retry mechanism** — retries up to 3 times with 3-second delays if the content script doesn't respond
 - **Fallback JIRA link** — if no JIRA has been created yet, uses a placeholder link (`TAE-10024`); after a JIRA is created, the real link is read from `chrome.storage.local`
 - **Extension permissions** — requires `tabs` permission for `chrome.tabs.query`/`chrome.tabs.create`; `host_permissions` includes `https://docs.google.com/*`; content script runs at `document_idle` on Google Sheets
-- **Sheet ID** — hardcoded to `1JFSPIvXUfenWkOT5M7yNt4kMfssxCPFezkU6Mgx0Vkc`; update in `background.js` to use a different sheet
+- **Sheet ID** — hardcoded to `10YgqLp3L66K27jx2KNumtfwe5sKl1VjFzXwQX5pGE3k`; update in `background.js` to use a different sheet
 
 ### Unsuspend (Abuse Desk Integration)
 - **"Create TAE JIRA and Unsuspend" button** — creates JIRA → transitions to Done → adds "Unsuspended" comment → opens Abuse Desk
