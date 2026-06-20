@@ -27,18 +27,30 @@ async function openSheetAndLog(rowData) {
       chrome.tabs.query({ url: 'https://docs.google.com/spreadsheets/d/*' }, resolve);
     });
     var tab = tabs && tabs.find(function(t) { return t.url && t.url.indexOf(SHEET_ID) !== -1; });
+    var isNew = false;
     if (!tab) {
       console.log('[Report→Sheet] No sheet tab found, creating...');
       tab = await new Promise(function(resolve) {
         chrome.tabs.create({ url: SHEET_URL, active: false }, resolve);
       });
+      isNew = true;
+    }
+
+    if (isNew || tab.status !== 'complete') {
       var loaded = await waitForTabLoad(tab.id, 15000);
       console.log('[Report→Sheet] Tab loaded:', loaded);
-    } else if (tab.status !== 'complete') {
-      var loaded = await waitForTabLoad(tab.id, 8000);
-      console.log('[Report→Sheet] Existing tab loaded:', loaded);
     }
+
     await sleep(4000);
+
+    // Ensure content-sheet.js is injected by reloading if needed
+    if (!isNew) {
+      console.log('[Report→Sheet] Reloading tab to ensure content script...');
+      await chrome.tabs.reload(tab.id);
+      await waitForTabLoad(tab.id, 15000);
+      await sleep(3000);
+    }
+
     console.log('[Report→Sheet] Sending message to tab', tab.id);
 
     var attempts = 0;
