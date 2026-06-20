@@ -96,7 +96,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Retry mechanism** — retries up to 3 times with 3-second delays if the content script doesn't respond
 - **Fallback JIRA link** — if no JIRA has been created yet, uses a placeholder link (`TAE-10024`); after a JIRA is created, the real link is read from `chrome.storage.local`
 - **Extension permissions** — requires `tabs` permission for `chrome.tabs.query`/`chrome.tabs.create`; `host_permissions` includes `https://docs.google.com/*`; content script runs at `document_idle` on Google Sheets
-- **Sheet ID** — hardcoded to `10YgqLp3L66K27jx2KNumtfwe5sKl1VjFzXwQX5pGE3k`; update in `background.js` to use a different sheet
+- **Sheet ID** — fetched from `/api/sheet-config` (reads `GOOGLE_SHEET_ID` env var); falls back to default sheet if not configured
 
 ### Unsuspend (Abuse Desk Integration)
 - **"Create TAE JIRA and Unsuspend" button** — creates JIRA → transitions to Done → adds "Unsuspended" comment → opens Abuse Desk
@@ -197,7 +197,8 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 │   ├── website-check.js            # Website reachability & classification (SPA detection, parked/placeholder detection, redirect analysis; cached 15 min)
 │   ├── dkim-check.js               # DNS DKIM selector check (cached 15 min, early termination)
 │   ├── health.js                   # Health-check endpoint (probes WhoisJSON + Google DNS)
-│   └── login.js                    # Login handler — constant-time password check, rate limited, sets signed auth cookie
+│   ├── login.js                    # Login handler — constant-time password check, rate limited, sets signed auth cookie
+│   └── sheet-config.js             # Returns Google Sheet ID from GOOGLE_SHEET_ID env var for Log to Sheet feature
 ├── scripts/
 │   ├── app.js                      # Core app logic (ARF + Bounce generate, domain lookup, CSV, unified state, event delegation)
 │   ├── pure.js                     # Pure functions (escapeHtml, parseCsvRow, sanitiseDomainInput, sanitiseAccountInput) — no DOM dependencies
@@ -259,6 +260,7 @@ Set these in the **Vercel Dashboard → Settings → Environment Variables**:
 | `AUTH_SECRET` | ✅ | Random secret used to HMAC-sign the auth session cookie |
 | `WHOISJSON_API_KEY` | ⭐ | API key for [whoisjson.com](https://whoisjson.com) WHOIS lookups (optional — used as fallback when RDAP fails) |
 | `APP_ORIGIN` | ✅ | Your deployment URL (e.g. `https://your-app.vercel.app`) — used for CORS |
+| `GOOGLE_SHEET_ID` | ⭐ | Google Sheet ID for Log to Sheet feature (optional — defaults to built-in sheet if not set) |
 
 > **Generating `AUTH_SECRET`:** Run `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` or use [generate-secret.vercel.app](https://generate-secret.vercel.app/32).
 
