@@ -243,6 +243,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 | `/api/dkim-check?domain=` | GET | Returns DKIM `status` and `selectors_found` array |
 | `/api/login` | POST | Validates password and sets HMAC-signed auth cookie |
 | `/api/health` | GET | Health-check — probes WhoisJSON and Google DNS, returns `{ status: "ok"|"degraded" }` |
+| `/api/sheet-config` | GET | Returns `{ sheetId }` from `GOOGLE_SHEET_ID` env var for Log to Sheet feature |
 
 All API endpoints enforce:
 - **CORS** — `Origin` must match `APP_ORIGIN` env var (read at request time); `Vary: Origin` is set
