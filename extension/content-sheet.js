@@ -18,69 +18,99 @@
     return true;
   });
 
+  async function readCell(nameBox, formulaBar, cellRef) {
+    nameBox.focus();
+    nameBox.select();
+    document.execCommand('insertText', false, cellRef);
+    nameBox.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true
+    }));
+    await sleep(100);
+    return formulaBar ? formulaBar.value.trim() : '';
+  }
+
   async function getNextEmptyRow() {
-    log('getNextEmptyRow: starting from B3 (rows 1-2 are frozen)');
-    try {
-      var nameBox = document.querySelector(
-        '#t-name-box-input, #t-name-box, .docs-name-box-input, [aria-label="Name Box"]'
-      );
-      if (!nameBox) {
-        log('Name Box not found - defaulting to row 3');
-        return 3;
-      }
+    log('getNextEmptyRow: binary search on column B');
 
-      // Navigate to B3 — first data cell (rows 1+2 are frozen header rows)
-      nameBox.focus();
-      nameBox.select();
-      document.execCommand('insertText', false, 'B3');
-      nameBox.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true
-      }));
-      await sleep(500);
+    var nameBox = document.querySelector(
+      '#t-name-box-input, #t-name-box, .docs-name-box-input, [aria-label="Name Box"]'
+    );
+    var formulaBar = document.querySelector(
+      '#t-formula-bar-input, .docs-bar-formula-input, [aria-label="Formula bar"]'
+    );
 
-      // Read Name Box to confirm we landed on B3
-      var confirmedRef = nameBox.value;
-      log('Confirmed cell after navigating to B3: "' + confirmedRef + '"');
-
-      // Press Ctrl+ArrowDown to jump to last filled cell in column B
-      var activeEl = document.activeElement || document.body;
-      activeEl.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'ArrowDown', code: 'ArrowDown', keyCode: 40, which: 40,
-        ctrlKey: true, bubbles: true
-      }));
-      await sleep(500);
-
-      var cellRef = nameBox.value;
-      log('Name Box after Ctrl+ArrowDown: "' + cellRef + '"');
-
-      var match = cellRef && cellRef.match(/(\d+)$/);
-      if (match) {
-        var lastFilledRow = parseInt(match[1], 10);
-
-        // Edge case: if Ctrl+ArrowDown landed on B3 itself,
-        // the sheet is empty — B3 is the first available row
-        if (lastFilledRow === 3) {
-          // Check if B3 is actually empty by reading cell reference
-          // If we started at B3 and didn't move, it means B3 is empty = first available
-          if (confirmedRef === cellRef) {
-            log('B3 is empty — first data row is 3');
-            return 3;
-          }
-        }
-
-        // Normal case: Ctrl+ArrowDown moved us to the last filled row
-        // Next empty row is one below
-        var nextRow = lastFilledRow + 1;
-        log('Last filled row: ' + lastFilledRow + ', next empty row: ' + nextRow);
-        return nextRow;
-      }
-    } catch (e) {
-      log('getNextEmptyRow error: ' + e.message);
+    if (!nameBox) {
+      log('Name Box not found - defaulting to row 3');
+      return 3;
     }
 
-    // Safe fallback: row 3 (never overwrite frozen rows 1 and 2)
-    log('Falling back to row 3');
-    return 3;
+    var today = new Date().toLocaleDateString('en-US');
+    log('Today: ' + today);
+
+    // Step 1: Find lastRow via Ctrl+End
+    nameBox.focus();
+    nameBox.select();
+    document.execCommand('insertText', false, 'B3');
+    nameBox.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true
+    }));
+    await sleep(150);
+
+    document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'End', code: 'End', keyCode: 35, which: 35, ctrlKey: true, bubbles: true
+    }));
+    await sleep(300);
+
+    var endRef = nameBox.value;
+    log('Ctrl+End landed on: ' + endRef);
+    var endMatch = endRef && endRef.match(/(\d+)$/);
+    var lastRow = endMatch ? parseInt(endMatch[1], 10) : 3;
+    log('lastRow: ' + lastRow);
+
+    // Step 2: Binary search column B for today's date
+    var lo = 3;
+    var hi = lastRow;
+    var foundRow = null;
+
+    while (lo <= hi) {
+      var mid = Math.floor((lo + hi) / 2);
+      var val = await readCell(nameBox, formulaBar, 'B' + mid);
+      log('BS row ' + mid + ': "' + val + '"');
+
+      if (val === today) {
+        foundRow = mid;
+        lo = mid + 1;
+      } else if (val === '') {
+        hi = mid - 1;
+      } else {
+        var cellDate = new Date(val);
+        var todayDate = new Date(today);
+        if (cellDate < todayDate) {
+          lo = mid + 1;
+        } else {
+          hi = mid - 1;
+        }
+      }
+    }
+
+    if (foundRow !== null) {
+      // Step 3: Scan downward from foundRow to find exact last today-row
+      var lastTodayRow = foundRow;
+      for (var r = foundRow + 1; r <= foundRow + 50; r++) {
+        var v = await readCell(nameBox, formulaBar, 'B' + r);
+        if (v === today) {
+          lastTodayRow = r;
+        } else {
+          break;
+        }
+      }
+      log('Last today row: ' + lastTodayRow + ', writing to row: ' + (lastTodayRow + 1));
+      return lastTodayRow + 1;
+    }
+
+    // Step 4: Today's date not found - append after last used row
+    log('Today not found - appending after last used row: ' + lastRow);
+    return lastRow + 1;
   }
 
   async function appendRow(data) {
