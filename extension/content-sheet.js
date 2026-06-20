@@ -103,7 +103,7 @@
       ];
 
       for (var i = 0; i < values.length; i++) {
-        var col = String.fromCharCode(65 + i); // A, B, C, D, E, F
+        var col = String.fromCharCode(66 + i); // B, C, D, E, F, G
         var cellRef = col + nextRow;
 
         // Navigate to cell
