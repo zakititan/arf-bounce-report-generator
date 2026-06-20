@@ -110,6 +110,7 @@
     var lo = 3;
     var hi = lastRow;
     var foundRow = null;
+    var lastNonEmptyRow = 2; // tracks last row with any data in column B
 
     while (lo <= hi) {
       var mid = Math.floor((lo + hi) / 2);
@@ -118,10 +119,12 @@
 
       if (val === today) {
         foundRow = mid;
+        lastNonEmptyRow = mid;
         lo = mid + 1;
       } else if (val === '') {
         hi = mid - 1;
       } else {
+        lastNonEmptyRow = mid;
         var cellDate = new Date(val);
         var todayDate = new Date(today);
         if (cellDate < todayDate) {
@@ -147,9 +150,9 @@
       return lastTodayRow + 1;
     }
 
-    // Step 4: Today's date not found - append after last used row
-    log('Today not found - appending after last used row: ' + lastRow);
-    return lastRow + 1;
+    // Step 4: Today's date not found - append after last non-empty row in column B
+    log('Today not found - appending after last non-empty row in column B: ' + lastNonEmptyRow);
+    return lastNonEmptyRow + 1;
   }
 
   async function appendRow(data) {
