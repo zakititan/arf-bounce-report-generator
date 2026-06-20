@@ -86,6 +86,18 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
   - Install by [downloading the extension zip](https://github.com/zakititan/arf-bounce-report-generator/raw/main/extension/releases/extension.zip), unzipping, and loading the folder as an unpacked extension in `chrome://extensions` (Developer mode)
   - To repackage after changes: `npm run pack-extension`
 
+### Log to Sheet (Google Sheets Integration)
+- **Log to Sheet button** — a "Log to Sheet" button appears in both ARF and Bounce output sections; disabled until a report is generated
+- **DOM automation** — writes report data to a Google Sheet via the Chrome extension's content script (`content-sheet.js`) running on `docs.google.com/spreadsheets/*`
+- **Binary search for row detection** — uses `Ctrl+End` to find the sheet's last used row, then binary searches column B (Date) for today's date to find the correct insertion point; handles frozen rows (rows 1–2 are headers) and 8000+ row sheets efficiently (~1.5 seconds)
+- **Column layout** — writes to columns B–G (column A is left empty): B = Date, C = ZD Ticket ID, D = JIRA Link, E = Domain/Email, F = Unsuspension Type, G = Reason
+- **Tab-based data commitment** — after writing the last value (Reason), Tabs to column H to ensure the cell value is saved
+- **Sheet tab management** — background script finds an existing sheet tab or creates a new one; reloads the tab to ensure the content script is injected before sending messages
+- **Retry mechanism** — retries up to 3 times with 3-second delays if the content script doesn't respond
+- **Fallback JIRA link** — if no JIRA has been created yet, uses a placeholder link (`TAE-10024`); after a JIRA is created, the real link is read from `chrome.storage.local`
+- **Extension permissions** — requires `tabs` permission for `chrome.tabs.query`/`chrome.tabs.create`; `host_permissions` includes `https://docs.google.com/*`; content script runs at `document_idle` on Google Sheets
+- **Sheet ID** — hardcoded to `1JFSPIvXUfenWkOT5M7yNt4kMfssxCPFezkU6Mgx0Vkc`; update in `background.js` to use a different sheet
+
 ### Unsuspend (Abuse Desk Integration)
 - **"Create TAE JIRA and Unsuspend" button** — creates JIRA → transitions to Done → adds "Unsuspended" comment → opens Abuse Desk
 - **Abuse Desk automation** — the extension's content script on `abusedesk.ops.titan.email` automatically:
@@ -193,12 +205,13 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 │   └── ui.js                       # UI helpers (showToast with types, theme toggle with transition, stepper, form progress, age colors, validation display, drag-and-drop)
 ├── styles/
 │   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, responsive)
-├── extension/                      # Chrome extension (Manifest V3) for JIRA integration and Abuse Desk automation
+├── extension/                      # Chrome extension (Manifest V3) for JIRA integration, Abuse Desk automation, and Google Sheets logging
 │   ├── manifest.json               # Extension config: v2.1, permissions, content scripts for webapp, JIRA, Abuse Desk, and Google Sheets
-│   ├── background.js               # Service worker: create-jira, create-jira-and-done (JIRA + markDone + comment), store/get report
+│   ├── background.js               # Service worker: create-jira, create-jira-and-done (JIRA + markDone + comment), log-to-sheet, store/get report
 │   ├── content-webapp.js           # Content script on Report Generator: handles JIRA creation, Unsuspend (create + markDone + AD), and sheet logging
 │   ├── content-jira.js             # Content script on JIRA: fallback paste strategy (text first, images one by one)
 │   ├── content-abusedesk.js        # Content script on Abuse Desk: auto-clicks Unblock, pastes reason, clicks Save
+│   ├── content-sheet.js            # Content script on Google Sheets: binary search row detection, cell navigation, data entry via execCommand
 │   ├── releases/extension.zip      # Packaged extension for easy distribution
 │   └── icons/                      # Extension icons (16/48/128px)
 └── tests/
@@ -306,6 +319,7 @@ WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fal
 7. Enter a Zendesk ticket link in the "Zendesk Ticket Link" field (required)
 8. Click **Create TAE JIRA** → JIRA ticket is created via REST API
 9. Or click **Create TAE JIRA and Unsuspend** → JIRA created + marked Done + "Unsuspended" comment + Abuse Desk opens
+10. Click **Log to Sheet** to append the report to the tracking Google Sheet
 
 ### Bounce Report
 1. Select previous unblock status
@@ -318,6 +332,7 @@ WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fal
 6. Enter a Zendesk ticket link in the "Zendesk Ticket Link" field (required)
 7. Click **Create TAE JIRA** → JIRA ticket is created via REST API
 8. Or click **Create TAE JIRA and Unsuspend** → JIRA created + marked Done + "Unsuspended" comment + Abuse Desk opens
+9. Click **Log to Sheet** to append the report to the tracking Google Sheet
 
 > **Tip:** All form fields are saved automatically — refreshing the page restores your last session.
 
