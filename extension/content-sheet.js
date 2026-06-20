@@ -18,6 +18,12 @@
     return true;
   });
 
+  function getFormulaBarText(el) {
+    if (!el) return '';
+    if (el.value !== undefined) return el.value.trim();
+    return (el.textContent || el.innerText || '').trim();
+  }
+
   async function readCell(nameBox, formulaBar, cellRef) {
     nameBox.focus();
     nameBox.select();
@@ -27,16 +33,14 @@
     }));
     await sleep(250);
 
-    if (formulaBar) {
-      var val = formulaBar.value.trim();
-      if (val) return val;
-    }
+    var val = getFormulaBarText(formulaBar);
+    if (val) return val;
 
-    // Fallback: try reading from the formula bar input inside the iframe
+    // Fallback: try reading from other formula bar selectors
     try {
       var fbInput = document.querySelector('input[id*="formula-bar"], input[class*="formula"], .waffle-formula-bar-input');
       if (fbInput) {
-        var val2 = fbInput.value.trim();
+        var val2 = getFormulaBarText(fbInput);
         log('readCell fallback fbInput: "' + val2 + '"');
         return val2;
       }
@@ -45,10 +49,12 @@
     // Fallback: read active element value
     try {
       var active = document.activeElement;
-      if (active && active !== nameBox && active.value) {
-        var val3 = active.value.trim();
-        log('readCell fallback activeEl: "' + val3 + '"');
-        return val3;
+      if (active && active !== nameBox) {
+        var val3 = getFormulaBarText(active);
+        if (val3) {
+          log('readCell fallback activeEl: "' + val3 + '"');
+          return val3;
+        }
       }
     } catch (e) {}
 
