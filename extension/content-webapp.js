@@ -95,7 +95,7 @@
       var logData = event.data;
 
       chrome.storage.local.get('lastJiraUrl', function(result) {
-        var jiraLink = result.lastJiraUrl || logData.fallbackJiraLink;
+        var jiraLink = result.lastJiraUrl || '';
 
         chrome.runtime.sendMessage({
           action: 'log-to-sheet',

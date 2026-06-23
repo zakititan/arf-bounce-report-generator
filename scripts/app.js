@@ -1171,8 +1171,6 @@ function logToSheet(prefix) {
   const type = prefix === 'arf' ? 'ARF' : 'BOUNCE';
   const date = new Date().toLocaleDateString('en-US');
 
-  const PLACEHOLDER_JIRA = 'https://jira.directi.com/browse/TAE-10024';
-
   window.postMessage({
     type: 'REPORT_GENERATOR_LOG_SHEET',
     date,
@@ -1180,7 +1178,6 @@ function logToSheet(prefix) {
     domainEmail: account,
     reportType: type,
     reason: reportText,
-    fallbackJiraLink: PLACEHOLDER_JIRA,
     sheetId: sheetConfig.sheetId,
   }, '*');
 
