@@ -159,7 +159,7 @@ function initDomainInputs() {
 }
 
 // Account field → auto-fill domain input + trigger lookup
-['arf', 'bounce'].forEach(prefix => {
+['arf', 'bounce', 'ipspike'].forEach(prefix => {
   const accountInput = document.getElementById(prefix + '-account');
   if (!accountInput) return;
 
