@@ -142,67 +142,11 @@
     return '';
   }
 
-  async function getLastRowViaFormula(nameBox, formulaBar) {
-    // Navigate to A1 as scratch cell
-    nameBox.focus();
-    nameBox.select();
-    document.execCommand('insertText', false, 'A1');
-    nameBox.dispatchEvent(new KeyboardEvent('keydown', {
-      key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true
-    }));
-    await sleep(300);
-
-    // Enter edit mode
-    if (document.activeElement) {
-      document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {
-        key: 'F2', code: 'F2', keyCode: 113, which: 113, bubbles: true
-      }));
-    }
-    await sleep(150);
-
-    // Type the formula — Sheets evaluates it live in the formula bar
-    // IFERROR covers dates stored as numbers (1E+99) and as text ("zzzzz")
-    // Returns the actual row number of the last filled cell in column B
-    document.execCommand('insertText', false,
-      '=IFERROR(MATCH(1E+99,B:B,1),MATCH("zzzzz",B:B,1))'
-    );
-    await sleep(600);
-
-    // Read the evaluated result from the formula bar
-    var rawVal = getFormulaBarText(formulaBar);
-    log('MATCH formula bar raw: "' + rawVal + '"');
-
-    // Fallback formula bar selectors
-    if (!rawVal || rawVal.startsWith('=')) {
-      try {
-        var fbInput = document.querySelector(
-          'input[id*="formula-bar"], input[class*="formula"], .waffle-formula-bar-input'
-        );
-        if (fbInput) rawVal = getFormulaBarText(fbInput);
-      } catch (e) {}
-    }
-
-    // Escape WITHOUT committing — formula discarded, A1 stays unchanged
-    document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {
-      key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true
-    }));
-    await sleep(150);
-
-    var lastRow = parseInt(rawVal, 10);
-    if (isNaN(lastRow) || rawVal.startsWith('=')) {
-      log('MATCH read failed (got "' + rawVal + '") — returning null for fallback');
-      return null;
-    }
-
-    log('MATCH result: lastRow = ' + lastRow);
-    return lastRow;
-  }
-
   async function getNextEmptyRow() {
     log('getNextEmptyRow: binary search on column B');
 
     var nameBox = document.querySelector(
-      '#t-name-box-input, #t-name-box, .docs-name-box-input, [aria-label="Name Box"], [aria-label="\u03a3 Name Box"], [data-goog-aria-label="Name Box"]'
+      '#t-name-box-input, #t-name-box, .docs-name-box-input, [aria-label="Name Box"]'
     );
     var formulaBar = document.querySelector(
       '#t-formula-bar-input, .docs-bar-formula-input, [aria-label="Formula bar"], input[id*="formula-bar"], input[class*="formula"], .waffle-formula-bar-input'
@@ -222,19 +166,18 @@
     var today = new Date().toLocaleDateString('en-US');
     log('Today: ' + today);
 
-    // Step 1: Find lastRow via MATCH formula — O(1), no modifier keys, works on Edge/macOS
-    var lastRow = await getLastRowViaFormula(nameBox, formulaBar);
+    // Step 1: Find lastRow via Ctrl+End
+    await typeText(nameBox, 'B3');
+    pressKey(nameBox, 'Enter', 'Enter', 13);
+    await sleep(200);
 
-    if (lastRow === null) {
-      // Formula bar read failed entirely — short linear scan as last resort
-      log('Formula fallback: scanning downward from row 3');
-      lastRow = 3;
-      for (var probe = 3; probe <= 50; probe++) {
-        var pv = await readCell(nameBox, formulaBar, 'B' + probe);
-        if (pv === '') break;
-        lastRow = probe;
-      }
-    }
+    pressKey(document.activeElement, 'End', 'End', 35, { ctrl: true });
+    await sleep(400);
+
+    var endRef = nameBox.value;
+    log('Ctrl+End landed on: ' + endRef);
+    var endMatch = endRef && endRef.match(/(\d+)$/);
+    var lastRow = endMatch ? parseInt(endMatch[1], 10) : 3;
     log('lastRow: ' + lastRow);
 
     // Step 2: Binary search column B for today's date
@@ -290,7 +233,7 @@
       log('Target row: ' + nextRow);
 
       var nameBox = document.querySelector(
-        '#t-name-box-input, #t-name-box, .docs-name-box-input, [aria-label="Name Box"], [aria-label="\u03a3 Name Box"], [data-goog-aria-label="Name Box"]'
+        '#t-name-box-input, #t-name-box, .docs-name-box-input, [aria-label="Name Box"]'
       );
       if (!nameBox) { log('Name Box not found - aborting'); return false; }
 
