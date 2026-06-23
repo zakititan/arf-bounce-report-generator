@@ -95,12 +95,14 @@
       var noJiraData = event.data;
       var noJiraAccounts = noJiraData.accounts || [noJiraData.account];
 
-      for (var n = 0; n < noJiraAccounts.length; n++) {
-        var adUrl = 'https://abusedesk.ops.titan.email/blocked_users.html?entity=' +
-          encodeURIComponent(noJiraAccounts[n]) + '&region=' + noJiraData.region;
-        window.open(adUrl, '_blank');
-      }
-      showToast('Opening ' + noJiraAccounts.length + ' Abuse Desk tab(s)…');
+      chrome.storage.local.set({ unsuspendReason: noJiraData.reason || 'Password Changed' }, function () {
+        for (var n = 0; n < noJiraAccounts.length; n++) {
+          var adUrl = 'https://abusedesk.ops.titan.email/blocked_users.html?entity=' +
+            encodeURIComponent(noJiraAccounts[n]) + '&region=' + noJiraData.region;
+          window.open(adUrl, '_blank');
+        }
+        showToast('Opening ' + noJiraAccounts.length + ' Abuse Desk tab(s)…');
+      });
     }
 
     if (event.data.type === 'REPORT_GENERATOR_LOG_SHEET') {
