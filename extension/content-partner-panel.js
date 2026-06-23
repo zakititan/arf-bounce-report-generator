@@ -75,43 +75,41 @@
   }
 
   function analyzeHistory(events) {
-    var suspensionDate = null;
+    var suspensionIdx = -1;
     var passwordResetAfterSuspension = false;
-    var lastSuspensionAction = null;
-    var lastPasswordReset = null;
 
+    // Find the most recent suspension (first one in newest-first list)
     for (var i = 0; i < events.length; i++) {
       var action = events[i].action.toLowerCase();
       if (action.indexOf('suspend') !== -1 && action.indexOf('un') === -1) {
-        lastSuspensionAction = events[i];
-      }
-      if (action.indexOf('password reset') !== -1) {
-        lastPasswordReset = events[i];
+        suspensionIdx = i;
+        break;
       }
     }
 
-    if (lastSuspensionAction && lastPasswordReset) {
-      var suspIdx = events.indexOf(lastSuspensionAction);
-      var resetIdx = events.indexOf(lastPasswordReset);
-      if (resetIdx < suspIdx) {
-        passwordResetAfterSuspension = false;
-      } else {
-        passwordResetAfterSuspension = true;
-      }
-    }
-
-    if (!lastSuspensionAction) {
-      for (var k = 0; k < events.length; k++) {
-        if (events[k].action.toLowerCase().indexOf('suspend') !== -1) {
-          lastSuspensionAction = events[k];
+    // If we found a suspension, check if any password reset appears BEFORE it
+    // in the DOM (which means it happened AFTER the suspension chronologically)
+    if (suspensionIdx > 0) {
+      for (var j = 0; j < suspensionIdx; j++) {
+        if (events[j].action.toLowerCase().indexOf('password reset') !== -1) {
+          passwordResetAfterSuspension = true;
           break;
         }
       }
     }
 
+    var lastSuspension = suspensionIdx >= 0 ? events[suspensionIdx] : null;
+    var lastPasswordReset = null;
+    for (var k = 0; k < events.length; k++) {
+      if (events[k].action.toLowerCase().indexOf('password reset') !== -1) {
+        lastPasswordReset = events[k];
+        break;
+      }
+    }
+
     return {
       passwordChanged: passwordResetAfterSuspension,
-      lastSuspension: lastSuspensionAction ? lastSuspensionAction.action : null,
+      lastSuspension: lastSuspension ? lastSuspension.action : null,
       lastPasswordReset: lastPasswordReset ? lastPasswordReset.action : null,
       events: events
     };
