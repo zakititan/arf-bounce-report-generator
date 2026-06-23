@@ -415,8 +415,13 @@
         </div>
         <div class="field">
           <label for="ipspike-pwd-changed">Password changed after suspension?<span class="req">*</span></label>
-          <select id="ipspike-pwd-changed" aria-required="true"><option value="">Select...</option><option value="Yes">Yes</option><option value="No">No</option></select>
-          <span class="hint">Based on partner panel lookup</span>
+          <div class="pwd-change-row">
+            <select id="ipspike-pwd-changed" aria-required="true"><option value="">Select...</option><option value="Yes">Yes</option><option value="No">No</option></select>
+            <button class="btn btn-secondary btn-check-pwd" data-action="check-password" data-panel="ipspike" title="Auto-check via Partner Panel">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Auto-check
+            </button>
+          </div>
+          <span class="hint">Based on partner panel lookup — or click Auto-check to verify</span>
         </div>
       </div>
       <div class="panel-actions sticky">

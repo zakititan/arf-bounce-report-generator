@@ -90,6 +90,12 @@ document.addEventListener('DOMContentLoaded', () => {
   fetch('/api/sheet-config').then(r => r.json()).then(d => {
     if (d.sheetId) sheetConfig.sheetId = d.sheetId;
   }).catch(() => {});
+
+  window.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'PARTNER_PANEL_RESULT') {
+      setPartnerPanelResult(e.data.data);
+    }
+  });
 });
 
 // ── Keyboard shortcuts (Ctrl/Cmd + Enter) ─────────────────────────────
@@ -390,6 +396,9 @@ function initEventDelegation() {
         break;
       case 'toggle-result-card':
         toggleResultCard(target.closest('.result-card').id.replace('-domain-result', ''));
+        break;
+      case 'check-password':
+        checkPasswordChange(panel);
         break;
       case 'remove-screenshot': {
         const idx = parseInt(target.getAttribute('data-index'), 10);
@@ -1214,4 +1223,49 @@ function logToSheet(prefix) {
   }, '*');
 
   showToast('Logging to Sheet…');
+}
+
+function checkPasswordChange(prefix) {
+  const account = document.getElementById(prefix + '-account')?.value.trim() || '';
+  if (!account) {
+    showToast('Please enter an account first.', 'warning');
+    return;
+  }
+
+  const btn = document.querySelector('[data-action="check-password"][data-panel="' + prefix + '"]');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 0.8s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Checking…';
+  }
+
+  window.postMessage({
+    type: 'REPORT_GENERATOR_PARTNER_PANEL_LOOKUP',
+    account: account,
+  }, '*');
+
+  showToast('Opening Partner Panel to check password change…', 'info');
+}
+
+function setPartnerPanelResult(result) {
+  const select = document.getElementById('ipspike-pwd-changed');
+  const btn = document.querySelector('[data-action="check-password"][data-panel="ipspike"]');
+
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Auto-check';
+  }
+
+  if (!result.success) {
+    showToast('Partner Panel check failed: ' + (result.error || 'Unknown error'), 'error');
+    return;
+  }
+
+  if (select) {
+    select.value = result.passwordChanged ? 'Yes' : 'No';
+  }
+
+  const msg = result.passwordChanged
+    ? 'Password WAS changed after suspension'
+    : 'Password was NOT changed after suspension';
+  showToast(msg, result.passwordChanged ? 'success' : 'warning');
 }

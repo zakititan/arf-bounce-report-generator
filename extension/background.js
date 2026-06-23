@@ -1,5 +1,6 @@
 const EXPIRY_MS = 10 * 60 * 1000;
 const DEFAULT_SHEET_ID = '10YgqLp3L66K27jx2KNumtfwe5sKl1VjFzXwQX5pGE3k';
+var _partnerPanelResolver = null;
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -64,6 +65,50 @@ async function openSheetAndLog(rowData) {
   }
 }
 
+async function handlePartnerPanelLookup(data, sendResponse) {
+  try {
+    var account = data.account;
+    if (!account) {
+      sendResponse({ success: false, error: 'No account provided' });
+      return;
+    }
+
+    var tab = await new Promise(function(resolve) {
+      chrome.tabs.create({ url: 'https://admin.titan.email', active: false }, resolve);
+    });
+
+    var loaded = await waitForTabLoad(tab.id, 15000);
+    if (!loaded) {
+      sendResponse({ success: false, error: 'Tab failed to load' });
+      return;
+    }
+
+    await sleep(3000);
+
+    var result = await new Promise(function(resolve) {
+      _partnerPanelResolver = resolve;
+      chrome.tabs.sendMessage(tab.id, { action: 'run-partner-panel-lookup', account: account }, function(r) {
+        if (chrome.runtime.lastError) {
+          console.warn('[PartnerPanel] sendMessage error:', chrome.runtime.lastError.message);
+          _partnerPanelResolver = null;
+          resolve({ success: false, error: chrome.runtime.lastError.message });
+        }
+      });
+      setTimeout(function() {
+        if (_partnerPanelResolver) {
+          _partnerPanelResolver = null;
+          resolve({ success: false, error: 'Timeout waiting for partner panel result' });
+        }
+      }, 60000);
+    });
+
+    sendResponse(result);
+  } catch (e) {
+    console.warn('[PartnerPanel] Exception:', e.message);
+    sendResponse({ success: false, error: e.message });
+  }
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'store-report') {
     const reportData = {
@@ -114,6 +159,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'create-jira-and-done') {
     handleCreateJiraAndDone(message.data, sendResponse);
     return true;
+  }
+
+  if (message.action === 'partner-panel-lookup') {
+    handlePartnerPanelLookup(message.data, sendResponse);
+    return true;
+  }
+
+  if (message.action === 'partner-panel-result') {
+    if (_partnerPanelResolver) {
+      _partnerPanelResolver(message.data);
+      _partnerPanelResolver = null;
+    }
+    return;
   }
 });
 

@@ -115,6 +115,22 @@
         });
       });
     }
+
+    if (event.data.type === 'REPORT_GENERATOR_PARTNER_PANEL_LOOKUP') {
+      var lookupAccount = event.data.account;
+      var requestId = 'pp_' + Date.now();
+
+      chrome.runtime.sendMessage({
+        action: 'partner-panel-lookup',
+        data: { account: lookupAccount, requestId: requestId }
+      }, function(response) {
+        if (chrome.runtime.lastError || !response) {
+          window.postMessage({ type: 'PARTNER_PANEL_RESULT', data: { success: false, error: chrome.runtime.lastError?.message || 'No response' } }, '*');
+          return;
+        }
+        window.postMessage({ type: 'PARTNER_PANEL_RESULT', data: response }, '*');
+      });
+    }
   });
 
   function fallbackToStorage(text, html, panel, account) {
