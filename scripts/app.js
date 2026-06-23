@@ -61,6 +61,11 @@ const state = {
     lookupInFlight: false,
     region: 'na',
   },
+  ipspike: {
+    whois: null,
+    lookupInFlight: false,
+    region: 'na',
+  },
 };
 let lastActivePanel = null; // tracks which panel the user last interacted with (for Ctrl/Cmd+Enter)
 let sheetConfig = { sheetId: '' };
@@ -118,7 +123,7 @@ async function detectRegion(prefix, domain) {
 }
 
 function initDomainInputs() {
-  ['arf', 'bounce'].forEach(prefix => {
+  ['arf', 'bounce', 'ipspike'].forEach(prefix => {
     const input = document.getElementById(prefix + '-domain-input');
     if (!input) return;
     input.addEventListener('paste', (e) => {
@@ -214,6 +219,24 @@ if (arfAccountInput && arfCountLink) {
   arfAccountInput.addEventListener('paste', () => setTimeout(updateArfCountHref, 0));
   arfAccountInput.addEventListener('regionchange', updateArfCountHref);
   updateArfCountHref();
+}
+
+// ── Check IP Spike AD link updater ─────────────────────────────────
+const ipspikeAccountInput = document.getElementById('ipspike-account');
+const ipspikeCountLink = document.querySelector('#ipspike-panel .btn-abusedesk');
+if (ipspikeAccountInput && ipspikeCountLink) {
+  function updateIpspikeCountHref() {
+    const account = ipspikeAccountInput.value.trim();
+    const region = state.ipspike.region === 'eu' ? 'eu-central-1' : 'us-east-1';
+    ipspikeCountLink.href = account
+      ? 'https://abusedesk.ops.titan.email/history.html?entity=' + encodeURIComponent(account) + '&region=' + region
+      : 'https://abusedesk.ops.titan.email/history.html?entity=&region=' + region;
+  }
+
+  ipspikeAccountInput.addEventListener('input', updateIpspikeCountHref);
+  ipspikeAccountInput.addEventListener('paste', () => setTimeout(updateIpspikeCountHref, 0));
+  ipspikeAccountInput.addEventListener('regionchange', updateIpspikeCountHref);
+  updateIpspikeCountHref();
 }
 
 // ── Check User Agent link updater ─────────────────────────────────
@@ -318,6 +341,7 @@ function initEventDelegation() {
     if (!panel) return;
     if (panel.id === 'arf-panel') lastActivePanel = 'arf';
     else if (panel.id === 'bounce-panel') lastActivePanel = 'bounce';
+    else if (panel.id === 'ipspike-panel') lastActivePanel = 'ipspike';
   });
 
   shell.addEventListener('click', (e) => {
@@ -452,6 +476,7 @@ const PERSIST_FIELDS = [
   'arf-blocked-lt2', 'arf-email-type', 'arf-website', 'arf-dkim', 'arf-domain-input',
   'bounce-account', 'bounce-prev-unblock', 'bounce-other-blocked', 'bounce-website',
   'bounce-dkim', 'bounce-domain-input', 'bounce-other-blocked-detail',
+  'ipspike-account', 'ipspike-zd-link', 'ipspike-domain-input', 'ipspike-pwd-changed',
 ];
 
 function saveFormState() {
@@ -1104,7 +1129,7 @@ function createTaeJira(prefix) {
 
 function unsuspendAccount(prefix) {
   const outputSection = document.getElementById(prefix + '-output-section');
-  if (!outputSection || outputSection.style.display === 'none') {
+  if (outputSection && outputSection.style.display === 'none') {
     showToast('Please generate the report first.', 'warning');
     return;
   }
@@ -1129,10 +1154,17 @@ function unsuspendAccount(prefix) {
   }
 
   const zdLink = document.getElementById(prefix + '-zd-link')?.value.trim() || '';
-  const region = (prefix === 'arf' ? state.arf : state.bounce).region === 'eu' ? 'eu-central-1' : 'us-east-1';
-  const reason = zdLink || 'no jira created';
+  const region = (state[prefix] || state.arf).region === 'eu' ? 'eu-central-1' : 'us-east-1';
 
-  const outputArea = outputSection.querySelector('.output-area');
+  let reason;
+  if (prefix === 'ipspike') {
+    const pwdChanged = document.getElementById('ipspike-pwd-changed')?.value || '';
+    reason = pwdChanged === 'Yes' ? 'Password changed' : 'Password not changed';
+  } else {
+    reason = zdLink || 'no jira created';
+  }
+
+  const outputArea = outputSection?.querySelector('.output-area');
   const reportText = (outputArea?.dataset.copyText) || document.getElementById(prefix + '-output-text')?.textContent || '';
   const reportHtml = outputArea ? Array.from(outputArea.childNodes)
     .filter(el => !el.classList?.contains('copy-btn-wrap'))

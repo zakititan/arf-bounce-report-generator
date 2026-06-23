@@ -100,6 +100,7 @@ a, button, input, select, textarea { transition: color var(--transition-interact
 }
 .badge-arf { background: var(--color-primary-highlight); color: var(--color-primary); }
 .badge-bounce { background: var(--color-warning-highlight); color: var(--color-warning); }
+.badge-ipspike { background: var(--color-success-highlight); color: var(--color-success); }
 .panel-title { font-size: var(--text-lg); font-weight: 600; }
 .panel-body { padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-4); }
 
