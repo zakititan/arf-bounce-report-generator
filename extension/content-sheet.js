@@ -166,17 +166,16 @@
     var today = new Date().toLocaleDateString('en-US');
     log('Today: ' + today);
 
-    // Step 1: Find lastRow by navigating to a large row then Ctrl+Up
-    await typeText(nameBox, 'B10000');
+    // Step 1: Find lastRow via Ctrl+End
+    await typeText(nameBox, 'B3');
     pressKey(nameBox, 'Enter', 'Enter', 13);
-    await sleep(300);
+    await sleep(200);
 
-    // Ctrl+Up from a far row finds the last filled cell
-    pressKey(document.activeElement, 'ArrowUp', 'ArrowUp', 38, { ctrl: true });
-    await sleep(500);
+    pressKey(document.activeElement, 'End', 'End', 35, { ctrl: true });
+    await sleep(400);
 
     var endRef = nameBox.value;
-    log('Ctrl+Up landed on: ' + endRef);
+    log('Ctrl+End landed on: ' + endRef);
     var endMatch = endRef && endRef.match(/(\d+)$/);
     var lastRow = endMatch ? parseInt(endMatch[1], 10) : 3;
     log('lastRow: ' + lastRow);
