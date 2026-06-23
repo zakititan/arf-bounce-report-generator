@@ -109,6 +109,23 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Region-aware URL** — Abuse Desk URL includes the correct `region` parameter (`us-east-1` for NA, `eu-central-1` for EU) based on MX-based region detection
 - **Fallback toast** — shows success/failure toast notifications at each step for user feedback
 
+### IP Spike Panel
+- **Dedicated panel** — a third panel for IP Spike unsuspend cases, displayed alongside ARF and Bounce on wide screens (≥1400px: 3-column layout)
+- **Account field** — enter the account email/domain; domain lookup auto-fills from the account input (same as ARF/Bounce)
+- **Domain Lookup** — same WHOIS/Website/DKIM widget as ARF and Bounce panels
+- **Partner Panel link** — "Check on Partner Panel" link opens `admin.titan.email` for manual lookups
+- **Partner Panel automation** — the extension's content script on `admin.titan.email` automatically:
+  1. Enters the account in the search field
+  2. Clicks **Get Info**
+  3. Clicks **View** on the Active order
+  4. Clicks **View Account History**
+  5. Reads the Action History to detect suspension date and password reset events
+  6. Returns results to the web app
+- **Password changed detection** — automatically determines if a password reset occurred after the most recent suspension by comparing event positions in the Action History (newest-first ordering)
+- **Suspension date & password changed date** — displays the most recent suspension date and last password reset date from the partner panel; shows N/A if not found
+- **Auto-check button** — click to trigger the partner panel automation; results auto-fill the "Password changed after suspension?" dropdown
+- **Unsuspend via AD** — opens Abuse Desk tabs directly (no JIRA created); reason is hardcoded to "Password Changed"
+
 ### Mailboards Integration
 - **Check on Mailboards** — a "Check on Mailboards" link sits below the Account field in both ARF and Bounce panels, linking to [mailboards.ops.titan.email](https://mailboards.ops.titan.email)
 - **Smart parameter selection** — if the Account field contains an email address (`@` present), the URL uses `?email=`; otherwise it uses `?domain=`; falls back to bare `?env=prod` when the Account field is empty
@@ -209,12 +226,13 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ├── styles/
 │   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, responsive)
 ├── extension/                      # Chrome extension (Manifest V3) for JIRA integration, Abuse Desk automation, and Google Sheets logging
-│   ├── manifest.json               # Extension config: v2.1, permissions, content scripts for webapp, JIRA, Abuse Desk, and Google Sheets
-│   ├── background.js               # Service worker: create-jira, create-jira-and-done (JIRA + markDone + comment), log-to-sheet, store/get report
-│   ├── content-webapp.js           # Content script on Report Generator: handles JIRA creation, Unsuspend (create + markDone + AD), and sheet logging
+│   ├── manifest.json               # Extension config: v3.0, permissions, content scripts for webapp, JIRA, Abuse Desk, Google Sheets, and Partner Panel
+│   ├── background.js               # Service worker: create-jira, create-jira-and-done (JIRA + markDone + comment), log-to-sheet, partner-panel-lookup, store/get report
+│   ├── content-webapp.js           # Content script on Report Generator: handles JIRA creation, Unsuspend (create + markDone + AD), partner panel lookup, and sheet logging
 │   ├── content-jira.js             # Content script on JIRA: fallback paste strategy (text first, images one by one)
 │   ├── content-abusedesk.js        # Content script on Abuse Desk: auto-clicks Unblock, pastes reason, clicks Save
 │   ├── content-sheet.js            # Content script on Google Sheets: binary search row detection, cell navigation, data entry via execCommand
+│   ├── content-partner-panel.js    # Content script on admin.titan.email: automates account lookup, order view, account history, and password change detection
 │   ├── releases/extension.zip      # Packaged extension for easy distribution
 │   └── icons/                      # Extension icons (16/48/128px)
 └── tests/
@@ -342,6 +360,14 @@ WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fal
 
 > **Tip:** All form fields are saved automatically — refreshing the page restores your last session.
 
+### IP Spike Unsuspend
+1. Enter the account email/domain in the Account field
+2. Domain lookup auto-runs (same as ARF/Bounce)
+3. Click **Auto-check** (or wait for the partner panel tab to open automatically) — the extension opens `admin.titan.email`, searches the account, views the active order, and reads the Account History
+4. The "Password changed after suspension?" dropdown auto-fills based on the history analysis
+5. Suspension Date and Last Password Changed dates appear in a results card below the dropdown
+6. Click **Unsuspend via AD** — opens Abuse Desk tabs directly with reason "Password Changed" (no JIRA created)
+
 ---
 
 ## Security
@@ -362,7 +388,7 @@ WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fal
 - **Middleware URL matching** uses exact path or subpath prefix to prevent `/api/login-staging` from bypassing auth
 - **`AUTH_SECRET`** and **`APP_PASSWORD`** are never committed to the repo — always set via environment variables
 - **Hostname validation** rejects IPv4/IPv6 addresses, localhost names, `.localhost`/`.local`/`.internal` TLDs (SSRF prevention), consecutive dots, hyphen-leading labels, and email local-parts
-- **Extension host permissions** — declares `host_permissions` for `https://jira.directi.com/*` to enable authenticated REST API calls using browser session cookies
+- **Extension host permissions** — declares `host_permissions` for `https://jira.directi.com/*`, `https://docs.google.com/*`, and `https://admin.titan.email/*` to enable authenticated REST API calls and Partner Panel automation using browser session cookies
 
 ---
 
