@@ -1231,6 +1231,9 @@ function checkPasswordChange(prefix) {
 function setPartnerPanelResult(result) {
   const select = document.getElementById('ipspike-pwd-changed');
   const btn = document.querySelector('[data-action="check-password"][data-panel="ipspike"]');
+  const resultsPanel = document.getElementById('ipspike-partner-results');
+  const suspDateEl = document.getElementById('ipspike-suspension-date');
+  const pwdDateEl = document.getElementById('ipspike-pwd-changed-date');
 
   if (btn) {
     btn.disabled = false;
@@ -1244,6 +1247,12 @@ function setPartnerPanelResult(result) {
 
   if (select) {
     select.value = result.passwordChanged ? 'Yes' : 'No';
+  }
+
+  if (resultsPanel) {
+    resultsPanel.style.display = 'flex';
+    if (suspDateEl) suspDateEl.textContent = result.suspensionDate || 'N/A';
+    if (pwdDateEl) pwdDateEl.textContent = result.lastPasswordResetDate || 'N/A';
   }
 
   const msg = result.passwordChanged

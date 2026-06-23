@@ -77,18 +77,18 @@
   function analyzeHistory(events) {
     var suspensionIdx = -1;
     var passwordResetAfterSuspension = false;
+    var suspensionDate = 'N/A';
+    var lastPasswordResetDate = 'N/A';
 
-    // Find the most recent suspension (first one in newest-first list)
     for (var i = 0; i < events.length; i++) {
       var action = events[i].action.toLowerCase();
       if (action.indexOf('suspend') !== -1 && action.indexOf('un') === -1) {
         suspensionIdx = i;
+        suspensionDate = events[i].date || 'N/A';
         break;
       }
     }
 
-    // If we found a suspension, check if any password reset appears BEFORE it
-    // in the DOM (which means it happened AFTER the suspension chronologically)
     if (suspensionIdx > 0) {
       for (var j = 0; j < suspensionIdx; j++) {
         if (events[j].action.toLowerCase().indexOf('password reset') !== -1) {
@@ -98,19 +98,17 @@
       }
     }
 
-    var lastSuspension = suspensionIdx >= 0 ? events[suspensionIdx] : null;
-    var lastPasswordReset = null;
     for (var k = 0; k < events.length; k++) {
       if (events[k].action.toLowerCase().indexOf('password reset') !== -1) {
-        lastPasswordReset = events[k];
+        lastPasswordResetDate = events[k].date || 'N/A';
         break;
       }
     }
 
     return {
       passwordChanged: passwordResetAfterSuspension,
-      lastSuspension: lastSuspension ? lastSuspension.action : null,
-      lastPasswordReset: lastPasswordReset ? lastPasswordReset.action : null,
+      suspensionDate: suspensionDate,
+      lastPasswordResetDate: lastPasswordResetDate,
       events: events
     };
   }
@@ -209,8 +207,8 @@
           success: true,
           account: account,
           passwordChanged: analysis.passwordChanged,
-          lastSuspension: analysis.lastSuspension,
-          lastPasswordReset: analysis.lastPasswordReset,
+          suspensionDate: analysis.suspensionDate,
+          lastPasswordResetDate: analysis.lastPasswordResetDate,
           events: events
         }
       });
