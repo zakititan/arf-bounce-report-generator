@@ -1161,7 +1161,7 @@ function unsuspendAccount(prefix) {
     .map(el => el.outerHTML).join('') : '';
 
   window.postMessage({
-    type: 'REPORT_GENERATOR_UNSUSPEND',
+    type: prefix === 'ipspike' ? 'REPORT_GENERATOR_UNSUSPEND_NO_JIRA' : 'REPORT_GENERATOR_UNSUSPEND',
     accounts: accounts,
     account: accounts[0],
     region: region,
