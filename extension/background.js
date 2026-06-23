@@ -1,4 +1,87 @@
 const EXPIRY_MS = 10 * 60 * 1000;
+const DEFAULT_SHEET_ID = '10YgqLp3L66K27jx2KNumtfwe5sKl1VjFzXwQX5pGE3k';
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function waitForTabLoad(tabId, maxMs) {
+  return new Promise(resolve => {
+    const listener = function(tabId_, changeInfo) {
+      if (tabId_ === tabId && changeInfo.status === 'complete') {
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve(true);
+      }
+    };
+    chrome.tabs.onUpdated.addListener(listener);
+    setTimeout(() => {
+      chrome.tabs.onUpdated.removeListener(listener);
+      resolve(false);
+    }, maxMs);
+  });
+}
+
+async function openSheetAndLog(rowData) {
+  try {
+    var sheetId = rowData.sheetId || DEFAULT_SHEET_ID;
+    var sheetUrl = 'https://docs.google.com/spreadsheets/d/' + sheetId + '/edit';
+    console.log('[Report→Sheet] openSheetAndLog called', rowData);
+
+    var tabs = await new Promise(function(resolve) {
+      chrome.tabs.query({ url: 'https://docs.google.com/spreadsheets/d/*' }, resolve);
+    });
+    var tab = tabs && tabs.find(function(t) { return t.url && t.url.indexOf(sheetId) !== -1; });
+    var isNew = false;
+    if (!tab) {
+      console.log('[Report→Sheet] No sheet tab found, creating...');
+      tab = await new Promise(function(resolve) {
+        chrome.tabs.create({ url: sheetUrl, active: false }, resolve);
+      });
+      isNew = true;
+    }
+
+    if (isNew || tab.status !== 'complete') {
+      var loaded = await waitForTabLoad(tab.id, 15000);
+      console.log('[Report→Sheet] Tab loaded:', loaded);
+    }
+
+    await sleep(4000);
+
+    // Ensure content-sheet.js is injected by reloading if needed
+    if (!isNew) {
+      console.log('[Report→Sheet] Reloading tab to ensure content script...');
+      await chrome.tabs.reload(tab.id);
+      await waitForTabLoad(tab.id, 15000);
+      await sleep(3000);
+    }
+
+    console.log('[Report→Sheet] Sending message to tab', tab.id);
+
+    var attempts = 0;
+    var response = null;
+    while (attempts < 3) {
+      attempts++;
+      response = await new Promise(function(resolve) {
+        chrome.tabs.sendMessage(tab.id, { action: 'append-sheet-row', data: rowData }, function(r) {
+          if (chrome.runtime.lastError) {
+            console.warn('[Report→Sheet] sendMessage error (attempt ' + attempts + '):', chrome.runtime.lastError.message);
+            resolve(null);
+          } else {
+            console.log('[Report→Sheet] Response (attempt ' + attempts + '):', r);
+            resolve(r);
+          }
+        });
+      });
+      if (response && response.success) return true;
+      if (response) break;
+      console.log('[Report→Sheet] Retrying in 3s...');
+      await sleep(3000);
+    }
+    console.warn('[Report→Sheet] All attempts failed, response:', response);
+    return response && response.success;
+  } catch (e) {
+    console.warn('[Report→Sheet] Exception:', e.message);
+    return false;
+  }
+}
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'store-report') {
@@ -37,6 +120,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === 'create-jira') {
     handleCreateJira(message.data, sendResponse);
+    return true;
+  }
+
+  if (message.action === 'log-to-sheet') {
+    openSheetAndLog(message.data)
+      .then(success => sendResponse({ success }))
+      .catch(() => sendResponse({ success: false }));
     return true;
   }
 

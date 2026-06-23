@@ -63,6 +63,7 @@ const state = {
   },
 };
 let lastActivePanel = null; // tracks which panel the user last interacted with (for Ctrl/Cmd+Enter)
+let sheetConfig = { sheetId: '' };
 
 // ── Init ──────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -81,6 +82,9 @@ document.addEventListener('DOMContentLoaded', () => {
   renderPreviews('arf', 'screenshots');
   renderPreviews('arf', 'assuranceScreenshots');
   renderPreviews('bounce', 'assuranceScreenshots');
+  fetch('/api/sheet-config').then(r => r.json()).then(d => {
+    if (d.sheetId) sheetConfig.sheetId = d.sheetId;
+  }).catch(() => {});
 });
 
 // ── Keyboard shortcuts (Ctrl/Cmd + Enter) ─────────────────────────────
@@ -339,6 +343,9 @@ function initEventDelegation() {
         break;
       case 'unsuspend':
         unsuspendAccount(panel);
+        break;
+      case 'log-sheet':
+        if (panel) logToSheet(panel);
         break;
       case 'copy': {
         const copyTarget = target.getAttribute('data-target');
@@ -891,6 +898,8 @@ function renderReportOutput(prefix, lines, fullCopyText, inlineScreenshots) {
     renderInlineScreenshots(outputArea, screenshots, label);
   });
   outputSection.style.display = 'block';
+  const logSheetBtn = outputSection.querySelector('.btn-log-sheet');
+  if (logSheetBtn) logSheetBtn.disabled = false;
   outputSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
@@ -970,6 +979,8 @@ function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, af
 
   const outputSection = document.getElementById(prefix + '-output-section');
   outputSection.style.display = 'none';
+  const logSheetBtn = outputSection.querySelector('.btn-log-sheet');
+  if (logSheetBtn) logSheetBtn.disabled = true;
   const outputArea = outputSection.querySelector('.output-area');
   const copyBtn = outputArea.querySelector('.copy-btn-wrap');
   outputArea.innerHTML = '';
@@ -1104,6 +1115,19 @@ function unsuspendAccount(prefix) {
     return;
   }
 
+  // Build accounts array: main account + blocked accounts (if any)
+  const accounts = [account];
+  if (prefix === 'bounce') {
+    const otherBlocked = document.getElementById('bounce-other-blocked')?.value;
+    if (otherBlocked === 'Yes') {
+      const blockedRaw = document.getElementById('bounce-other-blocked-detail')?.value.trim() || '';
+      if (blockedRaw) {
+        const blocked = blockedRaw.split(',').map(s => s.trim()).filter(s => s && s !== account);
+        accounts.push(...blocked);
+      }
+    }
+  }
+
   const zdLink = document.getElementById(prefix + '-zd-link')?.value.trim() || '';
   const region = (prefix === 'arf' ? state.arf : state.bounce).region === 'eu' ? 'eu-central-1' : 'us-east-1';
   const reason = zdLink || 'no jira created';
@@ -1116,7 +1140,8 @@ function unsuspendAccount(prefix) {
 
   window.postMessage({
     type: 'REPORT_GENERATOR_UNSUSPEND',
-    account: account,
+    accounts: accounts,
+    account: accounts[0],
     region: region,
     reason: reason,
     text: reportText,
@@ -1125,5 +1150,36 @@ function unsuspendAccount(prefix) {
     zdLink: zdLink,
   }, '*');
 
-  showToast('Opening Abuse Desk to unsuspend ' + account + '...', 'info');
+  const msg = accounts.length > 1
+    ? 'Opening Abuse Desk for ' + accounts.length + ' accounts...'
+    : 'Opening Abuse Desk to unsuspend ' + account + '...';
+  showToast(msg, 'info');
+}
+
+function logToSheet(prefix) {
+  const outputSection = document.getElementById(prefix + '-output-section');
+  if (!outputSection || outputSection.style.display === 'none') {
+    showToast('Please generate the report first.', 'warning');
+    return;
+  }
+
+  const account   = document.getElementById(prefix + '-account')?.value.trim() || '';
+  const zdLink    = document.getElementById(prefix + '-zd-link')?.value.trim() || '';
+  const outputArea = outputSection.querySelector('.output-area');
+  const reportText = (outputArea?.dataset.copyText) ||
+                     document.getElementById(prefix + '-output-text')?.textContent || '';
+  const type = prefix === 'arf' ? 'ARF' : 'BOUNCE';
+  const date = new Date().toLocaleDateString('en-US');
+
+  window.postMessage({
+    type: 'REPORT_GENERATOR_LOG_SHEET',
+    date,
+    zdLink,
+    domainEmail: account,
+    reportType: type,
+    reason: reportText,
+    sheetId: sheetConfig.sheetId,
+  }, '*');
+
+  showToast('Logging to Sheet…');
 }

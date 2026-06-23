@@ -60,13 +60,14 @@
 
     if (event.data.type === 'REPORT_GENERATOR_UNSUSPEND') {
       var unsuspendData = event.data;
+      var accounts = unsuspendData.accounts || [unsuspendData.account];
 
       chrome.runtime.sendMessage(
         { action: 'create-jira-and-done', data: {
           text: unsuspendData.text || '',
           html: unsuspendData.html || '',
           panel: unsuspendData.panel || '',
-          account: unsuspendData.account || '',
+          account: accounts.join(', '),
           zdLink: unsuspendData.zdLink || ''
         }},
         function (response) {
@@ -77,20 +78,42 @@
           }
 
           var jiraUrl = response.issueUrl;
-
-          var abuseDeskUrl = 'https://abusedesk.ops.titan.email/blocked_users.html?entity=' +
-            encodeURIComponent(unsuspendData.account) + '&region=' + unsuspendData.region;
-
-          chrome.storage.local.set({
-            unsuspendReason: jiraUrl,
-            unsuspendAccount: unsuspendData.account
-          }, function () {
-            window.open(abuseDeskUrl, '_blank');
-            var msg = '<span>JIRA <a href="' + jiraUrl + '" target="_blank" style="color:#5b9bd5;text-decoration:underline;">' + response.issueKey + '</a> created — opening Abuse Desk</span>';
+          chrome.storage.local.set({ unsuspendReason: jiraUrl, lastJiraUrl: jiraUrl }, function () {
+            for (var i = 0; i < accounts.length; i++) {
+              var abuseDeskUrl = 'https://abusedesk.ops.titan.email/blocked_users.html?entity=' +
+                encodeURIComponent(accounts[i]) + '&region=' + unsuspendData.region;
+              window.open(abuseDeskUrl, '_blank');
+            }
+            var msg = '<span>JIRA <a href="' + jiraUrl + '" target="_blank" style="color:#5b9bd5;text-decoration:underline;">' + response.issueKey + '</a> created — opening ' + accounts.length + ' Abuse Desk tab(s)</span>';
             showToast(msg);
           });
         }
       );
+    }
+
+    if (event.data.type === 'REPORT_GENERATOR_LOG_SHEET') {
+      var logData = event.data;
+
+      chrome.storage.local.get('lastJiraUrl', function(result) {
+        var jiraLink = result.lastJiraUrl || '';
+
+        chrome.runtime.sendMessage({
+          action: 'log-to-sheet',
+          data: {
+            date:        logData.date,
+            zdLink:      logData.zdLink,
+            jiraLink:    jiraLink,
+            domainEmail: logData.domainEmail,
+            type:        logData.reportType,
+            reason:      logData.reason,
+            sheetId:     logData.sheetId || '',
+          }
+        }, function(response) {
+          if (chrome.runtime.lastError || !response || !response.success) {
+            console.warn('[Report→Sheet] Failed:', chrome.runtime.lastError?.message);
+          }
+        });
+      });
     }
   });
 

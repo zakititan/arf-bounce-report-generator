@@ -65,8 +65,8 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Vercel Analytics & Speed Insights** — page view tracking and Core Web Vitals monitoring
 
 ### JIRA Integration
-- **Create TAE JIRA** — a "Create TAE JIRA" button appears in both ARF and Bounce output sections; creates the JIRA only (no status change, no Abuse Desk)
-- **Create TAE JIRA and Unsuspend** — a second button that creates the JIRA, transitions it to **Done** (transition ID `71`), adds a comment "Unsuspended", then opens Abuse Desk to complete the unsuspend
+- **Create TAE JIRA** — a "Create TAE JIRA" button appears in the bottom action row of both ARF and Bounce output sections; creates the JIRA only (no status change, no Abuse Desk)
+- **Create TAE JIRA and Unsuspend** — a second button that creates the JIRA (listing all accounts if multiple), transitions it to **Done** (transition ID `71`), adds a comment "Unsuspended", then opens one Abuse Desk tab per account
 - **REST API creation** — creates JIRA tickets directly via `POST /rest/api/2/issue` using the browser's authenticated session cookies; no API key required
 - **Image attachments** — screenshot images are decoded from base64 and uploaded as individual attachments via JIRA's attachment API (`POST /rest/api/2/issue/{key}/attachments`)
 - **Prefilled fields** — Project (TAE, `pid=12900`), Issue Type (Task, `id=10902`), Priority (P3, `id=10000`), Summary, Description, Labels, and Zendesk link (`customfield_12211`) are all set automatically
@@ -86,12 +86,26 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
   - Install by [downloading the extension zip](https://github.com/zakititan/arf-bounce-report-generator/raw/main/extension/releases/extension.zip), unzipping, and loading the folder as an unpacked extension in `chrome://extensions` (Developer mode)
   - To repackage after changes: `npm run pack-extension`
 
+### Log to Sheet (Google Sheets Integration)
+- **Log to Sheet button** — a "Log to Sheet" button appears in the bottom action row of both ARF and Bounce output sections, next to the JIRA buttons; disabled until a report is generated
+- **DOM automation** — writes report data to a Google Sheet via the Chrome extension's content script (`content-sheet.js`) running on `docs.google.com/spreadsheets/*`
+- **Binary search for row detection** — uses `Ctrl+End` to find the sheet's last used row, then binary searches column B (Date) for today's date to find the correct insertion point; handles frozen rows (rows 1–2 are headers) and 8000+ row sheets efficiently (~1.5 seconds)
+- **Column layout** — writes to columns B–G (column A is left empty): B = Date, C = ZD Ticket ID, D = JIRA Link, E = Domain/Email, F = Unsuspension Type, G = Reason
+- **JIRA link from unsuspend flow** — the JIRA link in the sheet is the one created during "Create TAE JIRA and Unsuspend"; stored in `chrome.storage.local` as `lastJiraUrl` for Log to Sheet to read
+- **Tab-based data commitment** — after writing the last value (Reason), Tabs to column H to ensure the cell value is saved
+- **Sheet tab management** — background script finds an existing sheet tab or creates a new one; reloads the tab to ensure the content script is injected before sending messages
+- **Retry mechanism** — retries up to 3 times with 3-second delays if the content script doesn't respond
+- **Extension permissions** — requires `tabs` permission for `chrome.tabs.query`/`chrome.tabs.create`; `host_permissions` includes `https://docs.google.com/*`; content script runs at `document_idle` on Google Sheets
+- **Sheet ID** — fetched from `/api/sheet-config` (reads `GOOGLE_SHEET_ID` env var); falls back to default sheet if not configured
+
 ### Unsuspend (Abuse Desk Integration)
 - **"Create TAE JIRA and Unsuspend" button** — creates JIRA → transitions to Done → adds "Unsuspended" comment → opens Abuse Desk
+- **Multi-account unsuspend** — if "Other Blocked Email in Domain?" is set to Yes, the blocked accounts from the "Blocked Email Account(s)" field are also unsuspended; one JIRA is created listing all accounts, and one Abuse Desk tab is opened per account
 - **Abuse Desk automation** — the extension's content script on `abusedesk.ops.titan.email` automatically:
   1. Clicks the **Unblock** button
   2. Pastes the JIRA URL as the reason into the textarea
   3. Clicks **Save reason and proceed**
+- **Account from URL parameter** — each Abuse Desk tab reads its account from the `?entity=` URL parameter, eliminating storage race conditions when multiple tabs open simultaneously
 - **Region-aware URL** — Abuse Desk URL includes the correct `region` parameter (`us-east-1` for NA, `eu-central-1` for EU) based on MX-based region detection
 - **Fallback toast** — shows success/failure toast notifications at each step for user feedback
 
@@ -141,7 +155,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **XSS prevention** — API response values (verdict, DKIM selectors) and validation error labels are set via `textContent` instead of `innerHTML` to prevent HTML injection
 - **Login redirect removed** — successful login always redirects to `/`; the `redirect` query parameter is no longer accepted, preventing open redirect and `javascript:` injection
 - **API error resilience** — all fetch calls are wrapped in a centralized `apiFetch()` helper that safely handles network errors and non-JSON responses instead of crashing
-- **Extension host permissions** — Chrome extension declares `host_permissions` for `https://jira.directi.com/*` to enable authenticated REST API calls using browser session cookies
+- **Extension host permissions** — Chrome extension declares `host_permissions` for `https://jira.directi.com/*` and `https://docs.google.com/*` to enable authenticated REST API calls using browser session cookies
 
 ### Code Quality & Performance
 - **No theme flash** — inline `<script>` in `<head>` sets dark theme before first paint, preventing flash on dark-mode systems
@@ -185,7 +199,8 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 │   ├── website-check.js            # Website reachability & classification (SPA detection, parked/placeholder detection, redirect analysis; cached 15 min)
 │   ├── dkim-check.js               # DNS DKIM selector check (cached 15 min, early termination)
 │   ├── health.js                   # Health-check endpoint (probes WhoisJSON + Google DNS)
-│   └── login.js                    # Login handler — constant-time password check, rate limited, sets signed auth cookie
+│   ├── login.js                    # Login handler — constant-time password check, rate limited, sets signed auth cookie
+│   └── sheet-config.js             # Returns Google Sheet ID from GOOGLE_SHEET_ID env var for Log to Sheet feature
 ├── scripts/
 │   ├── app.js                      # Core app logic (ARF + Bounce generate, domain lookup, CSV, unified state, event delegation)
 │   ├── pure.js                     # Pure functions (escapeHtml, parseCsvRow, sanitiseDomainInput, sanitiseAccountInput) — no DOM dependencies
@@ -193,12 +208,13 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 │   └── ui.js                       # UI helpers (showToast with types, theme toggle with transition, stepper, form progress, age colors, validation display, drag-and-drop)
 ├── styles/
 │   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, responsive)
-├── extension/                      # Chrome extension (Manifest V3) for JIRA integration and Abuse Desk automation
+├── extension/                      # Chrome extension (Manifest V3) for JIRA integration, Abuse Desk automation, and Google Sheets logging
 │   ├── manifest.json               # Extension config: v2.1, permissions, content scripts for webapp, JIRA, Abuse Desk, and Google Sheets
-│   ├── background.js               # Service worker: create-jira, create-jira-and-done (JIRA + markDone + comment), store/get report
+│   ├── background.js               # Service worker: create-jira, create-jira-and-done (JIRA + markDone + comment), log-to-sheet, store/get report
 │   ├── content-webapp.js           # Content script on Report Generator: handles JIRA creation, Unsuspend (create + markDone + AD), and sheet logging
 │   ├── content-jira.js             # Content script on JIRA: fallback paste strategy (text first, images one by one)
 │   ├── content-abusedesk.js        # Content script on Abuse Desk: auto-clicks Unblock, pastes reason, clicks Save
+│   ├── content-sheet.js            # Content script on Google Sheets: binary search row detection, cell navigation, data entry via execCommand
 │   ├── releases/extension.zip      # Packaged extension for easy distribution
 │   └── icons/                      # Extension icons (16/48/128px)
 └── tests/
@@ -229,6 +245,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 | `/api/dkim-check?domain=` | GET | Returns DKIM `status` and `selectors_found` array |
 | `/api/login` | POST | Validates password and sets HMAC-signed auth cookie |
 | `/api/health` | GET | Health-check — probes WhoisJSON and Google DNS, returns `{ status: "ok"|"degraded" }` |
+| `/api/sheet-config` | GET | Returns `{ sheetId }` from `GOOGLE_SHEET_ID` env var for Log to Sheet feature |
 
 All API endpoints enforce:
 - **CORS** — `Origin` must match `APP_ORIGIN` env var (read at request time); `Vary: Origin` is set
@@ -246,6 +263,7 @@ Set these in the **Vercel Dashboard → Settings → Environment Variables**:
 | `AUTH_SECRET` | ✅ | Random secret used to HMAC-sign the auth session cookie |
 | `WHOISJSON_API_KEY` | ⭐ | API key for [whoisjson.com](https://whoisjson.com) WHOIS lookups (optional — used as fallback when RDAP fails) |
 | `APP_ORIGIN` | ✅ | Your deployment URL (e.g. `https://your-app.vercel.app`) — used for CORS |
+| `GOOGLE_SHEET_ID` | ⭐ | Google Sheet ID for Log to Sheet feature (optional — defaults to built-in sheet if not set) |
 
 > **Generating `AUTH_SECRET`:** Run `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` or use [generate-secret.vercel.app](https://generate-secret.vercel.app/32).
 
@@ -306,6 +324,7 @@ WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fal
 7. Enter a Zendesk ticket link in the "Zendesk Ticket Link" field (required)
 8. Click **Create TAE JIRA** → JIRA ticket is created via REST API
 9. Or click **Create TAE JIRA and Unsuspend** → JIRA created + marked Done + "Unsuspended" comment + Abuse Desk opens
+10. Click **Log to Sheet** to append the report to the tracking Google Sheet (uses the JIRA created in step 8 or 9)
 
 ### Bounce Report
 1. Select previous unblock status
@@ -313,11 +332,13 @@ WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fal
    - Domain is auto-detected from the 2nd or 3rd CSV column and Lookup runs immediately
    - A `< 40` / `>= 40` badge shows the row count threshold
 3. Fill in remaining domain details (website and DKIM are auto-populated from the lookup)
-4. Select active assurances
-5. Click **Generate Bounce Report** (or press `Ctrl`/`Cmd` + `Enter`) → copy the output
-6. Enter a Zendesk ticket link in the "Zendesk Ticket Link" field (required)
-7. Click **Create TAE JIRA** → JIRA ticket is created via REST API
-8. Or click **Create TAE JIRA and Unsuspend** → JIRA created + marked Done + "Unsuspended" comment + Abuse Desk opens
+4. If "Other Blocked Email in Domain?" is Yes, enter comma-separated blocked accounts in the "Blocked Email Account(s)" field (these will also be unsuspended)
+5. Select active assurances
+6. Click **Generate Bounce Report** (or press `Ctrl`/`Cmd` + `Enter`) → copy the output
+7. Enter a Zendesk ticket link in the "Zendesk Ticket Link" field (required)
+8. Click **Create TAE JIRA** → JIRA ticket is created via REST API
+9. Or click **Create TAE JIRA and Unsuspend** → JIRA created (listing all accounts) + marked Done + Abuse Desk opens one tab per account
+10. Click **Log to Sheet** to append the report to the tracking Google Sheet (uses the JIRA created in step 8 or 9)
 
 > **Tip:** All form fields are saved automatically — refreshing the page restores your last session.
 
