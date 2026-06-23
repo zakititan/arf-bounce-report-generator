@@ -344,6 +344,9 @@ function initEventDelegation() {
       case 'unsuspend':
         unsuspendAccount(panel);
         break;
+      case 'unsuspend-ad':
+        if (panel) unsuspendViaAd(panel);
+        break;
       case 'log-sheet':
         if (panel) logToSheet(panel);
         break;
@@ -1115,6 +1118,19 @@ function unsuspendAccount(prefix) {
     return;
   }
 
+  // Build accounts array: main account + blocked accounts (if any)
+  const accounts = [account];
+  if (prefix === 'bounce') {
+    const otherBlocked = document.getElementById('bounce-other-blocked')?.value;
+    if (otherBlocked === 'Yes') {
+      const blockedRaw = document.getElementById('bounce-other-blocked-detail')?.value.trim() || '';
+      if (blockedRaw) {
+        const blocked = blockedRaw.split(',').map(s => s.trim()).filter(s => s && s !== account);
+        accounts.push(...blocked);
+      }
+    }
+  }
+
   const zdLink = document.getElementById(prefix + '-zd-link')?.value.trim() || '';
   const region = (prefix === 'arf' ? state.arf : state.bounce).region === 'eu' ? 'eu-central-1' : 'us-east-1';
   const reason = zdLink || 'no jira created';
@@ -1127,7 +1143,8 @@ function unsuspendAccount(prefix) {
 
   window.postMessage({
     type: 'REPORT_GENERATOR_UNSUSPEND',
-    account: account,
+    accounts: accounts,
+    account: accounts[0],
     region: region,
     reason: reason,
     text: reportText,
@@ -1136,7 +1153,53 @@ function unsuspendAccount(prefix) {
     zdLink: zdLink,
   }, '*');
 
-  showToast('Opening Abuse Desk to unsuspend ' + account + '...', 'info');
+  const msg = accounts.length > 1
+    ? 'Opening Abuse Desk for ' + accounts.length + ' accounts...'
+    : 'Opening Abuse Desk to unsuspend ' + account + '...';
+  showToast(msg, 'info');
+}
+
+function unsuspendViaAd(prefix) {
+  const outputSection = document.getElementById(prefix + '-output-section');
+  if (!outputSection || outputSection.style.display === 'none') {
+    showToast('Please generate the report first.', 'warning');
+    return;
+  }
+
+  const account = document.getElementById(prefix + '-account')?.value.trim() || '';
+  if (!account) {
+    showToast('Please enter an account name.', 'warning');
+    return;
+  }
+
+  // Build accounts array: main account + blocked accounts (if any)
+  const accounts = [account];
+  if (prefix === 'bounce') {
+    const otherBlocked = document.getElementById('bounce-other-blocked')?.value;
+    if (otherBlocked === 'Yes') {
+      const blockedRaw = document.getElementById('bounce-other-blocked-detail')?.value.trim() || '';
+      if (blockedRaw) {
+        const blocked = blockedRaw.split(',').map(s => s.trim()).filter(s => s && s !== account);
+        accounts.push(...blocked);
+      }
+    }
+  }
+
+  const region = (prefix === 'arf' ? state.arf : state.bounce).region === 'eu' ? 'eu-central-1' : 'us-east-1';
+  const PLACEHOLDER_JIRA = 'https://jira.directi.com/browse/TAE-9982';
+
+  window.postMessage({
+    type: 'REPORT_GENERATOR_UNSUSPEND_AD',
+    accounts: accounts,
+    account: accounts[0],
+    region: region,
+    reason: PLACEHOLDER_JIRA,
+  }, '*');
+
+  const msg = accounts.length > 1
+    ? 'Opening Abuse Desk for ' + accounts.length + ' accounts (test)...'
+    : 'Opening Abuse Desk to unsuspend ' + account + ' (test)...';
+  showToast(msg, 'info');
 }
 
 function logToSheet(prefix) {

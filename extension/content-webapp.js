@@ -60,13 +60,14 @@
 
     if (event.data.type === 'REPORT_GENERATOR_UNSUSPEND') {
       var unsuspendData = event.data;
+      var accounts = unsuspendData.accounts || [unsuspendData.account];
 
       chrome.runtime.sendMessage(
         { action: 'create-jira-and-done', data: {
           text: unsuspendData.text || '',
           html: unsuspendData.html || '',
           panel: unsuspendData.panel || '',
-          account: unsuspendData.account || '',
+          account: accounts.join(', '),
           zdLink: unsuspendData.zdLink || ''
         }},
         function (response) {
@@ -77,20 +78,31 @@
           }
 
           var jiraUrl = response.issueUrl;
-
-          var abuseDeskUrl = 'https://abusedesk.ops.titan.email/blocked_users.html?entity=' +
-            encodeURIComponent(unsuspendData.account) + '&region=' + unsuspendData.region;
-
-          chrome.storage.local.set({
-            unsuspendReason: jiraUrl,
-            unsuspendAccount: unsuspendData.account
-          }, function () {
-            window.open(abuseDeskUrl, '_blank');
-            var msg = '<span>JIRA <a href="' + jiraUrl + '" target="_blank" style="color:#5b9bd5;text-decoration:underline;">' + response.issueKey + '</a> created — opening Abuse Desk</span>';
+          chrome.storage.local.set({ unsuspendReason: jiraUrl }, function () {
+            for (var i = 0; i < accounts.length; i++) {
+              var abuseDeskUrl = 'https://abusedesk.ops.titan.email/blocked_users.html?entity=' +
+                encodeURIComponent(accounts[i]) + '&region=' + unsuspendData.region;
+              window.open(abuseDeskUrl, '_blank');
+            }
+            var msg = '<span>JIRA <a href="' + jiraUrl + '" target="_blank" style="color:#5b9bd5;text-decoration:underline;">' + response.issueKey + '</a> created — opening ' + accounts.length + ' Abuse Desk tab(s)</span>';
             showToast(msg);
           });
         }
       );
+    }
+
+    if (event.data.type === 'REPORT_GENERATOR_UNSUSPEND_AD') {
+      var adData = event.data;
+      var adAccounts = adData.accounts || [adData.account];
+
+      chrome.storage.local.set({ unsuspendReason: adData.reason }, function () {
+        for (var i = 0; i < adAccounts.length; i++) {
+          var abuseDeskUrl = 'https://abusedesk.ops.titan.email/blocked_users.html?entity=' +
+            encodeURIComponent(adAccounts[i]) + '&region=' + adData.region;
+          window.open(abuseDeskUrl, '_blank');
+        }
+        showToast('Opening ' + adAccounts.length + ' Abuse Desk tab(s)...');
+      });
     }
 
     if (event.data.type === 'REPORT_GENERATOR_LOG_SHEET') {

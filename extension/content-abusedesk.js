@@ -26,12 +26,11 @@
   }
 
   async function run() {
-    chrome.storage.local.get(['unsuspendReason', 'unsuspendAccount'], async function (result) {
+    chrome.storage.local.get(['unsuspendReason'], async function (result) {
       var reason = result.unsuspendReason;
-      var account = result.unsuspendAccount;
       if (!reason) { log('No unsuspend reason in storage'); return; }
 
-      chrome.storage.local.remove(['unsuspendReason', 'unsuspendAccount']);
+      var account = new URLSearchParams(window.location.search).get('entity') || 'unknown account';
       log('Starting unsuspend automation for ' + account);
 
       await sleep(2000);
@@ -43,15 +42,15 @@
           if (btns[i].textContent.trim() === 'Unblock') { unblockBtn = btns[i]; break; }
         }
       }
-      if (!unblockBtn) { log('Unblock button not found'); showToast('Unblock button not found'); return; }
-      log('Clicking Unblock');
+      if (!unblockBtn) { log('Unblock button not found'); showToast('Unblock button not found for ' + account); return; }
+      log('Clicking Unblock for ' + account);
       simulateClick(unblockBtn);
 
       await sleep(1500);
 
       var textarea = document.querySelector('textarea');
-      if (!textarea) { log('Textarea not found'); showToast('Textarea not found'); return; }
-      log('Pasting reason');
+      if (!textarea) { log('Textarea not found'); showToast('Textarea not found for ' + account); return; }
+      log('Pasting reason for ' + account);
       textarea.focus();
       textarea.value = reason;
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
@@ -60,8 +59,8 @@
       await sleep(1000);
 
       var saveBtn = document.getElementById('submitBtn');
-      if (!saveBtn) { log('submitBtn not found'); showToast('Save button not found'); return; }
-      log('Clicking Save');
+      if (!saveBtn) { log('submitBtn not found'); showToast('Save button not found for ' + account); return; }
+      log('Clicking Save for ' + account);
       simulateClick(saveBtn);
 
       await sleep(500);
