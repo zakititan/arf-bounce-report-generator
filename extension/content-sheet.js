@@ -1,6 +1,6 @@
 // extension/content-sheet.js
 // Runs on docs.google.com/spreadsheets/* - listens for append-sheet-row messages
-// and writes data to the sheet using keyboard navigation + execCommand
+// and writes data to the sheet using keyboard navigation + input automation
 
 (function () {
   function log(msg) { console.log('[Report->Sheet] ' + msg); }
@@ -24,14 +24,94 @@
     return (el.textContent || el.innerText || '').trim();
   }
 
+  // Robust text input: tries execCommand first, then sets value directly + input event
+  async function typeText(el, text) {
+    if (!el) return false;
+    el.focus();
+    el.select();
+
+    // Method 1: execCommand (works on Chrome)
+    try {
+      document.execCommand('insertText', false, text);
+      if (el.value === text || el.textContent === text) return true;
+    } catch (e) {}
+
+    // Method 2: Set value directly + dispatch input event (works on Edge)
+    try {
+      var nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      nativeInputValueSetter.call(el, text);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      if (el.value === text) return true;
+    } catch (e) {}
+
+    // Method 3: Clipboard paste
+    try {
+      await navigator.clipboard.writeText(text);
+      el.focus();
+      el.select();
+      document.execCommand('paste');
+      if (el.value === text) return true;
+    } catch (e) {}
+
+    // Method 4: Set value + dispatch React-compatible event
+    try {
+      el.value = text;
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true }));
+      el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+      return true;
+    } catch (e) {}
+
+    log('typeText: all methods failed for: ' + text);
+    return false;
+  }
+
+  // Type text into the active cell editor (not Name Box)
+  async function typeInCell(text) {
+    if (!text) return true;
+    var el = document.activeElement;
+    if (!el) return false;
+
+    // Method 1: execCommand (works on Chrome)
+    try {
+      document.execCommand('insertText', false, text);
+      return true;
+    } catch (e) {}
+
+    // Method 2: Clipboard paste into active element
+    try {
+      await navigator.clipboard.writeText(text);
+      document.execCommand('paste');
+      return true;
+    } catch (e) {}
+
+    // Method 3: Input event with data property
+    try {
+      el.dispatchEvent(new InputEvent('beforeinput', { inputType: 'insertText', data: text, bubbles: true, cancelable: true }));
+      el.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: text, bubbles: true }));
+      return true;
+    } catch (e) {}
+
+    log('typeInCell: all methods failed for: ' + text);
+    return false;
+  }
+
+  function pressKey(el, key, code, keyCode, modifiers) {
+    if (!el) return;
+    var opts = { key: key, code: code, keyCode: keyCode, which: keyCode, bubbles: true };
+    if (modifiers) {
+      if (modifiers.ctrl) opts.ctrlKey = true;
+      if (modifiers.meta) opts.metaKey = true;
+      if (modifiers.shift) opts.shiftKey = true;
+    }
+    el.dispatchEvent(new KeyboardEvent('keydown', opts));
+  }
+
   async function readCell(nameBox, formulaBar, cellRef) {
-    nameBox.focus();
-    nameBox.select();
-    document.execCommand('insertText', false, cellRef);
-    nameBox.dispatchEvent(new KeyboardEvent('keydown', {
-      key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true
-    }));
-    await sleep(250);
+    await typeText(nameBox, cellRef);
+    pressKey(nameBox, 'Enter', 'Enter', 13);
+    await sleep(300);
 
     var val = getFormulaBarText(formulaBar);
     if (val) return val;
@@ -87,18 +167,12 @@
     log('Today: ' + today);
 
     // Step 1: Find lastRow via Ctrl+End
-    nameBox.focus();
-    nameBox.select();
-    document.execCommand('insertText', false, 'B3');
-    nameBox.dispatchEvent(new KeyboardEvent('keydown', {
-      key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true
-    }));
-    await sleep(150);
+    await typeText(nameBox, 'B3');
+    pressKey(nameBox, 'Enter', 'Enter', 13);
+    await sleep(200);
 
-    document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {
-      key: 'End', code: 'End', keyCode: 35, which: 35, ctrlKey: true, bubbles: true
-    }));
-    await sleep(300);
+    pressKey(document.activeElement, 'End', 'End', 35, { ctrl: true });
+    await sleep(400);
 
     var endRef = nameBox.value;
     log('Ctrl+End landed on: ' + endRef);
@@ -110,7 +184,7 @@
     var lo = 3;
     var hi = lastRow;
     var foundRow = null;
-    var lastNonEmptyRow = 2; // tracks last row with any data in column B
+    var lastNonEmptyRow = 2;
 
     while (lo <= hi) {
       var mid = Math.floor((lo + hi) / 2);
@@ -136,7 +210,6 @@
     }
 
     if (foundRow !== null) {
-      // Step 3: Scan downward from foundRow to find exact last today-row
       var lastTodayRow = foundRow;
       for (var r = foundRow + 1; r <= foundRow + 50; r++) {
         var v = await readCell(nameBox, formulaBar, 'B' + r);
@@ -150,7 +223,6 @@
       return lastTodayRow + 1;
     }
 
-    // Step 4: Today's date not found - append after last non-empty row in column B
     log('Today not found - appending after last non-empty row in column B: ' + lastNonEmptyRow);
     return lastNonEmptyRow + 1;
   }
@@ -178,36 +250,24 @@
         var col = String.fromCharCode(66 + i); // B, C, D, E, F, G
         var cellRef = col + nextRow;
 
-        // Navigate to cell
-        nameBox.focus();
-        nameBox.select();
-        document.execCommand('insertText', false, cellRef);
-        nameBox.dispatchEvent(new KeyboardEvent('keydown', {
-          key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true
-        }));
+        // Navigate to cell via Name Box
+        await typeText(nameBox, cellRef);
+        pressKey(nameBox, 'Enter', 'Enter', 13);
         await sleep(400);
 
         // Enter edit mode with F2
-        if (document.activeElement) {
-          document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {
-            key: 'F2', code: 'F2', keyCode: 113, which: 113, bubbles: true
-          }));
-        }
-        await sleep(200);
+        pressKey(document.activeElement, 'F2', 'F2', 113);
+        await sleep(250);
 
-        // Type value
+        // Type value into cell
         if (values[i]) {
-          document.execCommand('insertText', false, values[i]);
-          await sleep(200);
+          await typeInCell(values[i]);
+          await sleep(250);
         }
 
         // Tab to next column (including after last value to save it)
-        if (document.activeElement) {
-          document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {
-            key: 'Tab', code: 'Tab', keyCode: 9, which: 9, bubbles: true
-          }));
-        }
-        await sleep(200);
+        pressKey(document.activeElement, 'Tab', 'Tab', 9);
+        await sleep(250);
       }
 
       log('Row written successfully at row ' + nextRow);
