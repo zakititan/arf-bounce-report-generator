@@ -78,7 +78,7 @@
           }
 
           var jiraUrl = response.issueUrl;
-          chrome.storage.local.set({ unsuspendReason: jiraUrl }, function () {
+          chrome.storage.local.set({ unsuspendReason: jiraUrl, lastJiraUrl: jiraUrl }, function () {
             for (var i = 0; i < accounts.length; i++) {
               var abuseDeskUrl = 'https://abusedesk.ops.titan.email/blocked_users.html?entity=' +
                 encodeURIComponent(accounts[i]) + '&region=' + unsuspendData.region;
