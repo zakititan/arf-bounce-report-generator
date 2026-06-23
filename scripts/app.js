@@ -96,6 +96,19 @@ document.addEventListener('DOMContentLoaded', () => {
       setPartnerPanelResult(e.data.data);
     }
   });
+
+  // IP Spike: auto-run partner panel lookup when account is entered
+  const ipAccountInput = document.getElementById('ipspike-account');
+  if (ipAccountInput) {
+    let _ipCheckTimer = null;
+    ipAccountInput.addEventListener('input', () => {
+      clearTimeout(_ipCheckTimer);
+      const val = ipAccountInput.value.trim();
+      if (val) {
+        _ipCheckTimer = setTimeout(() => checkPasswordChange('ipspike'), 1500);
+      }
+    });
+  }
 });
 
 // ── Keyboard shortcuts (Ctrl/Cmd + Enter) ─────────────────────────────
