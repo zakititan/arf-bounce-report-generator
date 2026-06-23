@@ -91,20 +91,6 @@
       );
     }
 
-    if (event.data.type === 'REPORT_GENERATOR_UNSUSPEND_AD') {
-      var adData = event.data;
-      var adAccounts = adData.accounts || [adData.account];
-
-      chrome.storage.local.set({ unsuspendReason: adData.reason }, function () {
-        for (var i = 0; i < adAccounts.length; i++) {
-          var abuseDeskUrl = 'https://abusedesk.ops.titan.email/blocked_users.html?entity=' +
-            encodeURIComponent(adAccounts[i]) + '&region=' + adData.region;
-          window.open(abuseDeskUrl, '_blank');
-        }
-        showToast('Opening ' + adAccounts.length + ' Abuse Desk tab(s)...');
-      });
-    }
-
     if (event.data.type === 'REPORT_GENERATOR_LOG_SHEET') {
       var logData = event.data;
 
