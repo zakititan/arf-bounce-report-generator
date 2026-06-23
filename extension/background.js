@@ -25,33 +25,14 @@ async function openSheetAndLog(rowData) {
     var sheetUrl = 'https://docs.google.com/spreadsheets/d/' + sheetId + '/edit';
     console.log('[Report→Sheet] openSheetAndLog called', rowData);
 
-    var tabs = await new Promise(function(resolve) {
-      chrome.tabs.query({ url: 'https://docs.google.com/spreadsheets/d/*' }, resolve);
+    var tab = await new Promise(function(resolve) {
+      chrome.tabs.create({ url: sheetUrl, active: false }, resolve);
     });
-    var tab = tabs && tabs.find(function(t) { return t.url && t.url.indexOf(sheetId) !== -1; });
-    var isNew = false;
-    if (!tab) {
-      console.log('[Report→Sheet] No sheet tab found, creating...');
-      tab = await new Promise(function(resolve) {
-        chrome.tabs.create({ url: sheetUrl, active: false }, resolve);
-      });
-      isNew = true;
-    }
 
-    if (isNew || tab.status !== 'complete') {
-      var loaded = await waitForTabLoad(tab.id, 15000);
-      console.log('[Report→Sheet] Tab loaded:', loaded);
-    }
+    var loaded = await waitForTabLoad(tab.id, 15000);
+    console.log('[Report→Sheet] Tab loaded:', loaded);
 
     await sleep(4000);
-
-    // Ensure content-sheet.js is injected by reloading if needed
-    if (!isNew) {
-      console.log('[Report→Sheet] Reloading tab to ensure content script...');
-      await chrome.tabs.reload(tab.id);
-      await waitForTabLoad(tab.id, 15000);
-      await sleep(3000);
-    }
 
     console.log('[Report→Sheet] Sending message to tab', tab.id);
 
