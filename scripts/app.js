@@ -227,24 +227,6 @@ if (arfAccountInput && arfCountLink) {
   updateArfCountHref();
 }
 
-// ── Check IP Spike AD link updater ─────────────────────────────────
-const ipspikeAccountInput = document.getElementById('ipspike-account');
-const ipspikeCountLink = document.querySelector('#ipspike-panel .btn-abusedesk');
-if (ipspikeAccountInput && ipspikeCountLink) {
-  function updateIpspikeCountHref() {
-    const account = ipspikeAccountInput.value.trim();
-    const region = state.ipspike.region === 'eu' ? 'eu-central-1' : 'us-east-1';
-    ipspikeCountLink.href = account
-      ? 'https://abusedesk.ops.titan.email/history.html?entity=' + encodeURIComponent(account) + '&region=' + region
-      : 'https://abusedesk.ops.titan.email/history.html?entity=&region=' + region;
-  }
-
-  ipspikeAccountInput.addEventListener('input', updateIpspikeCountHref);
-  ipspikeAccountInput.addEventListener('paste', () => setTimeout(updateIpspikeCountHref, 0));
-  ipspikeAccountInput.addEventListener('regionchange', updateIpspikeCountHref);
-  updateIpspikeCountHref();
-}
-
 // ── Check User Agent link updater ─────────────────────────────────
 function updateUserAgentHref() {
   const accountInput = document.getElementById('bounce-account');
@@ -485,7 +467,7 @@ const PERSIST_FIELDS = [
   'arf-blocked-lt2', 'arf-email-type', 'arf-website', 'arf-dkim', 'arf-domain-input',
   'bounce-account', 'bounce-prev-unblock', 'bounce-other-blocked', 'bounce-website',
   'bounce-dkim', 'bounce-domain-input', 'bounce-other-blocked-detail',
-  'ipspike-account', 'ipspike-zd-link', 'ipspike-domain-input', 'ipspike-pwd-changed',
+  'ipspike-account', 'ipspike-domain-input', 'ipspike-pwd-changed',
 ];
 
 function saveFormState() {
