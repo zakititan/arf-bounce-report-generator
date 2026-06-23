@@ -100,9 +100,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // IP Spike: auto-run partner panel lookup when account is entered
   const ipAccountInput = document.getElementById('ipspike-account');
   if (ipAccountInput) {
+    let _ipCheckTimer = null;
     ipAccountInput.addEventListener('input', () => {
+      clearTimeout(_ipCheckTimer);
       const val = ipAccountInput.value.trim();
-      if (val) checkPasswordChange('ipspike');
+      if (val) {
+        _ipCheckTimer = setTimeout(() => checkPasswordChange('ipspike'), 800);
+      }
     });
   }
 });
@@ -1158,8 +1162,7 @@ function unsuspendAccount(prefix) {
 
   let reason;
   if (prefix === 'ipspike') {
-    const pwdChanged = document.getElementById('ipspike-pwd-changed')?.value || '';
-    reason = pwdChanged === 'Yes' ? 'Password changed' : 'Password not changed';
+    reason = 'Password Changed';
   } else {
     reason = zdLink || 'no jira created';
   }
