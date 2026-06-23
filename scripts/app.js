@@ -61,6 +61,11 @@ const state = {
     lookupInFlight: false,
     region: 'na',
   },
+  ipspike: {
+    whois: null,
+    lookupInFlight: false,
+    region: 'na',
+  },
 };
 let lastActivePanel = null; // tracks which panel the user last interacted with (for Ctrl/Cmd+Enter)
 let sheetConfig = { sheetId: '' };
@@ -85,6 +90,12 @@ document.addEventListener('DOMContentLoaded', () => {
   fetch('/api/sheet-config').then(r => r.json()).then(d => {
     if (d.sheetId) sheetConfig.sheetId = d.sheetId;
   }).catch(() => {});
+
+  window.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'PARTNER_PANEL_RESULT') {
+      setPartnerPanelResult(e.data.data);
+    }
+  });
 });
 
 // ── Keyboard shortcuts (Ctrl/Cmd + Enter) ─────────────────────────────
@@ -118,7 +129,7 @@ async function detectRegion(prefix, domain) {
 }
 
 function initDomainInputs() {
-  ['arf', 'bounce'].forEach(prefix => {
+  ['arf', 'bounce', 'ipspike'].forEach(prefix => {
     const input = document.getElementById(prefix + '-domain-input');
     if (!input) return;
     input.addEventListener('paste', (e) => {
@@ -148,7 +159,7 @@ function initDomainInputs() {
 }
 
 // Account field → auto-fill domain input + trigger lookup
-['arf', 'bounce'].forEach(prefix => {
+['arf', 'bounce', 'ipspike'].forEach(prefix => {
   const accountInput = document.getElementById(prefix + '-account');
   if (!accountInput) return;
 
@@ -318,6 +329,7 @@ function initEventDelegation() {
     if (!panel) return;
     if (panel.id === 'arf-panel') lastActivePanel = 'arf';
     else if (panel.id === 'bounce-panel') lastActivePanel = 'bounce';
+    else if (panel.id === 'ipspike-panel') lastActivePanel = 'ipspike';
   });
 
   shell.addEventListener('click', (e) => {
@@ -366,6 +378,9 @@ function initEventDelegation() {
         break;
       case 'toggle-result-card':
         toggleResultCard(target.closest('.result-card').id.replace('-domain-result', ''));
+        break;
+      case 'check-password':
+        checkPasswordChange(panel);
         break;
       case 'remove-screenshot': {
         const idx = parseInt(target.getAttribute('data-index'), 10);
@@ -452,6 +467,7 @@ const PERSIST_FIELDS = [
   'arf-blocked-lt2', 'arf-email-type', 'arf-website', 'arf-dkim', 'arf-domain-input',
   'bounce-account', 'bounce-prev-unblock', 'bounce-other-blocked', 'bounce-website',
   'bounce-dkim', 'bounce-domain-input', 'bounce-other-blocked-detail',
+  'ipspike-account', 'ipspike-domain-input', 'ipspike-pwd-changed',
 ];
 
 function saveFormState() {
@@ -1104,7 +1120,7 @@ function createTaeJira(prefix) {
 
 function unsuspendAccount(prefix) {
   const outputSection = document.getElementById(prefix + '-output-section');
-  if (!outputSection || outputSection.style.display === 'none') {
+  if (outputSection && outputSection.style.display === 'none') {
     showToast('Please generate the report first.', 'warning');
     return;
   }
@@ -1129,17 +1145,23 @@ function unsuspendAccount(prefix) {
   }
 
   const zdLink = document.getElementById(prefix + '-zd-link')?.value.trim() || '';
-  const region = (prefix === 'arf' ? state.arf : state.bounce).region === 'eu' ? 'eu-central-1' : 'us-east-1';
-  const reason = zdLink || 'no jira created';
+  const region = (state[prefix] || state.arf).region === 'eu' ? 'eu-central-1' : 'us-east-1';
 
-  const outputArea = outputSection.querySelector('.output-area');
+  let reason;
+  if (prefix === 'ipspike') {
+    reason = 'Password Changed';
+  } else {
+    reason = zdLink || 'no jira created';
+  }
+
+  const outputArea = outputSection?.querySelector('.output-area');
   const reportText = (outputArea?.dataset.copyText) || document.getElementById(prefix + '-output-text')?.textContent || '';
   const reportHtml = outputArea ? Array.from(outputArea.childNodes)
     .filter(el => !el.classList?.contains('copy-btn-wrap'))
     .map(el => el.outerHTML).join('') : '';
 
   window.postMessage({
-    type: 'REPORT_GENERATOR_UNSUSPEND',
+    type: prefix === 'ipspike' ? 'REPORT_GENERATOR_UNSUSPEND_NO_JIRA' : 'REPORT_GENERATOR_UNSUSPEND',
     accounts: accounts,
     account: accounts[0],
     region: region,
@@ -1182,4 +1204,58 @@ function logToSheet(prefix) {
   }, '*');
 
   showToast('Logging to Sheet…');
+}
+
+function checkPasswordChange(prefix) {
+  const account = document.getElementById(prefix + '-account')?.value.trim() || '';
+  if (!account) {
+    showToast('Please enter an account first.', 'warning');
+    return;
+  }
+
+  const btn = document.querySelector('[data-action="check-password"][data-panel="' + prefix + '"]');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 0.8s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Checking…';
+  }
+
+  window.postMessage({
+    type: 'REPORT_GENERATOR_PARTNER_PANEL_LOOKUP',
+    account: account,
+  }, '*');
+
+  showToast('Opening Partner Panel to check password change…', 'info');
+}
+
+function setPartnerPanelResult(result) {
+  const select = document.getElementById('ipspike-pwd-changed');
+  const btn = document.querySelector('[data-action="check-password"][data-panel="ipspike"]');
+  const resultsPanel = document.getElementById('ipspike-partner-results');
+  const suspDateEl = document.getElementById('ipspike-suspension-date');
+  const pwdDateEl = document.getElementById('ipspike-pwd-changed-date');
+
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Auto-check';
+  }
+
+  if (!result.success) {
+    showToast('Partner Panel check failed: ' + (result.error || 'Unknown error'), 'error');
+    return;
+  }
+
+  if (select) {
+    select.value = result.passwordChanged ? 'Yes' : 'No';
+  }
+
+  if (resultsPanel) {
+    resultsPanel.style.display = 'flex';
+    if (suspDateEl) suspDateEl.textContent = result.suspensionDate || 'N/A';
+    if (pwdDateEl) pwdDateEl.textContent = result.lastPasswordResetDate || 'N/A';
+  }
+
+  const msg = result.passwordChanged
+    ? 'Password WAS changed after suspension'
+    : 'Password was NOT changed after suspension';
+  showToast(msg, result.passwordChanged ? 'success' : 'warning');
 }
