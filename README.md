@@ -16,7 +16,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Rich clipboard with images** — copies both `text/plain` and `text/html` to the clipboard; the HTML version uses monospace font (`DM Mono`) so pasting into email clients, Word, or Google Docs renders the report in monospace; when screenshots are attached, embedded `<img>` tags are included
 - **Report type pill + timestamp** — each generated report shows a coloured report type badge (ARF/Bounce) and a "Generated:" timestamp
 - **Keyboard shortcut** — `Ctrl`/`Cmd` + `Enter` generates the report for whichever panel is currently active
-- **Confirm before clear** — clearing either panel requires confirmation to prevent accidental data loss
+- **Confirm before clear** — clearing any panel requires confirmation to prevent accidental data loss
 
 ### Domain Lookup
 - **Auto WHOIS lookup** — fetches domain creation date and age via RDAP (Registration Data Access Protocol); falls back to [whoisjson.com](https://whoisjson.com) if RDAP fails
@@ -42,7 +42,6 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Email → domain sanitisation** — pasting or typing a full email address (`user@example.com`) in the domain field automatically strips the local-part to `example.com`; also strips `http(s)://`, trailing paths, and ports
 - **Account field sanitisation** — the Account field sanitises pasted input: domain-like values get HTML/protocol stripping and control char removal; email addresses (containing `@`) pass through untouched
 - **Auto-lookup on paste** — pasting a domain or email into either panel's domain field automatically fires the WHOIS/Website/DKIM lookup without needing to click the Lookup button
-- **Form state persistence** — all field values are saved to `localStorage` on every change and restored on next visit
 - **Dark / Light theme** — respects system preference with a manual toggle; preference is persisted to `localStorage` with a smooth 250ms crossfade transition
 - **Required field validation** — all required fields are highlighted with inline error messages before generation is allowed
 - **Error resilience** — generate functions are wrapped in `try/catch` so unexpected errors surface as a user-facing toast instead of silently failing
@@ -65,12 +64,12 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Vercel Analytics & Speed Insights** — page view tracking and Core Web Vitals monitoring
 
 ### JIRA Integration
-- **Create TAE JIRA** — a "Create TAE JIRA" button appears in the bottom action row of both ARF and Bounce output sections; creates the JIRA only (no status change, no Abuse Desk)
+- **Create TAE JIRA** — a "Create TAE JIRA" button appears in the bottom action row of ARF, Bounce, and SMTP Suspension output sections; creates the JIRA only (no status change, no Abuse Desk)
 - **Create TAE JIRA and Unsuspend** — a second button that creates the JIRA (listing all accounts if multiple), transitions it to **Done** (transition ID `71`), adds a comment "Unsuspended", then opens one Abuse Desk tab per account
 - **REST API creation** — creates JIRA tickets directly via `POST /rest/api/2/issue` using the browser's authenticated session cookies; no API key required
 - **Image attachments** — screenshot images are decoded from base64 and uploaded as individual attachments via JIRA's attachment API (`POST /rest/api/2/issue/{key}/attachments`)
 - **Prefilled fields** — Project (TAE, `pid=12900`), Issue Type (Task, `id=10902`), Priority (P3, `id=10000`), Summary, Description, Labels, and Zendesk link (`customfield_12211`) are all set automatically
-- **Dynamic labels** — ARF reports get the `ARF_unsuspension` label; Bounce reports get `Bounce_unsuspension`
+- **Dynamic labels** — ARF reports get the `ARF_unsuspension` label; Bounce reports get `Bounce_unsuspension`; SMTP Suspension reports get `SMTP_unsuspension`
 - **Zendesk ticket link (required)** — a "Zendesk Ticket Link" input field appears below Account in both panels; the URL is passed as `customfield_12211` in the JIRA payload; report generation is blocked if empty
 - **Auto-transition to Done** — the "Unsuspend" flow transitions the JIRA to Done status via `POST /rest/api/2/issue/{key}/transitions` with ID `71`, then adds a "Unsuspended" comment via `POST /rest/api/2/issue/{key}/comment`
 - **Fallback to paste** — if the REST API call fails (auth expired, network error), the report is stored in `chrome.storage.local` and the user is redirected to JIRA's create page for manual paste
@@ -87,7 +86,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
   - To repackage after changes: `npm run pack-extension`
 
 ### Log to Sheet (Google Sheets Integration)
-- **Log to Sheet button** — a "Log to Sheet" button appears in the bottom action row of both ARF and Bounce output sections, next to the JIRA buttons; disabled until a report is generated
+- **Log to Sheet button** — a "Log to Sheet" button appears in the bottom action row of ARF, Bounce, and SMTP Suspension output sections, next to the JIRA buttons; disabled until a report is generated
 - **DOM automation** — writes report data to a Google Sheet via the Chrome extension's content script (`content-sheet.js`) running on `docs.google.com/spreadsheets/*`
 - **Binary search for row detection** — uses `Ctrl+End` to find the sheet's last used row, then binary searches column B (Date) for today's date to find the correct insertion point; handles frozen rows (rows 1–2 are headers) and 8000+ row sheets efficiently (~1.5 seconds)
 - **Column layout** — writes to columns B–G (column A is left empty): B = Date, C = ZD Ticket ID, D = JIRA Link, E = Domain/Email, F = Unsuspension Type, G = Reason
@@ -109,8 +108,8 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Region-aware URL** — Abuse Desk URL includes the correct `region` parameter (`us-east-1` for NA, `eu-central-1` for EU) based on MX-based region detection
 - **Fallback toast** — shows success/failure toast notifications at each step for user feedback
 
-### IP Spike Panel
-- **Dedicated panel** — a third panel for IP Spike unsuspend cases, displayed alongside ARF and Bounce on wide screens (≥1400px: 3-column layout)
+### IP Spike & SMTP Suspension Panels
+- **Dedicated panels** — fourth and fifth panels for IP Spike and SMTP Suspension unsuspend cases, displayed alongside ARF and Bounce on wide screens (≥1400px: multi-column layout)
 - **Account field** — enter the account email/domain; domain lookup auto-fills from the account input (same as ARF/Bounce)
 - **Domain Lookup** — same WHOIS/Website/DKIM widget as ARF and Bounce panels
 - **Partner Panel link** — "Check on Partner Panel" link opens `admin.titan.email` for manual lookups
@@ -125,6 +124,16 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Suspension date & password changed date** — displays the most recent suspension date and last password reset date from the partner panel; shows N/A if not found
 - **Auto-check button** — click to trigger the partner panel automation; results auto-fill the "Password changed after suspension?" dropdown
 - **Unsuspend via AD** — opens Abuse Desk tabs directly (no JIRA created); reason is hardcoded to "Password Changed"
+
+#### SMTP Suspension
+- **Account & Zendesk link** — required fields for the account and Zendesk ticket link
+- **Domain Lookup** — same WHOIS/Website/DKIM widget as ARF and Bounce panels
+- **Assurances** (required) — single-group assurance buttons: Password changed, Virus scan shared, Fixed SMTP issues
+- **Screenshot upload** — drag-and-drop or file picker for virus scan evidence images; renders inline in the output
+- **Generate report** — produces a structured text report with domain age, DKIM status, and selected assurances
+- **JIRA & Unsuspend** — creates TAE JIRA (with description, labels, Zendesk link) and optionally transitions to Done + opens Abuse Desk
+- **Log to Sheet** — logs the report to the tracking Google Sheet (type: SMTP)
+- **Clear** — resets all fields and screenshots with confirmation
 
 ### Mailboards Integration
 - **Check on Mailboards** — a "Check on Mailboards" link sits below the Account field in both ARF and Bounce panels, linking to [mailboards.ops.titan.email](https://mailboards.ops.titan.email)
@@ -202,7 +211,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ## Project Structure
 
 ```
-├── index.html                      # Main app UI (ARF + Bounce panels)
+├── index.html                      # Main app UI (ARF, Bounce, IP Spike, and SMTP Suspension panels)
 ├── login.html                      # Password login page
 ├── favicon.svg                     # App favicon
 ├── middleware.js                   # Vercel Edge middleware (auth gate + HMAC cookie verification)
@@ -219,14 +228,14 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 │   ├── login.js                    # Login handler — constant-time password check, rate limited, sets signed auth cookie
 │   └── sheet-config.js             # Returns Google Sheet ID from GOOGLE_SHEET_ID env var for Log to Sheet feature
 ├── scripts/
-│   ├── app.js                      # Core app logic (ARF + Bounce generate, domain lookup, CSV, unified state, event delegation)
+│   ├── app.js                      # Core app logic (ARF, Bounce, SMTP Suspension generate; IP Spike unsuspend; domain lookup; CSV; unified state; event delegation)
 │   ├── pure.js                     # Pure functions (escapeHtml, parseCsvRow, sanitiseDomainInput, sanitiseAccountInput) — no DOM dependencies
 │   ├── api.js                      # Frontend API helpers (fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx — throws on non-2xx)
 │   └── ui.js                       # UI helpers (showToast with types, theme toggle with transition, stepper, form progress, age colors, validation display, drag-and-drop)
 ├── styles/
 │   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, responsive)
 ├── extension/                      # Chrome extension (Manifest V3) for JIRA integration, Abuse Desk automation, and Google Sheets logging
-│   ├── manifest.json               # Extension config: v3.0, permissions, content scripts for webapp, JIRA, Abuse Desk, Google Sheets, and Partner Panel
+│   ├── manifest.json               # Extension config: v4.0, permissions, content scripts for webapp, JIRA, Abuse Desk, Google Sheets, and Partner Panel
 │   ├── background.js               # Service worker: create-jira, create-jira-and-done (JIRA + markDone + comment), log-to-sheet, partner-panel-lookup, store/get report
 │   ├── content-webapp.js           # Content script on Report Generator: handles JIRA creation, Unsuspend (create + markDone + AD), partner panel lookup, and sheet logging
 │   ├── content-jira.js             # Content script on JIRA: fallback paste strategy (text first, images one by one)
@@ -358,8 +367,6 @@ WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fal
 9. Or click **Create TAE JIRA and Unsuspend** → JIRA created (listing all accounts) + marked Done + Abuse Desk opens one tab per account
 10. Click **Log to Sheet** to append the report to the tracking Google Sheet (uses the JIRA created in step 8 or 9)
 
-> **Tip:** All form fields are saved automatically — refreshing the page restores your last session.
-
 ### IP Spike Unsuspend
 1. Enter the account email/domain in the Account field
 2. Domain lookup auto-runs (same as ARF/Bounce)
@@ -367,6 +374,17 @@ WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fal
 4. The "Password changed after suspension?" dropdown auto-fills based on the history analysis
 5. Suspension Date and Last Password Changed dates appear in a results card below the dropdown
 6. Click **Unsuspend via AD** — opens Abuse Desk tabs directly with reason "Password Changed" (no JIRA created)
+
+### SMTP Suspension
+1. Enter the account email/domain in the Account field
+2. Enter the Zendesk ticket link (required)
+3. Enter the domain and click **Lookup** to auto-fill WHOIS, website, and DKIM fields
+4. Select assurances: Password changed, Virus scan shared, and/or Fixed SMTP issues (at least one required)
+5. Upload virus scan evidence screenshots (optional)
+6. Click **Generate SMTP Suspension Report** → report with domain age, DKIM status, and assurances appears
+7. Click **Create TAE JIRA** → JIRA ticket is created via REST API
+8. Or click **Create TAE JIRA and Unsuspend** → JIRA created + marked Done + "Unsuspended" comment + Abuse Desk opens
+9. Click **Log to Sheet** to append the report to the tracking Google Sheet
 
 ---
 
