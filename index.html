@@ -370,66 +370,6 @@
       </div>
     </section>
 
-    <!-- IP SPIKE PANEL -->
-    <section class="panel" id="ipspike-panel" aria-labelledby="ipspike-title">
-      <div class="panel-header">
-        <span class="panel-badge badge-ipspike">#IP Spike</span>
-        <h2 class="panel-title" id="ipspike-title">IP Spike Unsuspend</h2>
-      </div>
-      <div class="panel-body">
-        <div class="field">
-          <label for="ipspike-account">Account<span class="req">*</span></label>
-          <input type="text" id="ipspike-account" aria-required="true" placeholder="e.g. user@example.com or example.com">
-          <a class="btn btn-secondary btn-tool-link btn-partner-panel" href="https://admin.titan.email" target="_blank" rel="noopener noreferrer">Check on Partner Panel</a>
-          <span class="hint">On Partner Panel: Get Info → View → View Account History — check for password reset entries after suspension</span>
-        </div>
-        <!-- Domain Lookup (IP Spike) -->
-        <div class="domain-lookup-wrap">
-          <label for="ipspike-domain-input">Domain Lookup</label>
-          <div class="domain-lookup-row">
-            <input type="text" id="ipspike-domain-input" placeholder="e.g. example.com">
-            <button class="btn-lookup" id="ipspike-lookup-btn" data-action="lookup" data-panel="ipspike">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Lookup
-            </button>
-          </div>
-          <div class="domain-result-card result-card" id="ipspike-domain-result">
-            <div class="result-card-summary" data-action="toggle-result-card" data-panel="ipspike">
-              <span class="result-card-summary-label">Domain Lookup Results</span>
-              <span class="result-card-summary-value" id="ipspike-result-summary">—</span>
-              <svg class="result-card-toggle" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
-            </div>
-            <div class="result-card-detail">
-              <div class="domain-result-row"><span class="domain-result-label">Created On</span><span class="domain-result-value" id="ipspike-result-created">—</span></div>
-              <div class="domain-result-row"><span class="domain-result-label">Domain Age</span><span class="domain-result-value" id="ipspike-result-age">—</span></div>
-              <div class="domain-result-row"><span class="domain-result-label">Website</span><span class="domain-result-value" id="ipspike-result-website"><div class="skeleton skeleton-sm"></div></span></div>
-              <div class="domain-result-row"><span class="domain-result-label">DKIM</span><span class="domain-result-value" id="ipspike-result-dkim"><div class="skeleton skeleton-sm"></div></span></div>
-              <div class="domain-result-row"><span class="domain-result-label">Source</span><span class="domain-result-value" id="ipspike-result-source">—</span></div>
-            </div>
-          </div>
-        </div>
-        <div class="field">
-          <label for="ipspike-pwd-changed">Password changed after suspension?<span class="req">*</span></label>
-          <div class="pwd-change-row">
-            <select id="ipspike-pwd-changed" aria-required="true"><option value="">Select...</option><option value="Yes">Yes</option><option value="No">No</option></select>
-            <button class="btn btn-secondary btn-check-pwd" data-action="check-password" data-panel="ipspike" title="Auto-check via Partner Panel">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Auto-check
-            </button>
-          </div>
-          <span class="hint">Based on partner panel lookup — or click Auto-check to verify</span>
-        </div>
-        <div class="partner-panel-results" id="ipspike-partner-results" style="display:none;">
-          <div class="partner-result-row"><span class="partner-result-label">Suspension Date</span><span class="partner-result-value" id="ipspike-suspension-date">N/A</span></div>
-          <div class="partner-result-row"><span class="partner-result-label">Last Password Changed</span><span class="partner-result-value" id="ipspike-pwd-changed-date">N/A</span></div>
-        </div>
-      </div>
-      <div class="panel-actions sticky">
-        <button class="btn btn-primary btn-full btn-unsuspend" data-action="unsuspend" data-panel="ipspike">
-          Unsuspend via AD (Reason: Password Changed)
-        </button>
-        <button class="btn btn-secondary" data-action="clear" data-panel="ipspike">Clear</button>
-      </div>
-    </section>
-
     <!-- SMTP SUSPENSION PANEL -->
     <section class="panel" id="smtpsuspend-panel" aria-labelledby="smtpsuspend-title">
       <div class="panel-header">
@@ -514,6 +454,66 @@
           <button class="btn btn-secondary btn-unsuspend" data-action="unsuspend" data-panel="smtpsuspend">Create TAE JIRA and Unsuspend</button>
           <button class="btn btn-secondary btn-log-sheet" data-action="log-sheet" data-panel="smtpsuspend" title="Log this report to Google Sheet" disabled>Log to Sheet</button>
         </div>
+      </div>
+    </section>
+
+    <!-- IP SPIKE PANEL -->
+    <section class="panel" id="ipspike-panel" aria-labelledby="ipspike-title">
+      <div class="panel-header">
+        <span class="panel-badge badge-ipspike">#IP Spike</span>
+        <h2 class="panel-title" id="ipspike-title">IP Spike Unsuspend</h2>
+      </div>
+      <div class="panel-body">
+        <div class="field">
+          <label for="ipspike-account">Account<span class="req">*</span></label>
+          <input type="text" id="ipspike-account" aria-required="true" placeholder="e.g. user@example.com or example.com">
+          <a class="btn btn-secondary btn-tool-link btn-partner-panel" href="https://admin.titan.email" target="_blank" rel="noopener noreferrer">Check on Partner Panel</a>
+          <span class="hint">On Partner Panel: Get Info → View → View Account History — check for password reset entries after suspension</span>
+        </div>
+        <!-- Domain Lookup (IP Spike) -->
+        <div class="domain-lookup-wrap">
+          <label for="ipspike-domain-input">Domain Lookup</label>
+          <div class="domain-lookup-row">
+            <input type="text" id="ipspike-domain-input" placeholder="e.g. example.com">
+            <button class="btn-lookup" id="ipspike-lookup-btn" data-action="lookup" data-panel="ipspike">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Lookup
+            </button>
+          </div>
+          <div class="domain-result-card result-card" id="ipspike-domain-result">
+            <div class="result-card-summary" data-action="toggle-result-card" data-panel="ipspike">
+              <span class="result-card-summary-label">Domain Lookup Results</span>
+              <span class="result-card-summary-value" id="ipspike-result-summary">—</span>
+              <svg class="result-card-toggle" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+            <div class="result-card-detail">
+              <div class="domain-result-row"><span class="domain-result-label">Created On</span><span class="domain-result-value" id="ipspike-result-created">—</span></div>
+              <div class="domain-result-row"><span class="domain-result-label">Domain Age</span><span class="domain-result-value" id="ipspike-result-age">—</span></div>
+              <div class="domain-result-row"><span class="domain-result-label">Website</span><span class="domain-result-value" id="ipspike-result-website"><div class="skeleton skeleton-sm"></div></span></div>
+              <div class="domain-result-row"><span class="domain-result-label">DKIM</span><span class="domain-result-value" id="ipspike-result-dkim"><div class="skeleton skeleton-sm"></div></span></div>
+              <div class="domain-result-row"><span class="domain-result-label">Source</span><span class="domain-result-value" id="ipspike-result-source">—</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="ipspike-pwd-changed">Password changed after suspension?<span class="req">*</span></label>
+          <div class="pwd-change-row">
+            <select id="ipspike-pwd-changed" aria-required="true"><option value="">Select...</option><option value="Yes">Yes</option><option value="No">No</option></select>
+            <button class="btn btn-secondary btn-check-pwd" data-action="check-password" data-panel="ipspike" title="Auto-check via Partner Panel">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Auto-check
+            </button>
+          </div>
+          <span class="hint">Based on partner panel lookup — or click Auto-check to verify</span>
+        </div>
+        <div class="partner-panel-results" id="ipspike-partner-results" style="display:none;">
+          <div class="partner-result-row"><span class="partner-result-label">Suspension Date</span><span class="partner-result-value" id="ipspike-suspension-date">N/A</span></div>
+          <div class="partner-result-row"><span class="partner-result-label">Last Password Changed</span><span class="partner-result-value" id="ipspike-pwd-changed-date">N/A</span></div>
+        </div>
+      </div>
+      <div class="panel-actions sticky">
+        <button class="btn btn-primary btn-full btn-unsuspend" data-action="unsuspend" data-panel="ipspike">
+          Unsuspend via AD (Reason: Password Changed)
+        </button>
+        <button class="btn btn-secondary" data-action="clear" data-panel="ipspike">Clear</button>
       </div>
     </section>
 
