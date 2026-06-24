@@ -1017,7 +1017,7 @@ function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, af
 
 function clearARF() {
   clearPanel('arf',
-    ['arf-account','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim','arf-domain-input'],
+    ['arf-account','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim','arf-domain-input','arf-zd-link'],
     ['arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim'],
     { clearScreenshots: true }
   );
@@ -1073,7 +1073,7 @@ function generateBounce() {
 // clearBounce: confirm before destroying form data
 function clearBounce() {
   clearPanel('bounce',
-    ['bounce-account','bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-domain-input','bounce-other-blocked-detail'],
+    ['bounce-account','bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-domain-input','bounce-other-blocked-detail','bounce-zd-link'],
     ['bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-other-blocked-detail'],
     { clearScreenshots: false }
   );
