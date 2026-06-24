@@ -47,30 +47,62 @@
   function parseAccountHistory() {
     var events = [];
 
-    // Try all tables on the page
-    var tables = document.querySelectorAll('table');
-    for (var t = 0; t < tables.length; t++) {
-      var trs = tables[t].querySelectorAll('tr');
-      for (var i = 0; i < trs.length; i++) {
-        var cells = trs[i].querySelectorAll('td, th');
-        if (cells.length >= 2) {
-          var dateText = (cells[0] || {}).textContent || '';
-          var actionText = (cells[1] || {}).textContent || '';
-          // Skip header rows
-          if (actionText.trim().toLowerCase() === 'action' || dateText.trim().toLowerCase() === 'date/time') continue;
-          if (dateText.trim() && actionText.trim()) {
-            events.push({
-              date: dateText.trim(),
-              action: actionText.trim(),
-              role: ((cells[2] || {}).textContent || '').trim()
-            });
-          }
+    // 1. Try action-history specific cells first (from DOM screenshot: td.action-history-time + td.action-history-info)
+    var timeCells = document.querySelectorAll('td.action-history-time');
+    if (timeCells.length > 0) {
+      for (var i = 0; i < timeCells.length; i++) {
+        var timeTd = timeCells[i];
+        var row = timeTd.parentElement;
+        if (!row || row.tagName !== 'TR') continue;
+        var infoTds = row.querySelectorAll('td.action-history-info');
+        if (infoTds.length === 0) continue;
+
+        var dateText = (timeTd.textContent || '').trim();
+        var actionText = '';
+        var roleText = '';
+
+        // First action-history-info div has the action link, second has the role
+        var actionDiv = infoTds[0].querySelector('.action-detail-link');
+        if (actionDiv) {
+          actionText = actionDiv.textContent.trim();
+        } else {
+          actionText = infoTds[0].textContent.trim();
+        }
+
+        if (infoTds.length >= 2) {
+          roleText = infoTds[1].textContent.trim();
+        }
+
+        if (dateText && actionText) {
+          events.push({ date: dateText, action: actionText, role: roleText });
         }
       }
-      if (events.length > 0) break;
     }
 
-    // Fallback: parse from body text
+    // 2. Fallback: generic table parser
+    if (events.length === 0) {
+      var tables = document.querySelectorAll('table');
+      for (var t = 0; t < tables.length; t++) {
+        var trs = tables[t].querySelectorAll('tbody tr');
+        for (var i = 0; i < trs.length; i++) {
+          var cells = trs[i].querySelectorAll('td');
+          if (cells.length >= 2) {
+            var dateText = (cells[0] || {}).textContent || '';
+            var actionText = (cells[1] || {}).textContent || '';
+            if (dateText.trim() && actionText.trim()) {
+              events.push({
+                date: dateText.trim(),
+                action: actionText.trim(),
+                role: ((cells[2] || {}).textContent || '').trim()
+              });
+            }
+          }
+        }
+        if (events.length > 0) break;
+      }
+    }
+
+    // 3. Fallback: parse from body text
     if (events.length === 0) {
       var allText = document.body.innerText;
       var lines = allText.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 0; });
@@ -90,7 +122,7 @@
                        line.indexOf('Data migration') !== -1;
 
         if (isAction) {
-          // Look back 1-2 lines for the date
+          // Look back 1-3 lines for the date
           var date = '';
           for (var k = j - 1; k >= Math.max(0, j - 3); k--) {
             if (datePattern.test(lines[k])) {
@@ -232,10 +264,29 @@
 
       viewHistoryBtn.click();
       await waitForTextInBody('Action History', 10000);
-      await sleep(2000);
 
+      var historyReady = await new Promise(function(resolve) {
+        var start = Date.now();
+        var check = function() {
+          var cells = document.querySelectorAll('td.action-history-time');
+          if (cells.length > 0) { resolve(true); return; }
+          if (Date.now() - start > 10000) { resolve(false); return; }
+          setTimeout(check, 300);
+        };
+        check();
+      });
+
+      if (!historyReady) {
+        chrome.runtime.sendMessage({ action: 'partner-panel-result', data: { success: false, error: 'Action History rows did not load' } });
+        return;
+      }
+
+      await sleep(500);
       var events = parseAccountHistory();
       var analysis = analyzeHistory(events);
+
+      console.log('[PartnerPanel] Events found:', events.length, events);
+      console.log('[PartnerPanel] Analysis:', analysis);
 
       chrome.runtime.sendMessage({
         action: 'partner-panel-result',
@@ -245,7 +296,8 @@
           passwordChanged: analysis.passwordChanged,
           suspensionDate: analysis.suspensionDate,
           lastPasswordResetDate: analysis.lastPasswordResetDate,
-          events: events
+          events: events,
+          _debug: { eventCount: events.length, firstEvent: events[0] || null }
         }
       });
 
