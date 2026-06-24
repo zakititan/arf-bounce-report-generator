@@ -3,14 +3,13 @@
  * Imports API helpers from api.js and UI helpers from ui.js.
  *
  * Improvements applied:
- *  UX:      Auto-trigger lookup from CSV, localStorage persistence, Ctrl/Cmd+Enter
+ *  UX:      Auto-trigger lookup from CSV, Ctrl/Cmd+Enter
  *           shortcut, "Copied ✓" button feedback, email→domain sanitisation,
  *           inline screenshots in ARF output, full-text copy (incl. screenshot labels).
  *  Quality: Unified `state` object, whoisCache invalidated on domain input change,
  *           try/catch on generate, addEventListener replacing window.* inline handlers
  *           where feasible, debounced Lookup button, per-panel generate-button gating,
  *           lastActivePanel for keyboard shortcut, confirm before clear.
- *           attachPersistListeners called once inside DOMContentLoaded (not twice).
  *  Perf:    10-screenshot cap with warning toast.
  */
 
@@ -35,7 +34,6 @@ export const parseCsvRow = _parseCsvRow;
 // ── Constants ─────────────────────────────────────────────────────────
 const MAX_SCREENSHOTS = 10;
 const LOOKUP_DEBOUNCE_MS = 1000;
-const LS_KEY = 'arf_bounce_form_state';
 const _lookupTimers = { arf: null, bounce: null };
 const _progressTimers = {};
 function debouncedUpdateFormProgress(prefix) {
@@ -73,15 +71,11 @@ let sheetConfig = { sheetId: '' };
 // ── Init ──────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   initThemeToggle();
-  restoreFormState();
   initKeyboardShortcuts();
   initDomainInputs();
   initEventDelegation();
   initDragDrop();
   initPasteSupport();
-  // attachPersistListeners called exactly once here — do NOT add another
-  // DOMContentListener for it elsewhere in this file.
-  attachPersistListeners();
   updateFormProgress('arf');
   updateFormProgress('bounce');
   renderPreviews('arf', 'screenshots');
@@ -346,6 +340,7 @@ function initEventDelegation() {
       case 'clear':
         if (panel === 'arf') clearARF();
         else if (panel === 'bounce') clearBounce();
+        else if (panel === 'ipspike') clearIPspike();
         break;
       case 'lookup':
         if (panel) lookupDomainImmediate(panel);
@@ -461,41 +456,9 @@ function initPasteSupport() {
   });
 }
 
-// ── localStorage persistence ──────────────────────────────────────────
-const PERSIST_FIELDS = [
-  'arf-account', 'arf-complaints', 'arf-prev-unblock',
-  'arf-blocked-lt2', 'arf-email-type', 'arf-website', 'arf-dkim', 'arf-domain-input',
-  'bounce-account', 'bounce-prev-unblock', 'bounce-other-blocked', 'bounce-website',
-  'bounce-dkim', 'bounce-domain-input', 'bounce-other-blocked-detail',
-  'ipspike-account', 'ipspike-domain-input', 'ipspike-pwd-changed',
-];
 
-function saveFormState() {
-  const saved = {};
-  PERSIST_FIELDS.forEach(id => { const el = document.getElementById(id); if (el) saved[id] = el.value; });
-  try { localStorage.setItem(LS_KEY, JSON.stringify(saved)); } catch (_) {}
-}
 
-function restoreFormState() {
-  let saved;
-  try { saved = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (_) { return; }
-  if (!saved || !Object.keys(saved).some(k => saved[k])) return;
-  PERSIST_FIELDS.forEach(id => { const el = document.getElementById(id); if (el && saved[id]) el.value = saved[id]; });
-  const otherBlocked = document.getElementById('bounce-other-blocked');
-  if (otherBlocked && otherBlocked.value) toggleOtherBlockedField(otherBlocked.value);
-  showToast('Form state restored from last session.');
-}
 
-function attachPersistListeners() {
-  PERSIST_FIELDS.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) {
-      const panelPrefix = id.startsWith('arf') ? 'arf' : 'bounce';
-      el.addEventListener('change', () => { saveFormState(); updateFormProgress(panelPrefix); });
-      el.addEventListener('input', () => debouncedUpdateFormProgress(panelPrefix));
-    }
-  });
-}
 
 // ── Generate-button state (per-panel only) ────────────────────────────
 // Each panel's generate button is only gated by its own lookup being in
@@ -970,7 +933,7 @@ function generateARF() {
 
 // clearARF/clearBounce: confirm before destroying form data
 function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, afterClear }) {
-  const label = prefix === 'arf' ? 'ARF' : 'Bounce';
+  const label = prefix === 'arf' ? 'ARF' : prefix === 'bounce' ? 'Bounce' : 'IP Spike';
   if (!confirm('Clear all ' + label + ' form data? This cannot be undone.')) return;
 
   fieldIds.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
@@ -1012,7 +975,6 @@ function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, af
   updateStepper(prefix, '0');
   updateFormProgress(prefix);
   if (afterClear) afterClear();
-  saveFormState();
 }
 
 function clearARF() {
@@ -1076,6 +1038,17 @@ function clearBounce() {
     ['bounce-account','bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-domain-input','bounce-other-blocked-detail','bounce-zd-link'],
     ['bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-other-blocked-detail'],
     { clearScreenshots: false }
+  );
+}
+
+function clearIPspike() {
+  clearPanel('ipspike',
+    ['ipspike-account', 'ipspike-domain-input', 'ipspike-pwd-changed'],
+    [],
+    { clearScreenshots: false, afterClear: () => {
+      const results = document.getElementById('ipspike-partner-results');
+      if (results) results.style.display = 'none';
+    }}
   );
 }
 
