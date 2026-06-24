@@ -1071,13 +1071,11 @@ function clearIPspike() {
 
 // ── SMTP Suspension Generate / Clear ──────────────────────────────────
 function validateSMTPSuspend() {
-  const fieldIds = ['smtpsuspend-account', 'smtpsuspend-zd-link', 'smtpsuspend-website', 'smtpsuspend-dkim'];
+  const fieldIds = ['smtpsuspend-account', 'smtpsuspend-zd-link'];
   clearFieldErrors(fieldIds);
   const errors = [];
   if (!v('smtpsuspend-account')) errors.push({ id: 'smtpsuspend-account', label: 'Account' });
   if (!v('smtpsuspend-zd-link')) errors.push({ id: 'smtpsuspend-zd-link', label: 'Zendesk Ticket Link' });
-  if (!v('smtpsuspend-website')) errors.push({ id: 'smtpsuspend-website', label: 'Valid Website' });
-  if (!v('smtpsuspend-dkim')) errors.push({ id: 'smtpsuspend-dkim', label: 'DKIM Status' });
   const assurances = getActiveAssurances('smtpsuspend');
   if (assurances.length === 0)
     errors.push({ id: null, label: 'Assurances (select at least one)' });
@@ -1122,7 +1120,7 @@ function generateSMTPSuspend() {
 
 function clearSMTPSuspend() {
   clearPanel('smtpsuspend',
-    ['smtpsuspend-account', 'smtpsuspend-zd-link', 'smtpsuspend-domain-input', 'smtpsuspend-website', 'smtpsuspend-dkim'],
+    ['smtpsuspend-account', 'smtpsuspend-zd-link', 'smtpsuspend-domain-input'],
     [],
     { clearScreenshots: true }
   );
