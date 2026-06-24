@@ -430,6 +430,93 @@
       </div>
     </section>
 
+    <!-- SMTP SUSPENSION PANEL -->
+    <section class="panel" id="smtpsuspend-panel" aria-labelledby="smtpsuspend-title">
+      <div class="panel-header">
+        <span class="panel-badge badge-smtpsuspend">#SMTP Suspension</span>
+        <h2 class="panel-title" id="smtpsuspend-title">SMTP Suspension</h2>
+      </div>
+      <div class="form-progress-wrap">
+        <div class="form-progress-bar"><div class="form-progress-fill" id="smtpsuspend-form-progress-fill" data-fields="smtpsuspend-account,smtpsuspend-zd-link,smtpsuspend-website,smtpsuspend-dkim"></div></div>
+      </div>
+      <div class="panel-body">
+        <div class="field">
+          <label for="smtpsuspend-account">Account<span class="req">*</span></label>
+          <input type="text" id="smtpsuspend-account" aria-required="true" placeholder="e.g. user@example.com or example.com">
+        </div>
+        <div class="field">
+          <label for="smtpsuspend-zd-link">Zendesk Ticket Link<span class="req">*</span></label>
+          <input type="url" id="smtpsuspend-zd-link" aria-required="true" placeholder="e.g. https://flockhelp.zendesk.com/agent/tickets/12345">
+        </div>
+        <!-- Domain Lookup (SMTP Suspension) -->
+        <div class="domain-lookup-wrap">
+          <label for="smtpsuspend-domain-input">Domain Lookup</label>
+          <div class="domain-lookup-row">
+            <input type="text" id="smtpsuspend-domain-input" placeholder="e.g. example.com">
+            <button class="btn-lookup" id="smtpsuspend-lookup-btn" data-action="lookup" data-panel="smtpsuspend">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Lookup
+            </button>
+          </div>
+          <div class="domain-result-card result-card" id="smtpsuspend-domain-result">
+            <div class="result-card-summary" data-action="toggle-result-card" data-panel="smtpsuspend">
+              <span class="result-card-summary-label">Domain Lookup Results</span>
+              <span class="result-card-summary-value" id="smtpsuspend-result-summary">—</span>
+              <svg class="result-card-toggle" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+            <div class="result-card-detail">
+              <div class="domain-result-row"><span class="domain-result-label">Created On</span><span class="domain-result-value" id="smtpsuspend-result-created">—</span></div>
+              <div class="domain-result-row"><span class="domain-result-label">Domain Age</span><span class="domain-result-value" id="smtpsuspend-result-age">—</span></div>
+              <div class="domain-result-row"><span class="domain-result-label">Website</span><span class="domain-result-value" id="smtpsuspend-result-website"><div class="skeleton skeleton-sm"></div></span></div>
+              <div class="domain-result-row"><span class="domain-result-label">DKIM</span><span class="domain-result-value" id="smtpsuspend-result-dkim"><div class="skeleton skeleton-sm"></div></span></div>
+              <div class="domain-result-row"><span class="domain-result-label">Source</span><span class="domain-result-value" id="smtpsuspend-result-source">—</span></div>
+            </div>
+          </div>
+        </div>
+        <!-- Assurances -->
+        <div class="field">
+          <label>Assurances<span class="req">*</span></label>
+          <div class="assurance-btn-group" id="smtpsuspend-assurance-btns">
+            <button type="button" class="assurance-btn" data-value="Password changed" data-action="toggle-assurance" data-panel="smtpsuspend" aria-pressed="false"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Password changed</button>
+            <button type="button" class="assurance-btn" data-value="Virus scan shared" data-action="toggle-assurance" data-panel="smtpsuspend" aria-pressed="false"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Virus scan shared</button>
+            <button type="button" class="assurance-btn" data-value="Fixed SMTP issues" data-action="toggle-assurance" data-panel="smtpsuspend" aria-pressed="false"><svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>Fixed SMTP issues</button>
+          </div>
+        </div>
+        <!-- Screenshots (for virus scan evidence) -->
+        <div class="field">
+          <label>Screenshots</label>
+          <div class="upload-zone" id="smtpsuspend-upload-zone">
+            <input type="file" id="smtpsuspend-screenshot-input" accept="image/*" multiple aria-label="Upload screenshots">
+            <p class="upload-zone-text">Drag &amp; drop or click to upload virus scan evidence</p>
+          </div>
+          <div class="screenshot-previews" id="smtpsuspend-previews"></div>
+        </div>
+        <div class="validation-banner" id="smtpsuspend-validation-banner" role="alert">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <ul class="validation-banner-list" id="smtpsuspend-validation-list"></ul>
+        </div>
+        <button class="btn btn-primary btn-full" id="smtpsuspend-generate-btn" data-action="generate" data-panel="smtpsuspend">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Generate SMTP Suspension Report
+        </button>
+        <button class="btn btn-secondary" data-action="clear" data-panel="smtpsuspend">Clear</button>
+      </div>
+      <div class="panel-body" id="smtpsuspend-output-section" style="display:none;">
+        <hr>
+        <div class="output-header">Generated Report</div>
+        <span class="output-report-type smtpsuspend" id="smtpsuspend-report-type">SMTP Suspension Report</span>
+        <span class="output-timestamp" id="smtpsuspend-output-timestamp"></span>
+        <div class="output-area">
+          <div class="copy-btn-wrap"><button class="btn btn-secondary" data-action="copy" data-target="smtpsuspend-output-text">Copy</button></div>
+          <pre id="smtpsuspend-output-text" class="output-text"></pre>
+          <div id="smtpsuspend-output-images"></div>
+        </div>
+        <div class="output-bottom-actions">
+          <button class="btn btn-secondary btn-jira" data-action="create-jira" data-panel="smtpsuspend">Create TAE JIRA</button>
+          <button class="btn btn-secondary btn-unsuspend" data-action="unsuspend" data-panel="smtpsuspend">Create TAE JIRA and Unsuspend</button>
+          <button class="btn btn-secondary btn-log-sheet" data-action="log-sheet" data-panel="smtpsuspend" title="Log this report to Google Sheet" disabled>Log to Sheet</button>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <footer class="site-footer" role="contentinfo">
