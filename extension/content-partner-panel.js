@@ -45,32 +45,68 @@
   }
 
   function parseAccountHistory() {
-    var rows = document.querySelectorAll('table tbody tr, [class*="row"], [class*="Row"]');
     var events = [];
-    var tableEl = document.querySelector('table');
-    if (tableEl) {
-      var trs = tableEl.querySelectorAll('tr');
+
+    // Try all tables on the page
+    var tables = document.querySelectorAll('table');
+    for (var t = 0; t < tables.length; t++) {
+      var trs = tables[t].querySelectorAll('tr');
       for (var i = 0; i < trs.length; i++) {
-        var cells = trs[i].querySelectorAll('td');
+        var cells = trs[i].querySelectorAll('td, th');
         if (cells.length >= 2) {
-          events.push({
-            date: (cells[0] || {}).textContent || '',
-            action: (cells[1] || {}).textContent || '',
-            role: (cells[2] || {}).textContent || ''
-          });
+          var dateText = (cells[0] || {}).textContent || '';
+          var actionText = (cells[1] || {}).textContent || '';
+          // Skip header rows
+          if (actionText.trim().toLowerCase() === 'action' || dateText.trim().toLowerCase() === 'date/time') continue;
+          if (dateText.trim() && actionText.trim()) {
+            events.push({
+              date: dateText.trim(),
+              action: actionText.trim(),
+              role: ((cells[2] || {}).textContent || '').trim()
+            });
+          }
         }
       }
+      if (events.length > 0) break;
     }
+
+    // Fallback: parse from body text
     if (events.length === 0) {
       var allText = document.body.innerText;
-      var lines = allText.split('\n');
+      var lines = allText.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 0; });
+      var datePattern = /^\d{1,2}\s+\w+\s+\d{4}/;
+
       for (var j = 0; j < lines.length; j++) {
-        var line = lines[j].trim();
-        if (line.indexOf('Password reset') !== -1 || line.indexOf('Suspension') !== -1 || line.indexOf('Suspended') !== -1 || line.indexOf('Unsuspended') !== -1) {
-          events.push({ date: '', action: line, role: '' });
+        var line = lines[j];
+        var isAction = line.indexOf('Password reset') !== -1 ||
+                       line.indexOf('Suspension') !== -1 ||
+                       line.indexOf('Suspended') !== -1 ||
+                       line.indexOf('Unsuspended') !== -1 ||
+                       line.indexOf('Incoming Emails') !== -1 ||
+                       line.indexOf('Flags Updated') !== -1 ||
+                       line.indexOf('Created') !== -1 ||
+                       line.indexOf('Made admin') !== -1 ||
+                       line.indexOf('Made non-admin') !== -1 ||
+                       line.indexOf('Data migration') !== -1;
+
+        if (isAction) {
+          // Look back 1-2 lines for the date
+          var date = '';
+          for (var k = j - 1; k >= Math.max(0, j - 3); k--) {
+            if (datePattern.test(lines[k])) {
+              date = lines[k];
+              // Check if time is on the previous line
+              if (k > 0 && /^\d{2}:\d{2}:\d{2}/.test(lines[k - 1])) {
+                date = date + ' ' + lines[k - 1];
+              }
+              break;
+            }
+          }
+          events.push({ date: date, action: line, role: '' });
         }
       }
     }
+
     return events;
   }
 
