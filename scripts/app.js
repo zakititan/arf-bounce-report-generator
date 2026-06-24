@@ -69,6 +69,7 @@ const state = {
     lookupInFlight: false,
     region: 'na',
     screenshots: [],
+    assuranceScreenshots: [],
   },
 };
 let lastActivePanel = null; // tracks which panel the user last interacted with (for Ctrl/Cmd+Enter)
@@ -950,7 +951,7 @@ function generateARF() {
 
 // clearARF/clearBounce: confirm before destroying form data
 function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, afterClear }) {
-  const label = prefix === 'arf' ? 'ARF' : prefix === 'bounce' ? 'Bounce' : 'IP Spike';
+  const label = prefix === 'arf' ? 'ARF' : prefix === 'bounce' ? 'Bounce' : prefix === 'ipspike' ? 'IP Spike' : 'SMTP Suspension';
   if (!confirm('Clear all ' + label + ' form data? This cannot be undone.')) return;
 
   fieldIds.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
