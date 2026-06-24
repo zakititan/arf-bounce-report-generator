@@ -1096,7 +1096,7 @@ function generateSMTPSuspend() {
       '#SMTP Suspension',
       'Domain Creation Date : ' + (whois ? whois.creation_date : '-'),
       'Domain Age : ' + (whois ? whois.domain_age : '-'),
-      'DKIM: ' + (document.getElementById('smtpsuspend-result-dkim')?.textContent?.trim() || '-'),
+      'DKIM: ' + (() => { const t = (document.getElementById('smtpsuspend-result-dkim')?.textContent?.trim() || '-'); return t.startsWith('Set') ? 'Set' : t; })(),
       'Assurances : ' + (assurances.length > 0 ? assurances.join(', ') : '-'),
     ];
 
