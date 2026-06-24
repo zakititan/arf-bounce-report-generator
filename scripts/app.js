@@ -161,7 +161,7 @@ function initDomainInputs() {
 }
 
 // Account field → auto-fill domain input + trigger lookup
-['arf', 'bounce', 'ipspike'].forEach(prefix => {
+['arf', 'bounce', 'ipspike', 'smtpsuspend'].forEach(prefix => {
   const accountInput = document.getElementById(prefix + '-account');
   if (!accountInput) return;
 
@@ -1096,7 +1096,7 @@ function generateSMTPSuspend() {
       '#SMTP Suspension',
       'Domain Creation Date : ' + (whois ? whois.creation_date : '-'),
       'Domain Age : ' + (whois ? whois.domain_age : '-'),
-      'DKIM: ' + (v('smtpsuspend-dkim') || '-'),
+      'DKIM: ' + (document.getElementById('smtpsuspend-result-dkim')?.textContent?.trim() || '-'),
       'Assurances : ' + (assurances.length > 0 ? assurances.join(', ') : '-'),
     ];
 
