@@ -150,7 +150,7 @@
 
     for (var i = 0; i < events.length; i++) {
       var action = events[i].action.toLowerCase();
-      if (action.indexOf('suspens') !== -1 && action.indexOf('un') === -1) {
+      if (action.indexOf('suspens') !== -1 && action.indexOf('un') === -1 && action.indexOf('removed') === -1) {
         suspensionIdx = i;
         suspensionDate = events[i].date || 'N/A';
         break;
