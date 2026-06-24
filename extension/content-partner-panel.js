@@ -285,9 +285,6 @@
       var events = parseAccountHistory();
       var analysis = analyzeHistory(events);
 
-      console.log('[PartnerPanel] Events found:', events.length, events);
-      console.log('[PartnerPanel] Analysis:', analysis);
-
       chrome.runtime.sendMessage({
         action: 'partner-panel-result',
         data: {
@@ -296,8 +293,7 @@
           passwordChanged: analysis.passwordChanged,
           suspensionDate: analysis.suspensionDate,
           lastPasswordResetDate: analysis.lastPasswordResetDate,
-          events: events,
-          _debug: { eventCount: events.length, firstEvent: events[0] || null }
+          events: events
         }
       });
 
