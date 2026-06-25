@@ -120,7 +120,7 @@
             domainEmail: logData.domainEmail,
             type:        logData.reportType,
             reason:      logData.reason,
-            sheetId:     logData.sheetId || '',
+            appsScriptUrl: logData.appsScriptUrl || '',
           }
         }, function(response) {
           if (chrome.runtime.lastError || !response || !response.success) {

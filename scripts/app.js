@@ -73,7 +73,7 @@ const state = {
   },
 };
 let lastActivePanel = null; // tracks which panel the user last interacted with (for Ctrl/Cmd+Enter)
-let sheetConfig = { sheetId: '' };
+let sheetConfig = { sheetId: '', appsScriptUrl: '' };
 
 // ── Init ──────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -92,6 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderPreviews('smtpsuspend', 'screenshots');
   fetch('/api/sheet-config').then(r => r.json()).then(d => {
     if (d.sheetId) sheetConfig.sheetId = d.sheetId;
+    if (d.appsScriptUrl) sheetConfig.appsScriptUrl = d.appsScriptUrl;
   }).catch(() => {});
 
   window.addEventListener('message', (e) => {
@@ -1249,6 +1250,7 @@ function logToSheet(prefix) {
     reportType: type,
     reason: reportText,
     sheetId: sheetConfig.sheetId,
+    appsScriptUrl: sheetConfig.appsScriptUrl,
   }, '*');
 
   showToast('Logging to Sheet…');

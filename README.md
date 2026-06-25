@@ -89,15 +89,12 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 
 ### Log to Sheet (Google Sheets Integration)
 - **Log to Sheet button** — a "Log to Sheet" button appears in the bottom action row of ARF, Bounce, and SMTP Suspension output sections, next to the JIRA buttons; disabled until a report is generated
-- **DOM automation** — writes report data to a Google Sheet via the Chrome extension's content script (`content-sheet.js`) running on `docs.google.com/spreadsheets/*`
-- **Binary search for row detection** — uses `Ctrl+End` to find the sheet's last used row, then binary searches column B (Date) for today's date to find the correct insertion point; handles frozen rows (rows 1–2 are headers) and 8000+ row sheets efficiently (~1.5 seconds)
+- **Google Apps Script** — writes report data to a Google Sheet via a Google Apps Script web app (`fetch()` POST); no DOM automation or `docs.google.com` host permission required
+- **Binary search for row detection** — the Apps Script uses the sheet's API to find the correct insertion point for today's date
 - **Column layout** — writes to columns B–G (column A is left empty): B = Date, C = ZD Ticket ID, D = JIRA Link, E = Domain/Email, F = Unsuspension Type, G = Reason
 - **JIRA link from unsuspend flow** — the JIRA link in the sheet is the one created during "Create TAE JIRA and Unsuspend"; stored in `chrome.storage.local` as `lastJiraUrl` for Log to Sheet to read
-- **Tab-based data commitment** — after writing the last value (Reason), Tabs to column H to ensure the cell value is saved
-- **Sheet tab management** — background script finds an existing sheet tab or creates a new one; reloads the tab to ensure the content script is injected before sending messages
-- **Retry mechanism** — retries up to 3 times with 3-second delays if the content script doesn't respond
-- **Extension permissions** — requires `tabs` permission for `chrome.tabs.query`/`chrome.tabs.create`; `host_permissions` includes `https://docs.google.com/*`; content script runs at `document_idle` on Google Sheets
-- **Sheet ID** — fetched from `/api/sheet-config` (reads `GOOGLE_SHEET_ID` env var); falls back to default sheet if not configured
+- **Sheet tab management** — the Apps Script handles sheet access; no background tab creation or content script injection required
+- **Sheet ID** — fetched from `/api/sheet-config` (reads `GOOGLE_SHEET_ID` and `APPS_SCRIPT_URL` env vars)
 
 ### Unsuspend (Abuse Desk Integration)
 - **"Create TAE JIRA and Unsuspend" button** — creates JIRA → transitions to Done → adds "Unsuspended" comment → opens Abuse Desk
@@ -186,7 +183,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **XSS prevention** — API response values (verdict, DKIM selectors) and validation error labels are set via `textContent` instead of `innerHTML` to prevent HTML injection
 - **Login redirect removed** — successful login always redirects to `/`; the `redirect` query parameter is no longer accepted, preventing open redirect and `javascript:` injection
 - **API error resilience** — all fetch calls are wrapped in a centralized `apiFetch()` helper that safely handles network errors and non-JSON responses instead of crashing
-- **Extension host permissions** — Chrome extension declares `host_permissions` for `https://jira.directi.com/*` and `https://docs.google.com/*` to enable authenticated REST API calls using browser session cookies
+- **Extension host permissions** — Chrome extension declares `host_permissions` for `https://jira.directi.com/*` and `https://admin.titan.email/*` to enable authenticated REST API calls and Partner Panel automation using browser session cookies
 
 ### Code Quality & Performance
 - **No theme flash** — inline `<script>` in `<head>` sets dark theme before first paint, preventing flash on dark-mode systems
@@ -245,7 +242,6 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 │   ├── content-webapp.js           # Content script on Report Generator: handles JIRA creation, Unsuspend (create + markDone + AD), partner panel lookup, and sheet logging
 │   ├── content-jira.js             # Content script on JIRA: fallback paste strategy (text first, images one by one)
 │   ├── content-abusedesk.js        # Content script on Abuse Desk: auto-clicks Unblock, pastes reason, clicks Save
-│   ├── content-sheet.js            # Content script on Google Sheets: binary search row detection, cell navigation, data entry via execCommand
 │   ├── content-partner-panel.js    # Content script on admin.titan.email: automates account lookup, order view, account history, and password change detection
 │   ├── releases/extension.zip      # Packaged extension for easy distribution
 │   └── icons/                      # Extension icons (16/48/128px)
@@ -411,7 +407,7 @@ WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fal
 - **Middleware URL matching** uses exact path or subpath prefix to prevent `/api/login-staging` from bypassing auth
 - **`AUTH_SECRET`** and **`APP_PASSWORD`** are never committed to the repo — always set via environment variables
 - **Hostname validation** rejects IPv4/IPv6 addresses, localhost names, `.localhost`/`.local`/`.internal` TLDs (SSRF prevention), consecutive dots, hyphen-leading labels, and email local-parts
-- **Extension host permissions** — declares `host_permissions` for `https://jira.directi.com/*`, `https://docs.google.com/*`, and `https://admin.titan.email/*` to enable authenticated REST API calls and Partner Panel automation using browser session cookies
+- **Extension host permissions** — declares `host_permissions` for `https://jira.directi.com/*` and `https://admin.titan.email/*` to enable authenticated REST API calls and Partner Panel automation using browser session cookies
 
 ---
 

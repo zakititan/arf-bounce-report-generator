@@ -7,6 +7,6 @@
   },
   "scripts": {
     "test": "node --test tests/sanitiseDomain.test.js tests/api-handlers.test.js tests/website-check.test.js tests/withMiddleware.test.js tests/safeEqual.test.js tests/createCache.test.js tests/getClientIp.test.js tests/rateLimitInMemory.test.js tests/pureFunctions.test.js tests/website-check-helpers.test.js tests/whois-rdap.test.js tests/dkim-check.test.js tests/api-fetch.test.js tests/lookupMx.test.js",
-    "pack-extension": "powershell Compress-Archive -Path extension/manifest.json,extension/background.js,extension/content-webapp.js,extension/content-jira.js,extension/content-abusedesk.js,extension/content-sheet.js,extension/content-partner-panel.js,extension/icons -DestinationPath extension/releases/extension.zip -Force"
+    "pack-extension": "powershell Compress-Archive -Path extension/manifest.json,extension/background.js,extension/content-webapp.js,extension/content-jira.js,extension/content-abusedesk.js,extension/content-partner-panel.js,extension/icons -DestinationPath extension/releases/extension.zip -Force"
   }
 }
