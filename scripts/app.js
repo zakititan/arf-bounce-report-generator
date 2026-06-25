@@ -1139,9 +1139,9 @@ function createTaeJira(prefix) {
 
   const account = document.getElementById(prefix + '-account')?.value.trim() || '';
   const zdLink = document.getElementById(prefix + '-zd-link')?.value.trim() || '';
-  const typeLabel = prefix === 'arf' ? 'ARF' : 'Bounce';
+  const typeLabel = prefix === 'arf' ? 'ARF' : prefix === 'smtpsuspend' ? 'SMTP Compromised' : 'Bounce';
   const summary = encodeURIComponent(typeLabel + ' unsuspension request: ' + account);
-  const label = prefix === 'arf' ? 'ARF_unsuspension' : 'Bounce_unsuspension';
+  const label = prefix === 'arf' ? 'ARF_unsuspension' : prefix === 'smtpsuspend' ? 'SMTP_unsuspension' : 'Bounce_unsuspension';
   const jiraUrl = 'https://jira.directi.com/secure/CreateIssueDetails!init.jspa?pid=12900&issuetype=10902&priority=10000&labels=' + label + '&summary=' + summary;
 
   // Send report data to browser extension (if installed)
