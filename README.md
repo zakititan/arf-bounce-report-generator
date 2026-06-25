@@ -122,7 +122,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
   4. Clicks **View Account History**
   5. Reads the Action History to detect suspension date and password reset events
   6. Returns results to the web app
-- **Password changed detection** — automatically determines if a password reset occurred after the most recent suspension by comparing event positions in the Action History (newest-first ordering)
+- **Password changed detection** — automatically determines if a password reset or password change occurred after the most recent suspension by comparing event positions in the Action History (newest-first ordering); matches both "Password reset" and "Password changed" actions
 - **Suspension date & password changed date** — displays the most recent suspension date and last password reset date from the partner panel; shows N/A if not found
 - **Auto-check button** — click to trigger the partner panel automation; results auto-fill the "Password changed after suspension?" dropdown
 - **Unsuspend via AD** — opens Abuse Desk tabs directly (no JIRA created); reason is hardcoded to "Password Changed"
