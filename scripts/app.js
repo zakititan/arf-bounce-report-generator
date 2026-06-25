@@ -1242,6 +1242,20 @@ function logToSheet(prefix) {
   const type = prefix === 'arf' ? 'ARF' : prefix === 'smtpsuspend' ? 'SMTP' : 'BOUNCE';
   const date = new Date().toLocaleDateString('en-US');
 
+  const listener = (e) => {
+    if (e.data && e.data.type === 'REPORT_GENERATOR_LOG_SHEET_RESULT') {
+      window.removeEventListener('message', listener);
+      clearTimeout(timeout);
+      if (e.data.success) {
+        showToast('Logged to Sheet ✓', 'success');
+      } else {
+        showToast('Sheet logging failed — check console', 'error');
+      }
+    }
+  };
+  window.addEventListener('message', listener);
+  const timeout = setTimeout(() => window.removeEventListener('message', listener), 15000);
+
   window.postMessage({
     type: 'REPORT_GENERATOR_LOG_SHEET',
     date,

@@ -123,7 +123,9 @@
             appsScriptUrl: logData.appsScriptUrl || '',
           }
         }, function(response) {
-          if (chrome.runtime.lastError || !response || !response.success) {
+          var ok = response && response.success;
+          window.postMessage({ type: 'REPORT_GENERATOR_LOG_SHEET_RESULT', success: ok }, '*');
+          if (chrome.runtime.lastError || !ok) {
             console.warn('[Report→Sheet] Failed:', chrome.runtime.lastError?.message);
           }
         });
