@@ -3,14 +3,13 @@
  * Imports API helpers from api.js and UI helpers from ui.js.
  *
  * Improvements applied:
- *  UX:      Auto-trigger lookup from CSV, localStorage persistence, Ctrl/Cmd+Enter
+ *  UX:      Auto-trigger lookup from CSV, Ctrl/Cmd+Enter
  *           shortcut, "Copied ✓" button feedback, email→domain sanitisation,
  *           inline screenshots in ARF output, full-text copy (incl. screenshot labels).
  *  Quality: Unified `state` object, whoisCache invalidated on domain input change,
  *           try/catch on generate, addEventListener replacing window.* inline handlers
  *           where feasible, debounced Lookup button, per-panel generate-button gating,
  *           lastActivePanel for keyboard shortcut, confirm before clear.
- *           attachPersistListeners called once inside DOMContentLoaded (not twice).
  *  Perf:    10-screenshot cap with warning toast.
  */
 
@@ -35,7 +34,6 @@ export const parseCsvRow = _parseCsvRow;
 // ── Constants ─────────────────────────────────────────────────────────
 const MAX_SCREENSHOTS = 10;
 const LOOKUP_DEBOUNCE_MS = 1000;
-const LS_KEY = 'arf_bounce_form_state';
 const _lookupTimers = { arf: null, bounce: null };
 const _progressTimers = {};
 function debouncedUpdateFormProgress(prefix) {
@@ -66,6 +64,13 @@ const state = {
     lookupInFlight: false,
     region: 'na',
   },
+  smtpsuspend: {
+    whois: null,
+    lookupInFlight: false,
+    region: 'na',
+    screenshots: [],
+    assuranceScreenshots: [],
+  },
 };
 let lastActivePanel = null; // tracks which panel the user last interacted with (for Ctrl/Cmd+Enter)
 let sheetConfig = { sheetId: '' };
@@ -73,20 +78,18 @@ let sheetConfig = { sheetId: '' };
 // ── Init ──────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   initThemeToggle();
-  restoreFormState();
   initKeyboardShortcuts();
   initDomainInputs();
   initEventDelegation();
   initDragDrop();
   initPasteSupport();
-  // attachPersistListeners called exactly once here — do NOT add another
-  // DOMContentListener for it elsewhere in this file.
-  attachPersistListeners();
   updateFormProgress('arf');
   updateFormProgress('bounce');
   renderPreviews('arf', 'screenshots');
   renderPreviews('arf', 'assuranceScreenshots');
   renderPreviews('bounce', 'assuranceScreenshots');
+  updateFormProgress('smtpsuspend');
+  renderPreviews('smtpsuspend', 'screenshots');
   fetch('/api/sheet-config').then(r => r.json()).then(d => {
     if (d.sheetId) sheetConfig.sheetId = d.sheetId;
   }).catch(() => {});
@@ -129,7 +132,7 @@ async function detectRegion(prefix, domain) {
 }
 
 function initDomainInputs() {
-  ['arf', 'bounce', 'ipspike'].forEach(prefix => {
+  ['arf', 'bounce', 'ipspike', 'smtpsuspend'].forEach(prefix => {
     const input = document.getElementById(prefix + '-domain-input');
     if (!input) return;
     input.addEventListener('paste', (e) => {
@@ -159,7 +162,7 @@ function initDomainInputs() {
 }
 
 // Account field → auto-fill domain input + trigger lookup
-['arf', 'bounce', 'ipspike'].forEach(prefix => {
+['arf', 'bounce', 'ipspike', 'smtpsuspend'].forEach(prefix => {
   const accountInput = document.getElementById(prefix + '-account');
   if (!accountInput) return;
 
@@ -342,10 +345,13 @@ function initEventDelegation() {
       case 'generate':
         if (panel === 'arf') generateARF();
         else if (panel === 'bounce') generateBounce();
+        else if (panel === 'smtpsuspend') generateSMTPSuspend();
         break;
       case 'clear':
         if (panel === 'arf') clearARF();
         else if (panel === 'bounce') clearBounce();
+        else if (panel === 'ipspike') clearIPspike();
+        else if (panel === 'smtpsuspend') clearSMTPSuspend();
         break;
       case 'lookup':
         if (panel) lookupDomainImmediate(panel);
@@ -426,6 +432,12 @@ function initDragDrop() {
     bounceAssuranceZone.addEventListener('dragleave', (e) => handleDragLeave(e, 'bounce-assurance-upload-zone'));
     bounceAssuranceZone.addEventListener('drop', (e) => handleDrop(e, 'bounce', 'assuranceScreenshots'));
   }
+  const smtpZone = document.getElementById('smtpsuspend-upload-zone');
+  if (smtpZone) {
+    smtpZone.addEventListener('dragover', (e) => handleDragOver(e, 'smtpsuspend-upload-zone'));
+    smtpZone.addEventListener('dragleave', (e) => handleDragLeave(e, 'smtpsuspend-upload-zone'));
+    smtpZone.addEventListener('drop', (e) => handleDrop(e, 'smtpsuspend', 'screenshots'));
+  }
   const csvZone = document.getElementById('bounce-csv-zone');
   if (csvZone) {
     csvZone.addEventListener('dragover', handleCsvDragOver);
@@ -442,6 +454,7 @@ function initPasteSupport() {
     { id: 'arf-upload-zone',            prefix: 'arf',   key: 'screenshots' },
     { id: 'arf-assurance-upload-zone',  prefix: 'arf',   key: 'assuranceScreenshots' },
     { id: 'bounce-assurance-upload-zone', prefix: 'bounce', key: 'assuranceScreenshots' },
+    { id: 'smtpsuspend-upload-zone', prefix: 'smtpsuspend', key: 'screenshots' },
   ];
   zones.forEach(({ id, prefix, key }) => {
     const zone = document.getElementById(id);
@@ -461,41 +474,9 @@ function initPasteSupport() {
   });
 }
 
-// ── localStorage persistence ──────────────────────────────────────────
-const PERSIST_FIELDS = [
-  'arf-account', 'arf-complaints', 'arf-prev-unblock',
-  'arf-blocked-lt2', 'arf-email-type', 'arf-website', 'arf-dkim', 'arf-domain-input',
-  'bounce-account', 'bounce-prev-unblock', 'bounce-other-blocked', 'bounce-website',
-  'bounce-dkim', 'bounce-domain-input', 'bounce-other-blocked-detail',
-  'ipspike-account', 'ipspike-domain-input', 'ipspike-pwd-changed',
-];
 
-function saveFormState() {
-  const saved = {};
-  PERSIST_FIELDS.forEach(id => { const el = document.getElementById(id); if (el) saved[id] = el.value; });
-  try { localStorage.setItem(LS_KEY, JSON.stringify(saved)); } catch (_) {}
-}
 
-function restoreFormState() {
-  let saved;
-  try { saved = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (_) { return; }
-  if (!saved || !Object.keys(saved).some(k => saved[k])) return;
-  PERSIST_FIELDS.forEach(id => { const el = document.getElementById(id); if (el && saved[id]) el.value = saved[id]; });
-  const otherBlocked = document.getElementById('bounce-other-blocked');
-  if (otherBlocked && otherBlocked.value) toggleOtherBlockedField(otherBlocked.value);
-  showToast('Form state restored from last session.');
-}
 
-function attachPersistListeners() {
-  PERSIST_FIELDS.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) {
-      const panelPrefix = id.startsWith('arf') ? 'arf' : 'bounce';
-      el.addEventListener('change', () => { saveFormState(); updateFormProgress(panelPrefix); });
-      el.addEventListener('input', () => debouncedUpdateFormProgress(panelPrefix));
-    }
-  });
-}
 
 // ── Generate-button state (per-panel only) ────────────────────────────
 // Each panel's generate button is only gated by its own lookup being in
@@ -506,7 +487,7 @@ function setGenerateBtnState(prefix) {
   if (!btn) return;
   const isLocked = state[prefix].lookupInFlight;
   btn.disabled = isLocked;
-  const label = isLocked ? 'Lookup in progress…' : (prefix === 'arf' ? 'Generate ARF Report' : 'Generate Bounce Report');
+  const label = isLocked ? 'Lookup in progress…' : (prefix === 'arf' ? 'Generate ARF Report' : prefix === 'smtpsuspend' ? 'Generate SMTP Suspension Report' : 'Generate Bounce Report');
   if (isLocked) {
     btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 0.8s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> ' + label;
   } else {
@@ -970,7 +951,7 @@ function generateARF() {
 
 // clearARF/clearBounce: confirm before destroying form data
 function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, afterClear }) {
-  const label = prefix === 'arf' ? 'ARF' : 'Bounce';
+  const label = prefix === 'arf' ? 'ARF' : prefix === 'bounce' ? 'Bounce' : prefix === 'ipspike' ? 'IP Spike' : 'SMTP Suspension';
   if (!confirm('Clear all ' + label + ' form data? This cannot be undone.')) return;
 
   fieldIds.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
@@ -1012,7 +993,6 @@ function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, af
   updateStepper(prefix, '0');
   updateFormProgress(prefix);
   if (afterClear) afterClear();
-  saveFormState();
 }
 
 function clearARF() {
@@ -1079,6 +1059,74 @@ function clearBounce() {
   );
 }
 
+function clearIPspike() {
+  clearPanel('ipspike',
+    ['ipspike-account', 'ipspike-domain-input', 'ipspike-pwd-changed'],
+    [],
+    { clearScreenshots: false, afterClear: () => {
+      const results = document.getElementById('ipspike-partner-results');
+      if (results) results.style.display = 'none';
+    }}
+  );
+}
+
+// ── SMTP Suspension Generate / Clear ──────────────────────────────────
+function validateSMTPSuspend() {
+  const fieldIds = ['smtpsuspend-account', 'smtpsuspend-zd-link'];
+  clearFieldErrors(fieldIds);
+  const errors = [];
+  if (!v('smtpsuspend-account')) errors.push({ id: 'smtpsuspend-account', label: 'Account' });
+  if (!v('smtpsuspend-zd-link')) errors.push({ id: 'smtpsuspend-zd-link', label: 'Zendesk Ticket Link' });
+  const assurances = getActiveAssurances('smtpsuspend');
+  if (assurances.length === 0)
+    errors.push({ id: null, label: 'Assurances (select at least one)' });
+  return errors;
+}
+
+function generateSMTPSuspend() {
+  try {
+    const errors = validateSMTPSuspend();
+    if (showValidationErrors('smtpsuspend', errors)) return;
+    document.getElementById('smtpsuspend-validation-banner').classList.remove('visible');
+
+    const assurances = getActiveAssurances('smtpsuspend');
+    const whois = state.smtpsuspend.whois;
+    const hasScreenshots = state.smtpsuspend.screenshots.length > 0;
+
+    const lines = [
+      '#SMTP Suspension',
+      'Domain Creation Date : ' + (whois ? whois.creation_date : '-'),
+      'Domain Age : ' + (whois ? whois.domain_age : '-'),
+      'DKIM: ' + (() => { const t = (document.getElementById('smtpsuspend-result-dkim')?.textContent?.trim() || '-'); return t.startsWith('Set') ? 'Set' : t; })(),
+      'Assurances : ' + (assurances.length > 0 ? assurances.join(', ') : '-'),
+    ];
+
+    const copyLines = [...lines];
+    if (hasScreenshots) {
+      copyLines.push('');
+      copyLines.push('── Screenshots ──');
+      state.smtpsuspend.screenshots.forEach((s, i) => copyLines.push((i + 1) + '. ' + s.name));
+    }
+    const fullCopyText = copyLines.join('\n\n');
+
+    renderReportOutput('smtpsuspend', lines, fullCopyText, [
+      { screenshots: state.smtpsuspend.screenshots, label: '── Screenshots ──' },
+    ]);
+    showToast('SMTP Suspension report generated!');
+  } catch (err) {
+    showToast('Failed to generate report — please try again.');
+    console.error('generateSMTPSuspend error:', err);
+  }
+}
+
+function clearSMTPSuspend() {
+  clearPanel('smtpsuspend',
+    ['smtpsuspend-account', 'smtpsuspend-zd-link', 'smtpsuspend-domain-input'],
+    [],
+    { clearScreenshots: true }
+  );
+}
+
 // ── JIRA integration ──────────────────────────────────────────────
 function createTaeJira(prefix) {
   const outputSection = document.getElementById(prefix + '-output-section');
@@ -1091,9 +1139,9 @@ function createTaeJira(prefix) {
 
   const account = document.getElementById(prefix + '-account')?.value.trim() || '';
   const zdLink = document.getElementById(prefix + '-zd-link')?.value.trim() || '';
-  const typeLabel = prefix === 'arf' ? 'ARF' : 'Bounce';
+  const typeLabel = prefix === 'arf' ? 'ARF' : prefix === 'smtpsuspend' ? 'SMTP Compromised' : 'Bounce';
   const summary = encodeURIComponent(typeLabel + ' unsuspension request: ' + account);
-  const label = prefix === 'arf' ? 'ARF_unsuspension' : 'Bounce_unsuspension';
+  const label = prefix === 'arf' ? 'ARF_unsuspension' : prefix === 'smtpsuspend' ? 'SMTP_unsuspension' : 'Bounce_unsuspension';
   const jiraUrl = 'https://jira.directi.com/secure/CreateIssueDetails!init.jspa?pid=12900&issuetype=10902&priority=10000&labels=' + label + '&summary=' + summary;
 
   // Send report data to browser extension (if installed)
@@ -1190,7 +1238,7 @@ function logToSheet(prefix) {
   const outputArea = outputSection.querySelector('.output-area');
   const reportText = (outputArea?.dataset.copyText) ||
                      document.getElementById(prefix + '-output-text')?.textContent || '';
-  const type = prefix === 'arf' ? 'ARF' : 'BOUNCE';
+  const type = prefix === 'arf' ? 'ARF' : prefix === 'smtpsuspend' ? 'SMTP' : 'BOUNCE';
   const date = new Date().toLocaleDateString('en-US');
 
   window.postMessage({
