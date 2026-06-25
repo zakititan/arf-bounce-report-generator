@@ -69,6 +69,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **REST API creation** — creates JIRA tickets directly via `POST /rest/api/2/issue` using the browser's authenticated session cookies; no API key required
 - **Image attachments** — screenshot images are decoded from base64 and uploaded as individual attachments via JIRA's attachment API (`POST /rest/api/2/issue/{key}/attachments`)
 - **Prefilled fields** — Project (TAE, `pid=12900`), Issue Type (Task, `id=10902`), Priority (P3, `id=10000`), Summary, Description, Labels, and Zendesk link (`customfield_12211`) are all set automatically
+- **Clean JIRA/sheet output** — report type headers (e.g. #ARF, #Bounce) and screenshot filenames are excluded from the JIRA description and Google Sheet log; visual images still render inline in the output
 - **Dynamic labels** — ARF reports get the `ARF_unsuspension` label; Bounce reports get `Bounce_unsuspension`; SMTP Suspension reports get `SMTP_unsuspension`
 - **Dynamic titles** — ARF: "ARF unsuspension request"; Bounce: "Bounce unsuspension request"; SMTP: "SMTP Compromised unsuspension request"
 - **Zendesk ticket link (required)** — a "Zendesk Ticket Link" input field appears below Account in both panels; the URL is passed as `customfield_12211` in the JIRA payload; report generation is blocked if empty
@@ -131,7 +132,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Account & Zendesk link** — required fields for the account and Zendesk ticket link
 - **Domain auto-fill** — typing or pasting in the Account field auto-populates the Domain Lookup input and triggers lookup (same as ARF/Bounce)
 - **Domain Lookup** — same WHOIS/Website/DKIM widget as ARF and Bounce panels; website and DKIM are informational only (not validated)
-- **Assurances** (required) — single-group assurance buttons: Password changed, Virus scan shared, Fixed SMTP issues
+- **Assurances** (required) — single-group assurance buttons: Password changed, Virus scan shared, Fixed SMTP issues, + Other (custom text)
 - **Screenshot upload** — drag-and-drop or file picker for virus scan evidence images; renders inline in the output
 - **Generate report** — produces a structured text report with domain age, DKIM status ("Set" or "Not Set" only), and selected assurances
 - **JIRA** — creates TAE JIRA with title "SMTP Compromised unsuspension request" and `SMTP_unsuspension` label
