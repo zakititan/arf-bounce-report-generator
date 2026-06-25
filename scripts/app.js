@@ -1242,6 +1242,14 @@ function logToSheet(prefix) {
   const type = prefix === 'arf' ? 'ARF' : prefix === 'smtpsuspend' ? 'SMTP' : 'BOUNCE';
   const date = new Date().toLocaleDateString('en-US');
 
+  const cleanedReason = reportText
+    .split('\n')
+    .filter(l => !l.startsWith('#ARF') && !l.startsWith('#Bounce') && !l.startsWith('#SMTP Suspension'))
+    .filter(l => !/^── (Screenshots|Assurance Screenshots) ──$/.test(l.trim()))
+    .filter(l => !/^\d+\.\s+\S+\.(png|jpg|jpeg|gif|webp)$/i.test(l.trim()))
+    .join('\n')
+    .trim();
+
   const listener = (e) => {
     if (e.data && e.data.type === 'REPORT_GENERATOR_LOG_SHEET_RESULT') {
       window.removeEventListener('message', listener);
@@ -1262,7 +1270,7 @@ function logToSheet(prefix) {
     zdLink,
     domainEmail: account,
     reportType: type,
-    reason: reportText,
+    reason: cleanedReason,
     sheetId: sheetConfig.sheetId,
     appsScriptUrl: sheetConfig.appsScriptUrl,
   }, '*');
