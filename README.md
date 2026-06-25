@@ -89,12 +89,12 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 
 ### Log to Sheet (Google Sheets Integration)
 - **Log to Sheet button** — a "Log to Sheet" button appears in the bottom action row of ARF, Bounce, and SMTP Suspension output sections, next to the JIRA buttons; disabled until a report is generated
-- **Google Apps Script** — writes report data to a Google Sheet via a Google Apps Script web app (`fetch()` POST); no DOM automation or `docs.google.com` host permission required
-- **Binary search for row detection** — the Apps Script uses the sheet's API to find the correct insertion point for today's date
+- **Google Apps Script** — writes report data to a Google Sheet via a Google Apps Script web app (`fetch()` POST); the Apps Script has the spreadsheet ID embedded and appends rows directly; no DOM automation required
+- **Content-Type: application/json** — the extension sends JSON with `Content-Type` header; uses `mode: 'no-cors'` to avoid CORS restrictions on Google Apps Script origins
+- **Clean output** — report type headers (e.g. `#ARF`, `#Bounce`, `#SMTP Suspension`) and screenshot filenames are stripped from the reason field before logging to the sheet
 - **Column layout** — writes to columns B–G (column A is left empty): B = Date, C = ZD Ticket ID, D = JIRA Link, E = Domain/Email, F = Unsuspension Type, G = Reason
 - **JIRA link from unsuspend flow** — the JIRA link in the sheet is the one created during "Create TAE JIRA and Unsuspend"; stored in `chrome.storage.local` as `lastJiraUrl` for Log to Sheet to read
-- **Sheet tab management** — the Apps Script handles sheet access; no background tab creation or content script injection required
-- **Sheet ID** — fetched from `/api/sheet-config` (reads `GOOGLE_SHEET_ID` and `APPS_SCRIPT_URL` env vars)
+- **Sheet config** — the Apps Script URL is fetched from `/api/sheet-config` (reads `APPS_SCRIPT_URL` env var)
 
 ### Unsuspend (Abuse Desk Integration)
 - **"Create TAE JIRA and Unsuspend" button** — creates JIRA → transitions to Done → adds "Unsuspended" comment → opens Abuse Desk
@@ -183,7 +183,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **XSS prevention** — API response values (verdict, DKIM selectors) and validation error labels are set via `textContent` instead of `innerHTML` to prevent HTML injection
 - **Login redirect removed** — successful login always redirects to `/`; the `redirect` query parameter is no longer accepted, preventing open redirect and `javascript:` injection
 - **API error resilience** — all fetch calls are wrapped in a centralized `apiFetch()` helper that safely handles network errors and non-JSON responses instead of crashing
-- **Extension host permissions** — Chrome extension declares `host_permissions` for `https://jira.directi.com/*` and `https://admin.titan.email/*` to enable authenticated REST API calls and Partner Panel automation using browser session cookies
+- **Extension host permissions** — Chrome extension declares `host_permissions` for `https://jira.directi.com/*` and `https://admin.titan.email/*` to enable authenticated REST API calls and Partner Panel automation using browser session cookies; Google Apps Script logging uses `mode: 'no-cors'` so no `docs.google.com` permission is needed
 
 ### Code Quality & Performance
 - **No theme flash** — inline `<script>` in `<head>` sets dark theme before first paint, preventing flash on dark-mode systems
@@ -228,7 +228,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 │   ├── dkim-check.js               # DNS DKIM selector check (cached 15 min, early termination)
 │   ├── health.js                   # Health-check endpoint (probes WhoisJSON + Google DNS)
 │   ├── login.js                    # Login handler — constant-time password check, rate limited, sets signed auth cookie
-│   └── sheet-config.js             # Returns Google Sheet ID from GOOGLE_SHEET_ID env var for Log to Sheet feature
+│   └── sheet-config.js             # Returns Google Sheet ID and Apps Script URL from env vars for Log to Sheet feature
 ├── scripts/
 │   ├── app.js                      # Core app logic (ARF, Bounce, SMTP Suspension generate; IP Spike unsuspend; domain lookup; CSV; unified state; event delegation)
 │   ├── pure.js                     # Pure functions (escapeHtml, parseCsvRow, sanitiseDomainInput, sanitiseAccountInput) — no DOM dependencies
@@ -237,7 +237,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ├── styles/
 │   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, responsive)
 ├── extension/                      # Chrome extension (Manifest V3) for JIRA integration, Abuse Desk automation, and Google Sheets logging
-│   ├── manifest.json               # Extension config: v4.0, permissions, content scripts for webapp, JIRA, Abuse Desk, Google Sheets, and Partner Panel
+│   ├── manifest.json               # Extension config: v4.2, permissions, content scripts for webapp, JIRA, Abuse Desk, and Partner Panel
 │   ├── background.js               # Service worker: create-jira, create-jira-and-done (JIRA + markDone + comment), log-to-sheet, partner-panel-lookup, store/get report
 │   ├── content-webapp.js           # Content script on Report Generator: handles JIRA creation, Unsuspend (create + markDone + AD), partner panel lookup, and sheet logging
 │   ├── content-jira.js             # Content script on JIRA: fallback paste strategy (text first, images one by one)
@@ -273,7 +273,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 | `/api/dkim-check?domain=` | GET | Returns DKIM `status` and `selectors_found` array |
 | `/api/login` | POST | Validates password and sets HMAC-signed auth cookie |
 | `/api/health` | GET | Health-check — probes WhoisJSON and Google DNS, returns `{ status: "ok"|"degraded" }` |
-| `/api/sheet-config` | GET | Returns `{ sheetId }` from `GOOGLE_SHEET_ID` env var for Log to Sheet feature |
+| `/api/sheet-config` | GET | Returns `{ sheetId, appsScriptUrl }` from `GOOGLE_SHEET_ID` and `APPS_SCRIPT_URL` env vars |
 
 All API endpoints enforce:
 - **CORS** — `Origin` must match `APP_ORIGIN` env var (read at request time); `Vary: Origin` is set
@@ -291,7 +291,7 @@ Set these in the **Vercel Dashboard → Settings → Environment Variables**:
 | `AUTH_SECRET` | ✅ | Random secret used to HMAC-sign the auth session cookie |
 | `WHOISJSON_API_KEY` | ⭐ | API key for [whoisjson.com](https://whoisjson.com) WHOIS lookups (optional — used as fallback when RDAP fails) |
 | `APP_ORIGIN` | ✅ | Your deployment URL (e.g. `https://your-app.vercel.app`) — used for CORS |
-| `GOOGLE_SHEET_ID` | ⭐ | Google Sheet ID for Log to Sheet feature (optional — defaults to built-in sheet if not set) |
+| `APPS_SCRIPT_URL` | ⭐ | Google Apps Script web app URL for Log to Sheet feature (optional — the Apps Script has the spreadsheet ID embedded) |
 
 > **Generating `AUTH_SECRET`:** Run `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` or use [generate-secret.vercel.app](https://generate-secret.vercel.app/32).
 
@@ -331,6 +331,7 @@ APP_PASSWORD=yourpassword
 AUTH_SECRET=your-random-hex-secret
 APP_ORIGIN=http://localhost:3000
 WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fallback
+APPS_SCRIPT_URL=https://script.google.com/macros/s/.../exec  # optional — for Log to Sheet
 ```
 
 > **Note:** Domain lookup, website check, and DKIM check will not work if you open `index.html` directly in a browser — they require the serverless API functions to be running via `vercel dev`.
