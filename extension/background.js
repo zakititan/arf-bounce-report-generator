@@ -178,8 +178,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 async function handleCreateJira(data, sendResponse) {
   try {
     const { text, html, panel, account, zdLink } = data;
-    const typeLabel = panel === 'arf' ? 'ARF' : 'Bounce';
-    const label = panel === 'arf' ? 'ARF_unsuspension' : 'Bounce_unsuspension';
+    const typeLabel = panel === 'arf' ? 'ARF' : panel === 'smtpsuspend' ? 'SMTP Compromised' : 'Bounce';
+    const label = panel === 'arf' ? 'ARF_unsuspension' : panel === 'smtpsuspend' ? 'SMTP_unsuspension' : 'Bounce_unsuspension';
     const summary = `${typeLabel} unsuspension request: ${account}`;
 
     const images = extractImages(html);
@@ -252,8 +252,8 @@ async function handleCreateJira(data, sendResponse) {
 async function handleCreateJiraAndDone(data, sendResponse) {
   try {
     const { text, html, panel, account, zdLink } = data;
-    const typeLabel = panel === 'arf' ? 'ARF' : 'Bounce';
-    const label = panel === 'arf' ? 'ARF_unsuspension' : 'Bounce_unsuspension';
+    const typeLabel = panel === 'arf' ? 'ARF' : panel === 'smtpsuspend' ? 'SMTP Compromised' : 'Bounce';
+    const label = panel === 'arf' ? 'ARF_unsuspension' : panel === 'smtpsuspend' ? 'SMTP_unsuspension' : 'Bounce_unsuspension';
     const summary = `${typeLabel} unsuspension request: ${account}`;
 
     const images = extractImages(html);
