@@ -30,6 +30,7 @@ async function openSheetAndLog(rowData) {
     console.log('[Report→Sheet] Posting to Apps Script', url);
     var response = await fetch(url, {
       method: 'POST',
+      mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         date: rowData.date || '',
@@ -40,8 +41,8 @@ async function openSheetAndLog(rowData) {
         reason: rowData.reason || '',
       })
     });
-    console.log('[Report→Sheet] Response:', response.status, response.ok);
-    return response.ok;
+    console.log('[Report→Sheet] Sent (opaque response)');
+    return true;
   } catch (e) {
     console.warn('[Report→Sheet] Exception:', e.message);
     return false;
