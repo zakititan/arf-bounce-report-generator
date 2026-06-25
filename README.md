@@ -69,6 +69,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **REST API creation** — creates JIRA tickets directly via `POST /rest/api/2/issue` using the browser's authenticated session cookies; no API key required
 - **Image attachments** — screenshot images are decoded from base64 and uploaded as individual attachments via JIRA's attachment API (`POST /rest/api/2/issue/{key}/attachments`)
 - **Prefilled fields** — Project (TAE, `pid=12900`), Issue Type (Task, `id=10902`), Priority (P3, `id=10000`), Summary, Description, Labels, and Zendesk link (`customfield_12211`) are all set automatically
+- **Clean JIRA/sheet output** — report type headers (e.g. #ARF, #Bounce) and screenshot filenames are excluded from the JIRA description and Google Sheet log; visual images still render inline in the output
 - **Dynamic labels** — ARF reports get the `ARF_unsuspension` label; Bounce reports get `Bounce_unsuspension`; SMTP Suspension reports get `SMTP_unsuspension`
 - **Dynamic titles** — ARF: "ARF unsuspension request"; Bounce: "Bounce unsuspension request"; SMTP: "SMTP Compromised unsuspension request"
 - **Zendesk ticket link (required)** — a "Zendesk Ticket Link" input field appears below Account in both panels; the URL is passed as `customfield_12211` in the JIRA payload; report generation is blocked if empty
@@ -88,15 +89,12 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 
 ### Log to Sheet (Google Sheets Integration)
 - **Log to Sheet button** — a "Log to Sheet" button appears in the bottom action row of ARF, Bounce, and SMTP Suspension output sections, next to the JIRA buttons; disabled until a report is generated
-- **DOM automation** — writes report data to a Google Sheet via the Chrome extension's content script (`content-sheet.js`) running on `docs.google.com/spreadsheets/*`
-- **Binary search for row detection** — uses `Ctrl+End` to find the sheet's last used row, then binary searches column B (Date) for today's date to find the correct insertion point; handles frozen rows (rows 1–2 are headers) and 8000+ row sheets efficiently (~1.5 seconds)
+- **Google Apps Script** — writes report data to a Google Sheet via a Google Apps Script web app (`fetch()` POST); the Apps Script has the spreadsheet ID embedded and appends rows directly; no DOM automation required
+- **Content-Type: application/json** — the extension sends JSON with `Content-Type` header; uses `mode: 'no-cors'` to avoid CORS restrictions on Google Apps Script origins
+- **Clean output** — report type headers (e.g. `#ARF`, `#Bounce`, `#SMTP Suspension`) and screenshot filenames are stripped from the reason field before logging to the sheet
 - **Column layout** — writes to columns B–G (column A is left empty): B = Date, C = ZD Ticket ID, D = JIRA Link, E = Domain/Email, F = Unsuspension Type, G = Reason
 - **JIRA link from unsuspend flow** — the JIRA link in the sheet is the one created during "Create TAE JIRA and Unsuspend"; stored in `chrome.storage.local` as `lastJiraUrl` for Log to Sheet to read
-- **Tab-based data commitment** — after writing the last value (Reason), Tabs to column H to ensure the cell value is saved
-- **Sheet tab management** — background script finds an existing sheet tab or creates a new one; reloads the tab to ensure the content script is injected before sending messages
-- **Retry mechanism** — retries up to 3 times with 3-second delays if the content script doesn't respond
-- **Extension permissions** — requires `tabs` permission for `chrome.tabs.query`/`chrome.tabs.create`; `host_permissions` includes `https://docs.google.com/*`; content script runs at `document_idle` on Google Sheets
-- **Sheet ID** — fetched from `/api/sheet-config` (reads `GOOGLE_SHEET_ID` env var); falls back to default sheet if not configured
+- **Sheet config** — the Apps Script URL is fetched from `/api/sheet-config` (reads `APPS_SCRIPT_URL` env var)
 
 ### Unsuspend (Abuse Desk Integration)
 - **"Create TAE JIRA and Unsuspend" button** — creates JIRA → transitions to Done → adds "Unsuspended" comment → opens Abuse Desk
@@ -131,7 +129,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Account & Zendesk link** — required fields for the account and Zendesk ticket link
 - **Domain auto-fill** — typing or pasting in the Account field auto-populates the Domain Lookup input and triggers lookup (same as ARF/Bounce)
 - **Domain Lookup** — same WHOIS/Website/DKIM widget as ARF and Bounce panels; website and DKIM are informational only (not validated)
-- **Assurances** (required) — single-group assurance buttons: Password changed, Virus scan shared, Fixed SMTP issues
+- **Assurances** (required) — single-group assurance buttons: Password changed, Virus scan shared, Fixed SMTP issues, + Other (custom text)
 - **Screenshot upload** — drag-and-drop or file picker for virus scan evidence images; renders inline in the output
 - **Generate report** — produces a structured text report with domain age, DKIM status ("Set" or "Not Set" only), and selected assurances
 - **JIRA** — creates TAE JIRA with title "SMTP Compromised unsuspension request" and `SMTP_unsuspension` label
@@ -185,7 +183,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **XSS prevention** — API response values (verdict, DKIM selectors) and validation error labels are set via `textContent` instead of `innerHTML` to prevent HTML injection
 - **Login redirect removed** — successful login always redirects to `/`; the `redirect` query parameter is no longer accepted, preventing open redirect and `javascript:` injection
 - **API error resilience** — all fetch calls are wrapped in a centralized `apiFetch()` helper that safely handles network errors and non-JSON responses instead of crashing
-- **Extension host permissions** — Chrome extension declares `host_permissions` for `https://jira.directi.com/*` and `https://docs.google.com/*` to enable authenticated REST API calls using browser session cookies
+- **Extension host permissions** — Chrome extension declares `host_permissions` for `https://jira.directi.com/*` and `https://admin.titan.email/*` to enable authenticated REST API calls and Partner Panel automation using browser session cookies; Google Apps Script logging uses `mode: 'no-cors'` so no `docs.google.com` permission is needed
 
 ### Code Quality & Performance
 - **No theme flash** — inline `<script>` in `<head>` sets dark theme before first paint, preventing flash on dark-mode systems
@@ -230,7 +228,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 │   ├── dkim-check.js               # DNS DKIM selector check (cached 15 min, early termination)
 │   ├── health.js                   # Health-check endpoint (probes WhoisJSON + Google DNS)
 │   ├── login.js                    # Login handler — constant-time password check, rate limited, sets signed auth cookie
-│   └── sheet-config.js             # Returns Google Sheet ID from GOOGLE_SHEET_ID env var for Log to Sheet feature
+│   └── sheet-config.js             # Returns Google Sheet ID and Apps Script URL from env vars for Log to Sheet feature
 ├── scripts/
 │   ├── app.js                      # Core app logic (ARF, Bounce, SMTP Suspension generate; IP Spike unsuspend; domain lookup; CSV; unified state; event delegation)
 │   ├── pure.js                     # Pure functions (escapeHtml, parseCsvRow, sanitiseDomainInput, sanitiseAccountInput) — no DOM dependencies
@@ -239,12 +237,11 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ├── styles/
 │   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, responsive)
 ├── extension/                      # Chrome extension (Manifest V3) for JIRA integration, Abuse Desk automation, and Google Sheets logging
-│   ├── manifest.json               # Extension config: v4.0, permissions, content scripts for webapp, JIRA, Abuse Desk, Google Sheets, and Partner Panel
+│   ├── manifest.json               # Extension config: v4.2, permissions, content scripts for webapp, JIRA, Abuse Desk, and Partner Panel
 │   ├── background.js               # Service worker: create-jira, create-jira-and-done (JIRA + markDone + comment), log-to-sheet, partner-panel-lookup, store/get report
 │   ├── content-webapp.js           # Content script on Report Generator: handles JIRA creation, Unsuspend (create + markDone + AD), partner panel lookup, and sheet logging
 │   ├── content-jira.js             # Content script on JIRA: fallback paste strategy (text first, images one by one)
 │   ├── content-abusedesk.js        # Content script on Abuse Desk: auto-clicks Unblock, pastes reason, clicks Save
-│   ├── content-sheet.js            # Content script on Google Sheets: binary search row detection, cell navigation, data entry via execCommand
 │   ├── content-partner-panel.js    # Content script on admin.titan.email: automates account lookup, order view, account history, and password change detection
 │   ├── releases/extension.zip      # Packaged extension for easy distribution
 │   └── icons/                      # Extension icons (16/48/128px)
@@ -276,7 +273,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 | `/api/dkim-check?domain=` | GET | Returns DKIM `status` and `selectors_found` array |
 | `/api/login` | POST | Validates password and sets HMAC-signed auth cookie |
 | `/api/health` | GET | Health-check — probes WhoisJSON and Google DNS, returns `{ status: "ok"|"degraded" }` |
-| `/api/sheet-config` | GET | Returns `{ sheetId }` from `GOOGLE_SHEET_ID` env var for Log to Sheet feature |
+| `/api/sheet-config` | GET | Returns `{ sheetId, appsScriptUrl }` from `GOOGLE_SHEET_ID` and `APPS_SCRIPT_URL` env vars |
 
 All API endpoints enforce:
 - **CORS** — `Origin` must match `APP_ORIGIN` env var (read at request time); `Vary: Origin` is set
@@ -294,7 +291,7 @@ Set these in the **Vercel Dashboard → Settings → Environment Variables**:
 | `AUTH_SECRET` | ✅ | Random secret used to HMAC-sign the auth session cookie |
 | `WHOISJSON_API_KEY` | ⭐ | API key for [whoisjson.com](https://whoisjson.com) WHOIS lookups (optional — used as fallback when RDAP fails) |
 | `APP_ORIGIN` | ✅ | Your deployment URL (e.g. `https://your-app.vercel.app`) — used for CORS |
-| `GOOGLE_SHEET_ID` | ⭐ | Google Sheet ID for Log to Sheet feature (optional — defaults to built-in sheet if not set) |
+| `APPS_SCRIPT_URL` | ⭐ | Google Apps Script web app URL for Log to Sheet feature (optional — the Apps Script has the spreadsheet ID embedded) |
 
 > **Generating `AUTH_SECRET`:** Run `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` or use [generate-secret.vercel.app](https://generate-secret.vercel.app/32).
 
@@ -334,6 +331,7 @@ APP_PASSWORD=yourpassword
 AUTH_SECRET=your-random-hex-secret
 APP_ORIGIN=http://localhost:3000
 WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fallback
+APPS_SCRIPT_URL=https://script.google.com/macros/s/.../exec  # optional — for Log to Sheet
 ```
 
 > **Note:** Domain lookup, website check, and DKIM check will not work if you open `index.html` directly in a browser — they require the serverless API functions to be running via `vercel dev`.
@@ -410,7 +408,7 @@ WHOISJSON_API_KEY=your-api-key  # optional — RDAP is primary; WhoisJSON is fal
 - **Middleware URL matching** uses exact path or subpath prefix to prevent `/api/login-staging` from bypassing auth
 - **`AUTH_SECRET`** and **`APP_PASSWORD`** are never committed to the repo — always set via environment variables
 - **Hostname validation** rejects IPv4/IPv6 addresses, localhost names, `.localhost`/`.local`/`.internal` TLDs (SSRF prevention), consecutive dots, hyphen-leading labels, and email local-parts
-- **Extension host permissions** — declares `host_permissions` for `https://jira.directi.com/*`, `https://docs.google.com/*`, and `https://admin.titan.email/*` to enable authenticated REST API calls and Partner Panel automation using browser session cookies
+- **Extension host permissions** — declares `host_permissions` for `https://jira.directi.com/*` and `https://admin.titan.email/*` to enable authenticated REST API calls and Partner Panel automation using browser session cookies
 
 ---
 

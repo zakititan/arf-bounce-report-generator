@@ -73,7 +73,7 @@ const state = {
   },
 };
 let lastActivePanel = null; // tracks which panel the user last interacted with (for Ctrl/Cmd+Enter)
-let sheetConfig = { sheetId: '' };
+let sheetConfig = { sheetId: '', appsScriptUrl: '' };
 
 // ── Init ──────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -92,6 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderPreviews('smtpsuspend', 'screenshots');
   fetch('/api/sheet-config').then(r => r.json()).then(d => {
     if (d.sheetId) sheetConfig.sheetId = d.sheetId;
+    if (d.appsScriptUrl) sheetConfig.appsScriptUrl = d.appsScriptUrl;
   }).catch(() => {});
 
   window.addEventListener('message', (e) => {
@@ -1213,14 +1214,37 @@ function logToSheet(prefix) {
   const type = prefix === 'arf' ? 'ARF' : prefix === 'smtpsuspend' ? 'SMTP' : 'BOUNCE';
   const date = new Date().toLocaleDateString('en-US');
 
+  const cleanedReason = reportText
+    .split('\n')
+    .filter(l => !l.startsWith('#ARF') && !l.startsWith('#Bounce') && !l.startsWith('#SMTP Suspension'))
+    .filter(l => !/^── (Screenshots|Assurance Screenshots) ──$/.test(l.trim()))
+    .filter(l => !/^\d+\.\s+\S+\.(png|jpg|jpeg|gif|webp)$/i.test(l.trim()))
+    .join('\n')
+    .trim();
+
+  const listener = (e) => {
+    if (e.data && e.data.type === 'REPORT_GENERATOR_LOG_SHEET_RESULT') {
+      window.removeEventListener('message', listener);
+      clearTimeout(timeout);
+      if (e.data.success) {
+        showToast('Logged to Sheet ✓', 'success');
+      } else {
+        showToast('Sheet logging failed — check console', 'error');
+      }
+    }
+  };
+  window.addEventListener('message', listener);
+  const timeout = setTimeout(() => window.removeEventListener('message', listener), 15000);
+
   window.postMessage({
     type: 'REPORT_GENERATOR_LOG_SHEET',
     date,
     zdLink,
     domainEmail: account,
     reportType: type,
-    reason: reportText,
+    reason: cleanedReason,
     sheetId: sheetConfig.sheetId,
+    appsScriptUrl: sheetConfig.appsScriptUrl,
   }, '*');
 
   showToast('Logging to Sheet…');

@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Report Generator → JIRA",
-  "version": "4.1",
+  "version": "4.2",
   "description": "Auto-creates JIRA tickets from Report Generator (ARF, Bounce, SMTP Suspension)",
   "permissions": ["storage", "tabs"],
-  "host_permissions": ["https://jira.directi.com/*", "https://docs.google.com/*", "https://admin.titan.email/*"],
+  "host_permissions": ["https://jira.directi.com/*", "https://admin.titan.email/*"],
   "background": {
     "service_worker": "background.js"
   },
@@ -20,11 +20,6 @@
     {
       "matches": ["https://abusedesk.ops.titan.email/*"],
       "js": ["content-abusedesk.js"]
-    },
-    {
-      "matches": ["https://docs.google.com/spreadsheets/*"],
-      "js": ["content-sheet.js"],
-      "run_at": "document_idle"
     },
     {
       "matches": ["https://admin.titan.email/*"],

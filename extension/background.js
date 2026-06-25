@@ -22,43 +22,27 @@ function waitForTabLoad(tabId, maxMs) {
 
 async function openSheetAndLog(rowData) {
   try {
-    var sheetId = rowData.sheetId || DEFAULT_SHEET_ID;
-    var sheetUrl = 'https://docs.google.com/spreadsheets/d/' + sheetId + '/edit';
-    console.log('[Report→Sheet] openSheetAndLog called', rowData);
-
-    var tab = await new Promise(function(resolve) {
-      chrome.tabs.create({ url: sheetUrl, active: false }, resolve);
-    });
-
-    var loaded = await waitForTabLoad(tab.id, 15000);
-    console.log('[Report→Sheet] Tab loaded:', loaded);
-
-    await sleep(4000);
-
-    console.log('[Report→Sheet] Sending message to tab', tab.id);
-
-    var attempts = 0;
-    var response = null;
-    while (attempts < 3) {
-      attempts++;
-      response = await new Promise(function(resolve) {
-        chrome.tabs.sendMessage(tab.id, { action: 'append-sheet-row', data: rowData }, function(r) {
-          if (chrome.runtime.lastError) {
-            console.warn('[Report→Sheet] sendMessage error (attempt ' + attempts + '):', chrome.runtime.lastError.message);
-            resolve(null);
-          } else {
-            console.log('[Report→Sheet] Response (attempt ' + attempts + '):', r);
-            resolve(r);
-          }
-        });
-      });
-      if (response && response.success) return true;
-      if (response) break;
-      console.log('[Report→Sheet] Retrying in 3s...');
-      await sleep(3000);
+    var url = rowData.appsScriptUrl;
+    if (!url) {
+      console.warn('[Report→Sheet] No appsScriptUrl provided');
+      return false;
     }
-    console.warn('[Report→Sheet] All attempts failed, response:', response);
-    return response && response.success;
+    console.log('[Report→Sheet] Posting to Apps Script', url);
+    var response = await fetch(url, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        date: rowData.date || '',
+        zdTicketId: rowData.zdLink || '',
+        jiraLink: rowData.jiraLink || '',
+        domainEmail: rowData.domainEmail || '',
+        type: rowData.type || '',
+        reason: rowData.reason || '',
+      })
+    });
+    console.log('[Report→Sheet] Sent (opaque response)');
+    return true;
   } catch (e) {
     console.warn('[Report→Sheet] Exception:', e.message);
     return false;
