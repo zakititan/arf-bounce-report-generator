@@ -910,10 +910,8 @@ function generateARF() {
     const assurances = getActiveAssurances('arf');
     const whois = state.arf.whois;
     const hasScreenshots = state.arf.screenshots.length > 0;
-    const hasAssuranceSs = state.arf.assuranceScreenshots.length > 0;
 
     const lines = [
-      '#ARF',
       'No of ARF complaints = ' + (v('arf-complaints') || '-'),
       'No previous unblock request for the domain name : ' + (v('arf-prev-unblock') || '-'),
       'No. of blocked email accounts < 2 : ' + (v('arf-blocked-lt2') || '-'),
@@ -926,18 +924,7 @@ function generateARF() {
       'Assurances : ' + (assurances.length > 0 ? assurances.join(', ') : '-'),
     ];
 
-    const copyLines = [...lines];
-    if (hasScreenshots) {
-      copyLines.push('');
-      copyLines.push('── Screenshots ──');
-      state.arf.screenshots.forEach((s, i) => copyLines.push((i + 1) + '. ' + s.name));
-    }
-    if (hasAssuranceSs) {
-      copyLines.push('');
-      copyLines.push('── Assurance Screenshots ──');
-      state.arf.assuranceScreenshots.forEach((s, i) => copyLines.push((i + 1) + '. ' + s.name));
-    }
-    const fullCopyText = copyLines.join('\n\n');
+    const fullCopyText = lines.join('\n\n');
 
     renderReportOutput('arf', lines, fullCopyText, [
       { screenshots: state.arf.screenshots, label: '── Screenshots ──' },
@@ -1017,9 +1004,7 @@ function generateBounce() {
     const countDisplay = count !== null ? ' (' + count + ')' : '';
     const assurances = getActiveAssurances('bounce');
     const whois = state.bounce.whois;
-    const hasAssuranceSs = state.bounce.assuranceScreenshots.length > 0;
     const lines = [
-      '#Bounce',
       'Previous unblock request for the same account : ' + (v('bounce-prev-unblock') || '-'),
       'Total bounce count at the time of last block < 40 : ' + lt40 + countDisplay,
       'Other blocked email account in the same domain : ' + (otherBlocked || '-'),
@@ -1033,13 +1018,7 @@ function generateBounce() {
       'Assurances : ' + (assurances.length > 0 ? assurances.join(', ') : '-')
     );
 
-    const copyLines = [...lines];
-    if (hasAssuranceSs) {
-      copyLines.push('');
-      copyLines.push('── Assurance Screenshots ──');
-      state.bounce.assuranceScreenshots.forEach((s, i) => copyLines.push((i + 1) + '. ' + s.name));
-    }
-    const fullCopyText = copyLines.join('\n\n');
+    const fullCopyText = lines.join('\n\n');
 
     renderReportOutput('bounce', lines, fullCopyText, [
       { screenshots: state.bounce.assuranceScreenshots, label: '── Assurance Screenshots ──' },
@@ -1095,20 +1074,13 @@ function generateSMTPSuspend() {
     const hasScreenshots = state.smtpsuspend.screenshots.length > 0;
 
     const lines = [
-      '#SMTP Suspension',
       'Domain Creation Date : ' + (whois ? whois.creation_date : '-'),
       'Domain Age : ' + (whois ? whois.domain_age : '-'),
       'DKIM: ' + (() => { const t = (document.getElementById('smtpsuspend-result-dkim')?.textContent?.trim() || '-'); return t.startsWith('Set') ? 'Set' : t; })(),
       'Assurances : ' + (assurances.length > 0 ? assurances.join(', ') : '-'),
     ];
 
-    const copyLines = [...lines];
-    if (hasScreenshots) {
-      copyLines.push('');
-      copyLines.push('── Screenshots ──');
-      state.smtpsuspend.screenshots.forEach((s, i) => copyLines.push((i + 1) + '. ' + s.name));
-    }
-    const fullCopyText = copyLines.join('\n\n');
+    const fullCopyText = lines.join('\n\n');
 
     renderReportOutput('smtpsuspend', lines, fullCopyText, [
       { screenshots: state.smtpsuspend.screenshots, label: '── Screenshots ──' },
