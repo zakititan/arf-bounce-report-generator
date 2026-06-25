@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Report Generator → JIRA",
-  "version": "4.0",
+  "version": "4.2",
   "description": "Auto-creates JIRA tickets from Report Generator (ARF, Bounce, SMTP Suspension)",
   "permissions": ["storage", "tabs"],
   "host_permissions": ["https://jira.directi.com/*", "https://admin.titan.email/*"],
