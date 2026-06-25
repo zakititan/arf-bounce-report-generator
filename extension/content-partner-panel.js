@@ -111,6 +111,7 @@
       for (var j = 0; j < lines.length; j++) {
         var line = lines[j];
         var isAction = line.indexOf('Password reset') !== -1 ||
+                       line.indexOf('Password changed') !== -1 ||
                        line.indexOf('Suspension') !== -1 ||
                        line.indexOf('Suspended') !== -1 ||
                        line.indexOf('Unsuspended') !== -1 ||
@@ -159,7 +160,8 @@
 
     if (suspensionIdx > 0) {
       for (var j = 0; j < suspensionIdx; j++) {
-        if (events[j].action.toLowerCase().indexOf('password reset') !== -1) {
+        var jAction = events[j].action.toLowerCase();
+        if (jAction.indexOf('password reset') !== -1 || jAction.indexOf('password changed') !== -1) {
           passwordResetAfterSuspension = true;
           break;
         }
@@ -167,7 +169,8 @@
     }
 
     for (var k = 0; k < events.length; k++) {
-      if (events[k].action.toLowerCase().indexOf('password reset') !== -1) {
+      var kAction = events[k].action.toLowerCase();
+      if (kAction.indexOf('password reset') !== -1 || kAction.indexOf('password changed') !== -1) {
         lastPasswordResetDate = events[k].date || 'N/A';
         break;
       }
