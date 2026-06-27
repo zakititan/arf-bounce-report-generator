@@ -1,10 +1,6 @@
 {
   "cleanUrls": true,
   "trailingSlash": false,
-  "routes": [
-    { "src": "/api/laravel-check", "dest": "/api/laravel-check.js" },
-    { "src": "/api/xmlrpc-check",  "dest": "/api/xmlrpc-check.js"  }
-  ],
   "headers": [
     {
       "source": "/(.*)",
