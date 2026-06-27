@@ -872,7 +872,8 @@ function getActiveAssurances(prefix) {
 }
 function clearAssurances(prefix) {
   document.querySelectorAll('[id^="' + prefix + '-assurance-btns-"] .assurance-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById(prefix + '-other-field').classList.remove('visible');
+  const otherField = document.getElementById(prefix + '-other-field');
+  if (otherField) otherField.classList.remove('visible');
   const ot = document.getElementById(prefix + '-other-text'); if (ot) ot.value = '';
   if (prefix === 'bounce') {
     const panel = document.getElementById('bounce-contact-form-suboptions');
@@ -1030,7 +1031,8 @@ function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, af
     outputArea.appendChild(pre);
   }
 
-  document.getElementById(prefix + '-validation-banner').classList.remove('visible');
+  const banner = document.getElementById(prefix + '-validation-banner');
+  if (banner) banner.classList.remove('visible');
   clearFieldErrors(clearFieldErrorIds);
   updateStepper(prefix, '0');
   updateFormProgress(prefix);
