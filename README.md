@@ -123,6 +123,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Password changed detection** — automatically determines if a password reset or password change occurred after the most recent suspension by comparing event positions in the Action History (newest-first ordering); matches both "Password reset" and "Password changed" actions
 - **Suspension date & password changed date** — displays the most recent suspension date and last password reset date from the partner panel; shows N/A if not found
 - **Auto-check button** — click to trigger the partner panel automation; results auto-fill the "Password changed after suspension?" dropdown
+- **Password changed after suspension** (IP Spike) — required dropdown field; auto-check verifies via partner panel; manual selection also supported
 - **Unsuspend via AD** — opens Abuse Desk tabs directly (no JIRA created); reason is hardcoded to "Password Changed"
 
 #### SMTP Suspension
@@ -131,7 +132,8 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Domain Lookup** — same WHOIS/Website/DKIM widget as ARF and Bounce panels; website and DKIM are informational only (not validated)
 - **Laravel .env check** — automatically probes `/.env`, `/.env.backup`, `/.env.old`, `/api/.env` for exposed Laravel config files containing SMTP credentials; results shown as coloured badges (⚠ Exposed / ✓ Not Found)
 - **XML-RPC check** — automatically probes `/xmlrpc.php` with an XML-RPC `system.listMethods` call to detect publicly accessible WordPress XML-RPC endpoints; results shown as coloured badges (⚠ Accessible / ✓ Not Found)
-- **Assurances** (required) — single-group assurance buttons: Password changed, Virus scan shared, Fixed SMTP issues, + Other (custom text)
+- **Password changed after suspension** (SMTP Suspension) — required dropdown field; auto-check verifies via partner panel and auto-selects the "Password changed" assurance when confirmed
+- **Assurances** (required) — single-group assurance buttons: Virus scan shared, Fixed SMTP issues, + Other (custom text); "Password changed" is auto-selected based on partner panel check (not a manual button)
 - **Screenshot upload** — drag-and-drop or file picker for virus scan evidence images; renders inline in the output
 - **Generate report** — produces a structured text report with domain age, DKIM status ("Set" or "Not Set" only), Laravel SMTP compromise status, XML-RPC vulnerability status, and selected assurances
 - **JIRA** — creates TAE JIRA with title "SMTP Compromised unsuspension request" and `SMTP_unsuspension` label
@@ -388,12 +390,13 @@ APPS_SCRIPT_URL=https://script.google.com/macros/s/.../exec  # optional — for 
 2. Enter the Zendesk ticket link (required)
 3. Review domain lookup results (website and DKIM are informational, not validated)
 4. Laravel .env and XML-RPC checks run automatically alongside website/DKIM — results shown as coloured badges
-5. Select assurances: Password changed, Virus scan shared, and/or Fixed SMTP issues (at least one required)
-6. Upload virus scan evidence screenshots (optional)
-7. Click **Generate SMTP Suspension Report** → report with domain age, DKIM, Laravel SMTP compromise, XML-RPC vulnerability, and assurances appears
-8. Click **Create TAE JIRA** → JIRA ticket created with title "SMTP Compromised unsuspension request"
-9. Or click **Create TAE JIRA and Unsuspend** → JIRA created + marked Done + Abuse Desk opens
-10. Click **Log to Sheet** to append the report to the tracking Google Sheet
+5. Click **Auto-check** to verify password change via partner panel; "Password changed" assurance auto-selects if confirmed
+6. Select additional assurances: Virus scan shared and/or Fixed SMTP issues (at least one required)
+7. Upload virus scan evidence screenshots (optional)
+8. Click **Generate SMTP Suspension Report** → report with domain age, DKIM, Laravel SMTP compromise, XML-RPC vulnerability, and assurances appears
+9. Click **Create TAE JIRA** → JIRA ticket created with title "SMTP Compromised unsuspension request"
+10. Or click **Create TAE JIRA and Unsuspend** → JIRA created + marked Done + Abuse Desk opens
+11. Click **Log to Sheet** to append the report to the tracking Google Sheet
 
 ---
 
