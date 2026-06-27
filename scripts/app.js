@@ -61,6 +61,8 @@ const state = {
     region: 'na',
   },
   ipspike: {
+    screenshots: [],
+    assuranceScreenshots: [],
     whois: null,
     lookupInFlight: false,
     region: 'na',
