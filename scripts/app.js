@@ -1164,6 +1164,11 @@ function clearSMTPSuspend() {
     { clearScreenshots: true, afterClear: () => {
       const results = document.getElementById('smtpsuspend-partner-results');
       if (results) results.style.display = 'none';
+      const pwdBtn = document.querySelector('[data-value="Password changed"][data-panel="smtpsuspend"]');
+      if (pwdBtn) {
+        pwdBtn.style.display = 'none';
+        if (pwdBtn.classList.contains('active')) toggleAssurance(pwdBtn, 'smtpsuspend');
+      }
     }}
   );
 }
@@ -1361,6 +1366,19 @@ function setPartnerPanelResult(result) {
 
   if (select) {
     select.value = result.passwordChanged ? 'Yes' : 'No';
+  }
+
+  if (prefix === 'smtpsuspend') {
+    const pwdBtn = document.querySelector('[data-value="Password changed"][data-panel="smtpsuspend"]');
+    if (pwdBtn) {
+      if (result.passwordChanged) {
+        pwdBtn.style.display = '';
+        if (!pwdBtn.classList.contains('active')) toggleAssurance(pwdBtn, prefix);
+      } else {
+        pwdBtn.style.display = 'none';
+        if (pwdBtn.classList.contains('active')) toggleAssurance(pwdBtn, prefix);
+      }
+    }
   }
 
   if (resultsPanel) {
