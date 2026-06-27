@@ -129,9 +129,11 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Account & Zendesk link** — required fields for the account and Zendesk ticket link
 - **Domain auto-fill** — typing or pasting in the Account field auto-populates the Domain Lookup input and triggers lookup (same as ARF/Bounce)
 - **Domain Lookup** — same WHOIS/Website/DKIM widget as ARF and Bounce panels; website and DKIM are informational only (not validated)
+- **Laravel .env check** — automatically probes `/.env`, `/.env.backup`, `/.env.old`, `/api/.env` for exposed Laravel config files containing SMTP credentials; results shown as coloured badges (⚠ Exposed / ✓ Not Found)
+- **XML-RPC check** — automatically probes `/xmlrpc.php` with an XML-RPC `system.listMethods` call to detect publicly accessible WordPress XML-RPC endpoints; results shown as coloured badges (⚠ Accessible / ✓ Not Found)
 - **Assurances** (required) — single-group assurance buttons: Password changed, Virus scan shared, Fixed SMTP issues, + Other (custom text)
 - **Screenshot upload** — drag-and-drop or file picker for virus scan evidence images; renders inline in the output
-- **Generate report** — produces a structured text report with domain age, DKIM status ("Set" or "Not Set" only), and selected assurances
+- **Generate report** — produces a structured text report with domain age, DKIM status ("Set" or "Not Set" only), Laravel SMTP compromise status, XML-RPC vulnerability status, and selected assurances
 - **JIRA** — creates TAE JIRA with title "SMTP Compromised unsuspension request" and `SMTP_unsuspension` label
 - **Unsuspend** — creates JIRA → transitions to Done → opens Abuse Desk (uses ZD link as reason)
 - **Log to Sheet** — logs the report to the tracking Google Sheet (type: SMTP)
@@ -226,13 +228,15 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 │   ├── whois.js                    # WHOIS lookup serverless function (RDAP-first with WhoisJSON fallback, cached 15 min)
 │   ├── website-check.js            # Website reachability & classification (SPA detection, parked/placeholder detection, redirect analysis; cached 15 min)
 │   ├── dkim-check.js               # DNS DKIM selector check (cached 15 min, early termination)
+│   ├── laravel-check.js            # Laravel .env exposure check — probes for exposed SMTP credentials (cached 15 min)
+│   ├── xmlrpc-check.js             # XML-RPC SMTP vulnerability check — probes /xmlrpc.php for accessible endpoints (cached 15 min)
 │   ├── health.js                   # Health-check endpoint (probes WhoisJSON + Google DNS)
 │   ├── login.js                    # Login handler — constant-time password check, rate limited, sets signed auth cookie
 │   └── sheet-config.js             # Returns Google Sheet ID and Apps Script URL from env vars for Log to Sheet feature
 ├── scripts/
 │   ├── app.js                      # Core app logic (ARF, Bounce, SMTP Suspension generate; IP Spike unsuspend; domain lookup; CSV; unified state; event delegation)
 │   ├── pure.js                     # Pure functions (escapeHtml, parseCsvRow, sanitiseDomainInput, sanitiseAccountInput) — no DOM dependencies
-│   ├── api.js                      # Frontend API helpers (fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx — throws on non-2xx)
+│   ├── api.js                      # Frontend API helpers (fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx, fetchLaravelCheck, fetchXmlrpcCheck — throws on non-2xx)
 │   └── ui.js                       # UI helpers (showToast with types, theme toggle with transition, stepper, form progress, age colors, validation display, drag-and-drop)
 ├── styles/
 │   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, responsive)
@@ -271,6 +275,8 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 | `/api/whois?domain=` | GET | Returns domain creation date, age, and `source` (`rdap` or `whoisjson`) |
 | `/api/website-check?domain=` | GET | Returns `verdict`: Valid Website / No website + `reason` |
 | `/api/dkim-check?domain=` | GET | Returns DKIM `status` and `selectors_found` array |
+| `/api/laravel-check?domain=` | GET | Returns `vulnerable` (boolean) and `reason` for Laravel .env exposure |
+| `/api/xmlrpc-check?domain=` | GET | Returns `vulnerable` (boolean) and `reason` for XML-RPC accessibility |
 | `/api/login` | POST | Validates password and sets HMAC-signed auth cookie |
 | `/api/health` | GET | Health-check — probes WhoisJSON and Google DNS, returns `{ status: "ok"|"degraded" }` |
 | `/api/sheet-config` | GET | Returns `{ sheetId, appsScriptUrl }` from `GOOGLE_SHEET_ID` and `APPS_SCRIPT_URL` env vars |
@@ -381,12 +387,13 @@ APPS_SCRIPT_URL=https://script.google.com/macros/s/.../exec  # optional — for 
 1. Enter the account email/domain in the Account field — domain auto-fills and lookup runs automatically
 2. Enter the Zendesk ticket link (required)
 3. Review domain lookup results (website and DKIM are informational, not validated)
-4. Select assurances: Password changed, Virus scan shared, and/or Fixed SMTP issues (at least one required)
-5. Upload virus scan evidence screenshots (optional)
-6. Click **Generate SMTP Suspension Report** → report with domain age, DKIM ("Set"/"Not Set"), and assurances appears
-7. Click **Create TAE JIRA** → JIRA ticket created with title "SMTP Compromised unsuspension request"
-8. Or click **Create TAE JIRA and Unsuspend** → JIRA created + marked Done + Abuse Desk opens
-9. Click **Log to Sheet** to append the report to the tracking Google Sheet
+4. Laravel .env and XML-RPC checks run automatically alongside website/DKIM — results shown as coloured badges
+5. Select assurances: Password changed, Virus scan shared, and/or Fixed SMTP issues (at least one required)
+6. Upload virus scan evidence screenshots (optional)
+7. Click **Generate SMTP Suspension Report** → report with domain age, DKIM, Laravel SMTP compromise, XML-RPC vulnerability, and assurances appears
+8. Click **Create TAE JIRA** → JIRA ticket created with title "SMTP Compromised unsuspension request"
+9. Or click **Create TAE JIRA and Unsuspend** → JIRA created + marked Done + Abuse Desk opens
+10. Click **Log to Sheet** to append the report to the tracking Google Sheet
 
 ---
 
