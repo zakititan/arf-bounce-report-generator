@@ -121,7 +121,7 @@ function initKeyboardShortcuts() {
 
 function resetWhoisState(prefix) {
   state[prefix].whois = null;
-  document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error');
+  document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error', 'open');
 }
 
 async function detectRegion(prefix, domain) {
@@ -1007,6 +1007,7 @@ function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, af
   }
   clearAssurances(prefix);
   state[prefix].whois = null;
+  state[prefix].lookupInFlight = false;
   resetWhoisState(prefix);
   ['website-hint', 'dkim-hint'].forEach(suffix => {
     const el = document.getElementById(prefix + '-' + suffix);
@@ -1014,18 +1015,20 @@ function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, af
   });
 
   const outputSection = document.getElementById(prefix + '-output-section');
-  outputSection.style.display = 'none';
-  const logSheetBtn = outputSection.querySelector('.btn-log-sheet');
-  if (logSheetBtn) logSheetBtn.disabled = true;
-  const outputArea = outputSection.querySelector('.output-area');
-  const copyBtn = outputArea.querySelector('.copy-btn-wrap');
-  outputArea.innerHTML = '';
-  delete outputArea.dataset.copyText;
-  if (copyBtn) outputArea.appendChild(copyBtn);
-  const pre = document.createElement('pre');
-  pre.id = prefix + '-output-text';
-  pre.className = 'output-text';
-  outputArea.appendChild(pre);
+  if (outputSection) {
+    outputSection.style.display = 'none';
+    const logSheetBtn = outputSection.querySelector('.btn-log-sheet');
+    if (logSheetBtn) logSheetBtn.disabled = true;
+    const outputArea = outputSection.querySelector('.output-area');
+    const copyBtn = outputArea.querySelector('.copy-btn-wrap');
+    outputArea.innerHTML = '';
+    delete outputArea.dataset.copyText;
+    if (copyBtn) outputArea.appendChild(copyBtn);
+    const pre = document.createElement('pre');
+    pre.id = prefix + '-output-text';
+    pre.className = 'output-text';
+    outputArea.appendChild(pre);
+  }
 
   document.getElementById(prefix + '-validation-banner').classList.remove('visible');
   clearFieldErrors(clearFieldErrorIds);
