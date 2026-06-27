@@ -1,4 +1,4 @@
-import { sanitiseDomain, withMiddleware, createCache } from './_utils.js';
+import { sanitiseDomain, createCache } from './_utils.js';
 
 const cache = createCache(15 * 60 * 1000);
 const TIMEOUT_MS = 8000;
@@ -9,7 +9,9 @@ const XMLRPC_PROBE_BODY = `<?xml version="1.0"?>
   <params></params>
 </methodCall>`;
 
-export default withMiddleware(async function handler(req, res) {
+export default async function handler(req, res) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+
   const domain = sanitiseDomain(req.query.domain);
   if (!domain) return res.status(400).json({ error: 'Invalid or missing domain parameter' });
 
@@ -62,4 +64,4 @@ export default withMiddleware(async function handler(req, res) {
   const result = { vulnerable: false, reason: 'xmlrpc.php not found or not responding' };
   cache.set(domain, result);
   return res.status(200).json(result);
-});
+}
