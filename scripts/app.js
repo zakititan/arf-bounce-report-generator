@@ -1159,9 +1159,12 @@ function generateSMTPSuspend() {
 
 function clearSMTPSuspend() {
   clearPanel('smtpsuspend',
-    ['smtpsuspend-account', 'smtpsuspend-zd-link', 'smtpsuspend-domain-input'],
+    ['smtpsuspend-account', 'smtpsuspend-zd-link', 'smtpsuspend-domain-input', 'smtpsuspend-pwd-changed'],
     [],
-    { clearScreenshots: true }
+    { clearScreenshots: true, afterClear: () => {
+      const results = document.getElementById('smtpsuspend-partner-results');
+      if (results) results.style.display = 'none';
+    }}
   );
 }
 
@@ -1328,6 +1331,8 @@ function checkPasswordChange(prefix) {
     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 0.8s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Checking…';
   }
 
+  window.__partnerPanelPrefix = prefix;
+
   window.postMessage({
     type: 'REPORT_GENERATOR_PARTNER_PANEL_LOOKUP',
     account: account,
@@ -1337,11 +1342,12 @@ function checkPasswordChange(prefix) {
 }
 
 function setPartnerPanelResult(result) {
-  const select = document.getElementById('ipspike-pwd-changed');
-  const btn = document.querySelector('[data-action="check-password"][data-panel="ipspike"]');
-  const resultsPanel = document.getElementById('ipspike-partner-results');
-  const suspDateEl = document.getElementById('ipspike-suspension-date');
-  const pwdDateEl = document.getElementById('ipspike-pwd-changed-date');
+  const prefix = window.__partnerPanelPrefix || 'ipspike';
+  const select = document.getElementById(prefix + '-pwd-changed');
+  const btn = document.querySelector('[data-action="check-password"][data-panel="' + prefix + '"]');
+  const resultsPanel = document.getElementById(prefix + '-partner-results');
+  const suspDateEl = document.getElementById(prefix + '-suspension-date');
+  const pwdDateEl = document.getElementById(prefix + '-pwd-changed-date');
 
   if (btn) {
     btn.disabled = false;
