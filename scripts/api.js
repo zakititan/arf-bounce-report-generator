@@ -106,3 +106,11 @@ export async function lookupMx(domain) {
     return { region: 'na' };
   }
 }
+
+export async function fetchLaravelCheck(domain) {
+  return apiFetch('/api/laravel-check?domain=' + encodeURIComponent(domain));
+}
+
+export async function fetchXmlrpcCheck(domain) {
+  return apiFetch('/api/xmlrpc-check?domain=' + encodeURIComponent(domain));
+}

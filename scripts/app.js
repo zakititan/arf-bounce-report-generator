@@ -13,7 +13,8 @@
  *  Perf:    10-screenshot cap with warning toast.
  */
 
-import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx } from './api.js';
+import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx,
+         fetchLaravelCheck, fetchXmlrpcCheck } from './api.js';
 import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow } from './pure.js';
 import {
   showToast, initThemeToggle,
@@ -70,6 +71,8 @@ const state = {
     region: 'na',
     screenshots: [],
     assuranceScreenshots: [],
+    laravelVulnerable: null,
+    xmlrpcVulnerable: null,
   },
 };
 let lastActivePanel = null; // tracks which panel the user last interacted with (for Ctrl/Cmd+Enter)
@@ -635,6 +638,10 @@ async function _doLookup(prefix) {
       checkWebsite(prefix, domain),
       checkDkim(prefix, domain),
       detectRegion(prefix, domain),
+      ...(prefix === 'smtpsuspend' ? [
+        checkLaravelVuln(domain),
+        checkXmlrpcVuln(domain),
+      ] : []),
     ]);
     btn.disabled = false;
     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Lookup';
@@ -697,6 +704,42 @@ async function checkDkim(prefix, domain) {
     }
     updateStepper(prefix, '3');
   } catch { if (dkimEl) dkimEl.innerHTML = '<span class="dkim-badge notset">Check failed</span>'; updateStepper(prefix, '3'); }
+}
+
+async function checkLaravelVuln(domain) {
+  const el = document.getElementById('smtpsuspend-result-laravel');
+  if (el) el.innerHTML = '<div class="skeleton skeleton-sm"></div>';
+  try {
+    const data = await fetchLaravelCheck(domain);
+    state.smtpsuspend.laravelVulnerable = data.vulnerable;
+    if (el) {
+      const cls = data.vulnerable ? 'vuln-badge exposed' : 'vuln-badge safe';
+      const label = data.vulnerable ? '⚠ Exposed' : '✓ Not Found';
+      el.innerHTML = `<span class="${cls}" title="${escapeHtml(data.reason)}">${label}</span>`;
+    }
+    showToast('Laravel .env: ' + (data.vulnerable ? 'Exposed!' : 'Not found'));
+  } catch {
+    state.smtpsuspend.laravelVulnerable = null;
+    if (el) el.innerHTML = '<span class="vuln-badge unknown">Check failed</span>';
+  }
+}
+
+async function checkXmlrpcVuln(domain) {
+  const el = document.getElementById('smtpsuspend-result-xmlrpc');
+  if (el) el.innerHTML = '<div class="skeleton skeleton-sm"></div>';
+  try {
+    const data = await fetchXmlrpcCheck(domain);
+    state.smtpsuspend.xmlrpcVulnerable = data.vulnerable;
+    if (el) {
+      const cls = data.vulnerable ? 'vuln-badge exposed' : 'vuln-badge safe';
+      const label = data.vulnerable ? '⚠ Accessible' : '✓ Not Found';
+      el.innerHTML = `<span class="${cls}" title="${escapeHtml(data.reason)}">${label}</span>`;
+    }
+    showToast('XML-RPC: ' + (data.vulnerable ? 'Accessible!' : 'Not found'));
+  } catch {
+    state.smtpsuspend.xmlrpcVulnerable = null;
+    if (el) el.innerHTML = '<span class="vuln-badge unknown">Check failed</span>';
+  }
 }
 
 // ── Screenshots (capped at MAX_SCREENSHOTS) ───────────────────────────
@@ -954,6 +997,14 @@ function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, af
   renderPreviews(prefix, 'assuranceScreenshots');
 
   if (prefix === 'bounce') { clearCsv(); toggleOtherBlockedField(''); }
+  if (prefix === 'smtpsuspend') {
+    state.smtpsuspend.laravelVulnerable = null;
+    state.smtpsuspend.xmlrpcVulnerable  = null;
+    const laravelEl = document.getElementById('smtpsuspend-result-laravel');
+    const xmlrpcEl  = document.getElementById('smtpsuspend-result-xmlrpc');
+    if (laravelEl) laravelEl.innerHTML = '—';
+    if (xmlrpcEl)  xmlrpcEl.innerHTML  = '—';
+  }
   clearAssurances(prefix);
   state[prefix].whois = null;
   resetWhoisState(prefix);
@@ -1073,10 +1124,24 @@ function generateSMTPSuspend() {
     const whois = state.smtpsuspend.whois;
     const hasScreenshots = state.smtpsuspend.screenshots.length > 0;
 
+    const laravelStatus = state.smtpsuspend.laravelVulnerable === true
+      ? 'Vulnerable (Exposed .env)'
+      : state.smtpsuspend.laravelVulnerable === false
+      ? 'Not Found'
+      : 'Not Checked';
+
+    const xmlrpcStatus = state.smtpsuspend.xmlrpcVulnerable === true
+      ? 'Vulnerable (xmlrpc.php accessible)'
+      : state.smtpsuspend.xmlrpcVulnerable === false
+      ? 'Not Found'
+      : 'Not Checked';
+
     const lines = [
       'Domain Creation Date : ' + (whois ? whois.creation_date : '-'),
       'Domain Age : ' + (whois ? whois.domain_age : '-'),
       'DKIM: ' + (() => { const t = (document.getElementById('smtpsuspend-result-dkim')?.textContent?.trim() || '-'); return t.startsWith('Set') ? 'Set' : t; })(),
+      'Laravel SMTP Compromise : ' + laravelStatus,
+      'XML-RPC SMTP Vulnerability : ' + xmlrpcStatus,
       'Assurances : ' + (assurances.length > 0 ? assurances.join(', ') : '-'),
     ];
 
