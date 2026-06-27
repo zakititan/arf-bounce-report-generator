@@ -1097,6 +1097,18 @@ function clearIPspike() {
     { clearScreenshots: false, afterClear: () => {
       const results = document.getElementById('ipspike-partner-results');
       if (results) results.style.display = 'none';
+      const createdEl = document.getElementById('ipspike-result-created');
+      const ageEl = document.getElementById('ipspike-result-age');
+      const websiteEl = document.getElementById('ipspike-result-website');
+      const dkimEl = document.getElementById('ipspike-result-dkim');
+      const sourceEl = document.getElementById('ipspike-result-source');
+      const summaryEl = document.getElementById('ipspike-result-summary');
+      if (createdEl) createdEl.textContent = '—';
+      if (ageEl) ageEl.textContent = '—';
+      if (websiteEl) websiteEl.innerHTML = '<div class="skeleton skeleton-sm"></div>';
+      if (dkimEl) dkimEl.innerHTML = '<div class="skeleton skeleton-sm"></div>';
+      if (sourceEl) sourceEl.textContent = '—';
+      if (summaryEl) summaryEl.textContent = '—';
     }}
   );
 }
