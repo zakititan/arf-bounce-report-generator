@@ -56,10 +56,8 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Clipboard API guard** — shows a warning toast if `navigator.clipboard` is unavailable (non-HTTPS or insecure context)
 - **Combined age calculation** — `parseAgeToDays` accumulates all units (years + months + days) instead of returning only the first non-null match
 - **Print stylesheet** — hides UI chrome (topbar, buttons, upload zones, stepper) when printing, showing only the output areas
-- **Form completion progress bar** — a thin progress bar under each panel header fills as required fields are completed
 - **Assurance button subgroups** — assurance buttons are grouped into Email Hygiene and Technical sections with labelled headers
-- **Stepper/Progress reset on clear** — clicking Clear resets the stepper to step 1 and the progress bar to 0%
-- **Progress bar updates on auto-fill** — form progress updates when website/DKIM fields are auto-populated from a CSV-triggered lookup
+- **Stepper reset on clear** — clicking Clear resets the stepper to step 1
 - **Reduced motion support** — respects `prefers-reduced-motion: reduce` by disabling all animations
 - **Sticky generate button** — the generate button row sticks to the bottom of the panel on scroll with a frosted-glass backdrop blur
 - **Mobile layout** — full-width lookup buttons and vertical stepper on narrow screens
@@ -241,7 +239,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 │   ├── app.js                      # Core app logic (ARF, Bounce, SMTP Suspension generate; IP Spike unsuspend; domain lookup; CSV; unified state; event delegation)
 │   ├── pure.js                     # Pure functions (escapeHtml, parseCsvRow, sanitiseDomainInput, sanitiseAccountInput) — no DOM dependencies
 │   ├── api.js                      # Frontend API helpers (fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx, fetchLaravelCheck, fetchXmlrpcCheck — throws on non-2xx)
-│   └── ui.js                       # UI helpers (showToast with types, theme toggle with transition, stepper, form progress, age colors, validation display, drag-and-drop)
+│   └── ui.js                       # UI helpers (showToast with types, theme toggle with transition, stepper, age colors, validation display, drag-and-drop)
 ├── styles/
 │   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, extension modal, responsive)
 ├── extension/                      # Chrome extension (Manifest V3) for JIRA integration, Abuse Desk automation, and Google Sheets logging
