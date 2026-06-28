@@ -59,13 +59,19 @@
 
   <main class="main-content">
 
+    <section class="panel" id="report-panel">
+    <nav class="tab-bar" role="tablist" aria-label="Report Panels">
+      <button class="tab-btn active" role="tab" data-tab="arf"             aria-controls="panel-arf"       aria-selected="true">ARF</button>
+      <button class="tab-btn"        role="tab" data-tab="bounce"          aria-controls="panel-bounce"     aria-selected="false">Bounce</button>
+      <button class="tab-btn"        role="tab" data-tab="ip-spike"        aria-controls="panel-ip-spike"   aria-selected="false">IP Spike</button>
+      <button class="tab-btn"        role="tab" data-tab="smtp-suspension" aria-controls="panel-smtp"       aria-selected="false">SMTP Suspension</button>
+    </nav>
+    <div class="tab-content">
+
     <!-- ARF PANEL -->
-    <section class="panel" id="arf-panel" aria-labelledby="arf-title">
+    <div id="panel-arf" class="tab-panel active">
       <div class="panel-header">
         <h2 class="panel-title" id="arf-title">ARF Complaint Report</h2>
-      </div>
-      <div class="form-progress-wrap">
-        <div class="form-progress-bar"><div class="form-progress-fill" id="arf-form-progress-fill" data-fields="arf-account,arf-complaints,arf-prev-unblock,arf-blocked-lt2,arf-email-type,arf-website,arf-dkim"></div></div>
       </div>
       <div class="panel-body">
         <div class="progress-stepper" id="arf-stepper">
@@ -211,15 +217,12 @@
           <button class="btn btn-secondary btn-log-sheet" data-action="log-sheet" data-panel="arf" title="Log this report to Google Sheet" disabled>Log to Sheet</button>
         </div>
       </div>
-    </section>
+    </div>
 
     <!-- BOUNCE PANEL -->
-    <section class="panel" id="bounce-panel" aria-labelledby="bounce-title">
+    <div id="panel-bounce" class="tab-panel">
       <div class="panel-header">
         <h2 class="panel-title" id="bounce-title">Bounce Report</h2>
-      </div>
-      <div class="form-progress-wrap">
-        <div class="form-progress-bar"><div class="form-progress-fill" id="bounce-form-progress-fill" data-fields="bounce-account,bounce-prev-unblock,bounce-other-blocked,bounce-website,bounce-dkim"></div></div>
       </div>
       <div class="panel-body">
         <div class="progress-stepper" id="bounce-stepper">
@@ -379,14 +382,21 @@
           <button class="btn btn-secondary btn-log-sheet" data-action="log-sheet" data-panel="bounce" title="Log this report to Google Sheet" disabled>Log to Sheet</button>
         </div>
       </div>
-    </section>
+    </div>
 
     <!-- IP SPIKE PANEL -->
-    <section class="panel" id="ipspike-panel" aria-labelledby="ipspike-title">
+    <div id="panel-ip-spike" class="tab-panel">
       <div class="panel-header">
         <h2 class="panel-title" id="ipspike-title">IP Spike Unsuspend</h2>
       </div>
       <div class="panel-body">
+        <div class="progress-stepper" id="ipspike-stepper">
+          <div class="stepper-step active" data-step="1"><div class="stepper-dot">1</div><span class="stepper-label">WHOIS</span></div>
+          <div class="stepper-connector" data-before="1"></div>
+          <div class="stepper-step" data-step="2"><div class="stepper-dot">2</div><span class="stepper-label">Website</span></div>
+          <div class="stepper-connector" data-before="2"></div>
+          <div class="stepper-step" data-step="3"><div class="stepper-dot">3</div><span class="stepper-label">DKIM</span></div>
+        </div>
         <div class="field">
           <label for="ipspike-account">Account<span class="req">*</span></label>
           <input type="text" id="ipspike-account" aria-required="true" placeholder="e.g. user@example.com or example.com">
@@ -438,17 +448,21 @@
         </button>
         <button class="btn btn-secondary" data-action="clear" data-panel="ipspike">Clear</button>
       </div>
-    </section>
+    </div>
 
     <!-- SMTP SUSPENSION PANEL -->
-    <section class="panel" id="smtpsuspend-panel" aria-labelledby="smtpsuspend-title">
+    <div id="panel-smtp-suspension" class="tab-panel">
       <div class="panel-header">
         <h2 class="panel-title" id="smtpsuspend-title">SMTP Suspension</h2>
       </div>
-      <div class="form-progress-wrap">
-        <div class="form-progress-bar"><div class="form-progress-fill" id="smtpsuspend-form-progress-fill" data-fields="smtpsuspend-account,smtpsuspend-zd-link"></div></div>
-      </div>
       <div class="panel-body">
+        <div class="progress-stepper" id="smtpsuspend-stepper">
+          <div class="stepper-step active" data-step="1"><div class="stepper-dot">1</div><span class="stepper-label">WHOIS</span></div>
+          <div class="stepper-connector" data-before="1"></div>
+          <div class="stepper-step" data-step="2"><div class="stepper-dot">2</div><span class="stepper-label">Website</span></div>
+          <div class="stepper-connector" data-before="2"></div>
+          <div class="stepper-step" data-step="3"><div class="stepper-dot">3</div><span class="stepper-label">DKIM</span></div>
+        </div>
         <div class="field">
           <label for="smtpsuspend-account">Account<span class="req">*</span></label>
           <input type="text" id="smtpsuspend-account" aria-required="true" placeholder="e.g. user@example.com or example.com">
@@ -548,6 +562,9 @@
           <button class="btn btn-secondary btn-log-sheet" data-action="log-sheet" data-panel="smtpsuspend" title="Log this report to Google Sheet" disabled>Log to Sheet</button>
         </div>
       </div>
+    </div>
+
+    </div>
     </section>
 
   </main>
