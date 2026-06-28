@@ -390,6 +390,13 @@
         <h2 class="panel-title" id="ipspike-title">IP Spike Unsuspend</h2>
       </div>
       <div class="panel-body">
+        <div class="progress-stepper" id="ipspike-stepper">
+          <div class="stepper-step active" data-step="1"><div class="stepper-dot">1</div><span class="stepper-label">WHOIS</span></div>
+          <div class="stepper-connector" data-before="1"></div>
+          <div class="stepper-step" data-step="2"><div class="stepper-dot">2</div><span class="stepper-label">Website</span></div>
+          <div class="stepper-connector" data-before="2"></div>
+          <div class="stepper-step" data-step="3"><div class="stepper-dot">3</div><span class="stepper-label">DKIM</span></div>
+        </div>
         <div class="field">
           <label for="ipspike-account">Account<span class="req">*</span></label>
           <input type="text" id="ipspike-account" aria-required="true" placeholder="e.g. user@example.com or example.com">
@@ -449,6 +456,13 @@
         <h2 class="panel-title" id="smtpsuspend-title">SMTP Suspension</h2>
       </div>
       <div class="panel-body">
+        <div class="progress-stepper" id="smtpsuspend-stepper">
+          <div class="stepper-step active" data-step="1"><div class="stepper-dot">1</div><span class="stepper-label">WHOIS</span></div>
+          <div class="stepper-connector" data-before="1"></div>
+          <div class="stepper-step" data-step="2"><div class="stepper-dot">2</div><span class="stepper-label">Website</span></div>
+          <div class="stepper-connector" data-before="2"></div>
+          <div class="stepper-step" data-step="3"><div class="stepper-dot">3</div><span class="stepper-label">DKIM</span></div>
+        </div>
         <div class="field">
           <label for="smtpsuspend-account">Account<span class="req">*</span></label>
           <input type="text" id="smtpsuspend-account" aria-required="true" placeholder="e.g. user@example.com or example.com">
