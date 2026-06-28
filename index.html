@@ -59,8 +59,17 @@
 
   <main class="main-content">
 
+    <section class="panel" id="report-panel">
+    <nav class="tab-bar" role="tablist" aria-label="Report Panels">
+      <button class="tab-btn active" role="tab" data-tab="arf"             aria-controls="panel-arf"       aria-selected="true">ARF</button>
+      <button class="tab-btn"        role="tab" data-tab="bounce"          aria-controls="panel-bounce"     aria-selected="false">Bounce</button>
+      <button class="tab-btn"        role="tab" data-tab="ip-spike"        aria-controls="panel-ip-spike"   aria-selected="false">IP Spike</button>
+      <button class="tab-btn"        role="tab" data-tab="smtp-suspension" aria-controls="panel-smtp"       aria-selected="false">SMTP Suspension</button>
+    </nav>
+    <div class="tab-content">
+
     <!-- ARF PANEL -->
-    <section class="panel" id="arf-panel" aria-labelledby="arf-title">
+    <div id="panel-arf" class="tab-panel active">
       <div class="panel-header">
         <h2 class="panel-title" id="arf-title">ARF Complaint Report</h2>
       </div>
@@ -211,10 +220,10 @@
           <button class="btn btn-secondary btn-log-sheet" data-action="log-sheet" data-panel="arf" title="Log this report to Google Sheet" disabled>Log to Sheet</button>
         </div>
       </div>
-    </section>
+    </div>
 
     <!-- BOUNCE PANEL -->
-    <section class="panel" id="bounce-panel" aria-labelledby="bounce-title">
+    <div id="panel-bounce" class="tab-panel">
       <div class="panel-header">
         <h2 class="panel-title" id="bounce-title">Bounce Report</h2>
       </div>
@@ -379,10 +388,10 @@
           <button class="btn btn-secondary btn-log-sheet" data-action="log-sheet" data-panel="bounce" title="Log this report to Google Sheet" disabled>Log to Sheet</button>
         </div>
       </div>
-    </section>
+    </div>
 
     <!-- IP SPIKE PANEL -->
-    <section class="panel" id="ipspike-panel" aria-labelledby="ipspike-title">
+    <div id="panel-ip-spike" class="tab-panel">
       <div class="panel-header">
         <h2 class="panel-title" id="ipspike-title">IP Spike Unsuspend</h2>
       </div>
@@ -438,10 +447,10 @@
         </button>
         <button class="btn btn-secondary" data-action="clear" data-panel="ipspike">Clear</button>
       </div>
-    </section>
+    </div>
 
     <!-- SMTP SUSPENSION PANEL -->
-    <section class="panel" id="smtpsuspend-panel" aria-labelledby="smtpsuspend-title">
+    <div id="panel-smtp" class="tab-panel">
       <div class="panel-header">
         <h2 class="panel-title" id="smtpsuspend-title">SMTP Suspension</h2>
       </div>
@@ -548,6 +557,9 @@
           <button class="btn btn-secondary btn-log-sheet" data-action="log-sheet" data-panel="smtpsuspend" title="Log this report to Google Sheet" disabled>Log to Sheet</button>
         </div>
       </div>
+    </div>
+
+    </div>
     </section>
 
   </main>
