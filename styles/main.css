@@ -87,6 +87,7 @@ a, button, input, select, textarea { transition: color var(--transition-interact
 .panel {
   background: var(--color-surface); border: 1px solid var(--color-border);
   border-radius: var(--radius-xl); box-shadow: var(--shadow-sm); overflow: clip;
+  max-width: 900px; margin: 0 auto;
 }
 .panel-header {
   padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--color-divider);

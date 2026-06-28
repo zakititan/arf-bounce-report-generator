@@ -80,9 +80,41 @@ const state = {
 let lastActivePanel = null; // tracks which panel the user last interacted with (for Ctrl/Cmd+Enter)
 let sheetConfig = { sheetId: '', appsScriptUrl: '' };
 
+// ── Tab Navigation ─────────────────────────────────────────
+function initTabs() {
+  const STORAGE_KEY = 'activeTab';
+  const DEFAULT_TAB = 'arf';
+
+  const tabBtns   = document.querySelectorAll('.tab-btn');
+  const tabPanels = document.querySelectorAll('.tab-panel');
+
+  function activateTab(targetTab) {
+    tabBtns.forEach(btn => {
+      const isActive = btn.dataset.tab === targetTab;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-selected', isActive);
+    });
+
+    tabPanels.forEach(panel => {
+      const isActive = panel.id === `panel-${targetTab}`;
+      panel.classList.toggle('active', isActive);
+    });
+
+    localStorage.setItem(STORAGE_KEY, targetTab);
+  }
+
+  const savedTab = localStorage.getItem(STORAGE_KEY) ?? DEFAULT_TAB;
+  activateTab(savedTab);
+
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => activateTab(btn.dataset.tab));
+  });
+}
+
 // ── Init ──────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   initThemeToggle();
+  initTabs();
   initKeyboardShortcuts();
   initDomainInputs();
   initEventDelegation();
