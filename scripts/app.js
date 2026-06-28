@@ -1411,3 +1411,36 @@ function setPartnerPanelResult(result) {
     : 'Password was NOT changed after suspension';
   showToast(msg, result.passwordChanged ? 'success' : 'warning');
 }
+
+// ── Extension Modal ───────────────────────────────────────
+(function () {
+  const openBtn  = document.getElementById('ext-download-btn');
+  const modal    = document.getElementById('ext-modal');
+  const closeBtn = document.getElementById('ext-modal-close');
+  if (!openBtn || !modal || !closeBtn) return;
+
+  function openModal() {
+    modal.hidden = false;
+    document.body.style.overflow = 'hidden';
+    closeBtn.focus();
+  }
+
+  function closeModal() {
+    modal.hidden = true;
+    document.body.style.overflow = '';
+    openBtn.focus();
+  }
+
+  openBtn.addEventListener('click', openModal);
+  closeBtn.addEventListener('click', closeModal);
+
+  // Close on overlay backdrop click
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeModal();
+  });
+
+  // Close on Escape key
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !modal.hidden) closeModal();
+  });
+})();
