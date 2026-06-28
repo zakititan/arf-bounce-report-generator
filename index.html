@@ -38,6 +38,19 @@
       <span class="logo-text">Report Generator</span>
     </div>
     <div class="topbar-actions">
+      <!-- Extension download button -->
+      <button
+        class="btn-ghost ext-download-btn"
+        id="ext-download-btn"
+        aria-label="Download browser extension"
+        title="Get the browser extension"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M12 2v13M7 10l5 5 5-5"/>
+          <rect x="3" y="17" width="18" height="4" rx="1"/>
+        </svg>
+        <span class="ext-btn-label">Extension</span>
+      </button>
       <button class="theme-toggle btn-ghost" data-theme-toggle aria-label="Toggle dark mode" title="Toggle theme">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
       </button>
@@ -545,6 +558,93 @@
       View on GitHub
     </a>
   </footer>
+
+  <!-- Extension Install Modal -->
+  <div
+    class="modal-overlay"
+    id="ext-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="ext-modal-title"
+    hidden
+  >
+    <div class="modal-panel">
+
+      <div class="modal-header">
+        <div class="modal-header-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+          </svg>
+        </div>
+        <h2 class="modal-title" id="ext-modal-title">Install the Browser Extension</h2>
+        <button class="btn-ghost modal-close" id="ext-modal-close" aria-label="Close modal">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <p class="modal-desc">
+        Install the extension to allow features as Auto creating JIRAs, automatic unsuspension via AD and checking Partner panel for password changes.
+        <br>
+        Follow the steps below to install it in Chrome or any Chromium-based browser.
+      </p>
+
+      <ol class="install-steps">
+        <li class="install-step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <strong>Download the extension file</strong>
+            <span>Click the download button below to save <code>extension.zip</code> to your computer.</span>
+          </div>
+        </li>
+        <li class="install-step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <strong>Unzip the file</strong>
+            <span>Extract the <code>.zip</code> — you'll get a folder with the extension files inside.</span>
+          </div>
+        </li>
+        <li class="install-step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <strong>Open Chrome Extensions</strong>
+            <span>Navigate to <code>chrome://extensions</code> or go to <strong>Menu → More Tools → Extensions</strong>.</span>
+          </div>
+        </li>
+        <li class="install-step">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <strong>Enable Developer Mode</strong>
+            <span>Toggle the <strong>Developer mode</strong> switch in the top-right corner of the Extensions page.</span>
+          </div>
+        </li>
+        <li class="install-step">
+          <div class="step-num">5</div>
+          <div class="step-body">
+            <strong>Load the extension</strong>
+            <span>Click <strong>Load unpacked</strong> and select the unzipped folder. The extension will appear in your toolbar.</span>
+          </div>
+        </li>
+      </ol>
+
+      <a
+        class="btn btn-primary btn-download-ext"
+        href="https://github.com/zakititan/arf-bounce-report-generator/raw/main/extension/releases/extension.zip"
+        download="extension.zip"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+          <path d="M12 2v13M7 10l5 5 5-5"/>
+          <rect x="3" y="17" width="18" height="4" rx="1"/>
+        </svg>
+        Download extension.zip
+      </a>
+
+    </div>
+  </div>
 
 </div>
 

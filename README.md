@@ -43,6 +43,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Account field sanitisation** — the Account field sanitises pasted input: domain-like values get HTML/protocol stripping and control char removal; email addresses (containing `@`) pass through untouched
 - **Auto-lookup on paste** — pasting a domain or email into either panel's domain field automatically fires the WHOIS/Website/DKIM lookup without needing to click the Lookup button
 - **Dark / Light theme** — respects system preference with a manual toggle; preference is persisted to `localStorage` with a smooth 250ms crossfade transition
+- **Extension download button** — a button in the top-right header opens a modal with step-by-step install instructions and a direct download link for the browser extension; accessible (Escape to close, focus return, keyboard navigation); label hidden on mobile
 - **Required field validation** — all required fields are highlighted with inline error messages before generation is allowed
 - **Error resilience** — generate functions are wrapped in `try/catch` so unexpected errors surface as a user-facing toast instead of silently failing
 - **10-screenshot cap** — excess files are skipped with a descriptive toast
@@ -241,7 +242,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 │   ├── api.js                      # Frontend API helpers (fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx, fetchLaravelCheck, fetchXmlrpcCheck — throws on non-2xx)
 │   └── ui.js                       # UI helpers (showToast with types, theme toggle with transition, stepper, form progress, age colors, validation display, drag-and-drop)
 ├── styles/
-│   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, responsive)
+│   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, extension modal, responsive)
 ├── extension/                      # Chrome extension (Manifest V3) for JIRA integration, Abuse Desk automation, and Google Sheets logging
 │   ├── manifest.json               # Extension config: v4.2, permissions, content scripts for webapp, JIRA, Abuse Desk, and Partner Panel
 │   ├── background.js               # Service worker: create-jira, create-jira-and-done (JIRA + markDone + comment), log-to-sheet, partner-panel-lookup, store/get report
