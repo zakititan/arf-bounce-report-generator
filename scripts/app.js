@@ -21,7 +21,7 @@ import {
   clearFieldErrors, showValidationErrors,
   handleDragOver, handleDragLeave,
   handleCsvDragOver, handleCsvDragLeave,
-  updateStepper, updateFormProgress,
+  updateStepper,
   applyDomainAgeColor, toggleResultCard,
   renderScreenshotEmptyState, getOutputTimestamp
 } from './ui.js';
@@ -36,11 +36,6 @@ export const parseCsvRow = _parseCsvRow;
 const MAX_SCREENSHOTS = 10;
 const LOOKUP_DEBOUNCE_MS = 1000;
 const _lookupTimers = { arf: null, bounce: null };
-const _progressTimers = {};
-function debouncedUpdateFormProgress(prefix) {
-  clearTimeout(_progressTimers[prefix]);
-  _progressTimers[prefix] = setTimeout(() => updateFormProgress(prefix), 150);
-}
 
 // ── State ─────────────────────────────────────────────────────────────
 const state = {
@@ -120,12 +115,9 @@ document.addEventListener('DOMContentLoaded', () => {
   initEventDelegation();
   initDragDrop();
   initPasteSupport();
-  updateFormProgress('arf');
-  updateFormProgress('bounce');
   renderPreviews('arf', 'screenshots');
   renderPreviews('arf', 'assuranceScreenshots');
   renderPreviews('bounce', 'assuranceScreenshots');
-  updateFormProgress('smtpsuspend');
   renderPreviews('smtpsuspend', 'screenshots');
   fetch('/api/sheet-config').then(r => r.json()).then(d => {
     if (d.sheetId) sheetConfig.sheetId = d.sheetId;
@@ -701,7 +693,6 @@ async function checkWebsite(prefix, domain) {
       const mapped = verdict === 'Valid Website' ? 'Valid Website' : 'No website';
       websiteSelect.value = mapped;
       if (hintEl) hintEl.textContent = 'Auto-detected: ' + reason;
-      updateFormProgress(prefix);
     }
     updateStepper(prefix, '2');
     showToast('Website: ' + verdict);
@@ -724,7 +715,6 @@ async function checkDkim(prefix, domain) {
       if (dkimSelect && dkimSelect.value === '') {
         dkimSelect.value = 'Set';
         if (hintEl) hintEl.textContent = 'Auto-detected via selector: ' + selectors.join(', ');
-        updateFormProgress(prefix);
       }
       showToast('DKIM: Set (' + selectors.join(', ') + ')');
     } else {
@@ -732,7 +722,6 @@ async function checkDkim(prefix, domain) {
       if (dkimSelect && dkimSelect.value === '') {
         dkimSelect.value = 'Not Set';
         if (hintEl) hintEl.textContent = 'Auto-detected: no titan/neo DKIM record found';
-        updateFormProgress(prefix);
       }
       showToast('DKIM: Not Set');
     }
@@ -1069,7 +1058,6 @@ function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, af
   if (banner) banner.classList.remove('visible');
   clearFieldErrors(clearFieldErrorIds);
   updateStepper(prefix, '0');
-  updateFormProgress(prefix);
   if (afterClear) afterClear();
 }
 

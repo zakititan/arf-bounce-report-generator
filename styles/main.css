@@ -372,11 +372,6 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   100% { transform: translateX(100%); }
 }
 
-/* Form progress bar */
-.form-progress-wrap { padding: var(--space-2) var(--space-5) 0; }
-.form-progress-bar { height: 4px; background: var(--color-surface-offset); border-radius: var(--radius-full); overflow: hidden; }
-.form-progress-fill { height: 100%; background: var(--color-primary); width: 0%; border-radius: var(--radius-full); transition: width 350ms cubic-bezier(0.16, 1, 0.3, 1); }
-
 /* Domain age colors */
 .age-recent { color: var(--color-error); }
 .age-moderate { color: var(--color-warning); }
@@ -639,7 +634,7 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
 /* ── Print ────────────────────────────────────────────────────── */
 @media print {
   .topbar, .site-footer, .panel-actions, .upload-zone, .csv-drop-zone,
-  .domain-lookup-wrap, .progress-stepper, .form-progress-wrap,
+  .domain-lookup-wrap, .progress-stepper,
   .theme-toggle, .toast, .validation-banner, .tab-bar,
   .btn-mailboards, .btn-abusedesk, .btn-user-agent,
   .output-bottom-actions { display: none !important; }
