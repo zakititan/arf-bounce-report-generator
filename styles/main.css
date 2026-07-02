@@ -806,6 +806,7 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
 /* ── Tab Bar ─────────────────────────────────────────────── */
 .tab-bar {
   display: flex;
+  justify-content: center;
   gap: 0;
   border-bottom: 2px solid var(--color-border);
 }
