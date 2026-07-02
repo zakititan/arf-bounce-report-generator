@@ -114,3 +114,7 @@ export async function fetchLaravelCheck(domain) {
 export async function fetchXmlrpcCheck(domain) {
   return apiFetch('/api/xmlrpc-check?domain=' + encodeURIComponent(domain));
 }
+
+export async function fetchWordPressCheck(domain) {
+  return apiFetch('/api/wordpress-check?domain=' + encodeURIComponent(domain));
+}

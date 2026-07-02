@@ -14,7 +14,7 @@
  */
 
 import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx,
-         fetchLaravelCheck, fetchXmlrpcCheck } from './api.js';
+         fetchLaravelCheck, fetchXmlrpcCheck, fetchWordPressCheck } from './api.js';
 import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow } from './pure.js';
 import {
   showToast, initThemeToggle,
@@ -70,6 +70,7 @@ const state = {
     assuranceScreenshots: [],
     laravelVulnerable: null,
     xmlrpcVulnerable: null,
+    wordpressDetected: null,
   },
 };
 let lastActivePanel = null; // tracks which panel the user last interacted with (for Ctrl/Cmd+Enter)
@@ -667,6 +668,7 @@ async function _doLookup(prefix) {
       ...(prefix === 'smtpsuspend' ? [
         checkLaravelVuln(domain),
         checkXmlrpcVuln(domain),
+        checkWordPressVuln(domain),
       ] : []),
     ]);
     btn.disabled = false;
@@ -761,6 +763,24 @@ async function checkXmlrpcVuln(domain) {
     showToast('XML-RPC: ' + (data.vulnerable ? 'Accessible!' : 'Not found'));
   } catch {
     state.smtpsuspend.xmlrpcVulnerable = null;
+    if (el) el.innerHTML = '<span class="vuln-badge unknown">Check failed</span>';
+  }
+}
+
+async function checkWordPressVuln(domain) {
+  const el = document.getElementById('smtpsuspend-result-wordpress');
+  if (el) el.innerHTML = '<div class="skeleton skeleton-sm"></div>';
+  try {
+    const data = await fetchWordPressCheck(domain);
+    state.smtpsuspend.wordpressDetected = data.detected;
+    if (el) {
+      const cls = data.detected ? 'vuln-badge exposed' : 'vuln-badge safe';
+      const label = data.detected ? '⚠ Detected' : '✓ Not Found';
+      el.innerHTML = `<span class="${cls}" title="${escapeHtml(data.reason)}">${label}</span>`;
+    }
+    showToast('WordPress: ' + (data.detected ? 'Detected!' : 'Not found'));
+  } catch {
+    state.smtpsuspend.wordpressDetected = null;
     if (el) el.innerHTML = '<span class="vuln-badge unknown">Check failed</span>';
   }
 }
@@ -1024,10 +1044,13 @@ function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, af
   if (prefix === 'smtpsuspend') {
     state.smtpsuspend.laravelVulnerable = null;
     state.smtpsuspend.xmlrpcVulnerable  = null;
+    state.smtpsuspend.wordpressDetected = null;
     const laravelEl = document.getElementById('smtpsuspend-result-laravel');
     const xmlrpcEl  = document.getElementById('smtpsuspend-result-xmlrpc');
+    const wpEl      = document.getElementById('smtpsuspend-result-wordpress');
     if (laravelEl) laravelEl.innerHTML = '—';
     if (xmlrpcEl)  xmlrpcEl.innerHTML  = '—';
+    if (wpEl)      wpEl.innerHTML      = '—';
   }
   clearAssurances(prefix);
   state[prefix].whois = null;
@@ -1175,12 +1198,19 @@ function generateSMTPSuspend() {
       ? 'Not Found'
       : 'Not Checked';
 
+    const wordpressStatus = state.smtpsuspend.wordpressDetected === true
+      ? 'Yes'
+      : state.smtpsuspend.wordpressDetected === false
+      ? 'No'
+      : 'Not Checked';
+
     const lines = [
       'Domain Creation Date : ' + (whois ? whois.creation_date : '-'),
       'Domain Age : ' + (whois ? whois.domain_age : '-'),
       'DKIM: ' + (() => { const t = (document.getElementById('smtpsuspend-result-dkim')?.textContent?.trim() || '-'); return t.startsWith('Set') ? 'Set' : t; })(),
       'Laravel SMTP Compromise : ' + laravelStatus,
       'XML-RPC SMTP Vulnerability : ' + xmlrpcStatus,
+      'Hosted on WordPress : ' + wordpressStatus,
       'Assurances : ' + (assurances.length > 0 ? assurances.join(', ') : '-'),
     ];
 
