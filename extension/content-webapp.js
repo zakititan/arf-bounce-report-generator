@@ -158,8 +158,8 @@
       }
     });
 
-    var label = panel === 'arf' ? 'ARF_unsuspension' : 'Bounce_unsuspension';
-    var typeLabel = panel === 'arf' ? 'ARF' : 'Bounce';
+    var label = panel === 'arf' ? 'ARF_unsuspension' : panel === 'smtpsuspend' ? 'SMTP_unsuspension' : 'Bounce_unsuspension';
+    var typeLabel = panel === 'arf' ? 'ARF' : panel === 'smtpsuspend' ? 'SMTP Compromised' : 'Bounce';
     var summary = encodeURIComponent(typeLabel + ' unsuspension request: ' + account);
     var jiraUrl =
       'https://jira.directi.com/secure/CreateIssueDetails!init.jspa?pid=12900&issuetype=10902&priority=10000&labels=' +
