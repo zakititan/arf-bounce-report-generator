@@ -223,7 +223,7 @@ function initDomainInputs() {
 // ── Mailboards link href updater ─────────────────────────────────────
 ['arf', 'bounce'].forEach(prefix => {
   const accountInput = document.getElementById(prefix + '-account');
-  const mailboardsLink = document.querySelector('#' + prefix + '-panel .btn-mailboards');
+  const mailboardsLink = document.querySelector('#panel-' + prefix + ' .btn-mailboards');
   if (!accountInput || !mailboardsLink) return;
 
   function updateMailboardsHref() {
@@ -245,7 +245,7 @@ function initDomainInputs() {
 
 // ── Check ARF count link updater ───────────────────────────────────
 const arfAccountInput = document.getElementById('arf-account');
-const arfCountLink = document.querySelector('#arf-panel .btn-abusedesk');
+const arfCountLink = document.querySelector('#panel-arf .btn-abusedesk');
 if (arfAccountInput && arfCountLink) {
   function updateArfCountHref() {
     const account = arfAccountInput.value.trim();
@@ -264,7 +264,7 @@ if (arfAccountInput && arfCountLink) {
 // ── Check User Agent link updater ─────────────────────────────────
 function updateUserAgentHref() {
   const accountInput = document.getElementById('bounce-account');
-  const userAgentLink = document.querySelector('#bounce-panel .btn-user-agent');
+  const userAgentLink = document.querySelector('#panel-bounce .btn-user-agent');
   if (!accountInput || !userAgentLink) return;
   const account = accountInput.value.trim();
   const fromDate = state.bounce.csvFromDate || '';
@@ -275,7 +275,7 @@ function updateUserAgentHref() {
 }
 {
   const uaAccountInput = document.getElementById('bounce-account');
-  const userAgentLink = document.querySelector('#bounce-panel .btn-user-agent');
+  const userAgentLink = document.querySelector('#panel-bounce .btn-user-agent');
   if (uaAccountInput && userAgentLink) {
     uaAccountInput.addEventListener('input', updateUserAgentHref);
     uaAccountInput.addEventListener('paste', () => setTimeout(updateUserAgentHref, 0));
@@ -359,11 +359,11 @@ function initEventDelegation() {
   // Runs on every focusin that bubbles from an input or select inside a .panel.
   const shell = document.querySelector('.app-shell');
   shell.addEventListener('focusin', (e) => {
-    const panel = e.target.closest('[id$="-panel"]');
+    const panel = e.target.closest('[id^="panel-"]');
     if (!panel) return;
-    if (panel.id === 'arf-panel') lastActivePanel = 'arf';
-    else if (panel.id === 'bounce-panel') lastActivePanel = 'bounce';
-    else if (panel.id === 'ipspike-panel') lastActivePanel = 'ipspike';
+    if (panel.id === 'panel-arf') lastActivePanel = 'arf';
+    else if (panel.id === 'panel-bounce') lastActivePanel = 'bounce';
+    else if (panel.id === 'panel-ip-spike') lastActivePanel = 'ipspike';
   });
 
   shell.addEventListener('click', (e) => {
