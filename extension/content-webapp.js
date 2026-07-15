@@ -168,8 +168,4 @@
 
     showToast('API unavailable — opening JIRA page instead');
   }
-
-  if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getManifest) {
-    window.postMessage({ type: 'EXTENSION_VERSION', version: chrome.runtime.getManifest().version }, '*');
-  }
 })();
