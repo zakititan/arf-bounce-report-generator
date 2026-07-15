@@ -725,9 +725,9 @@
   var notInstalledTimer = setTimeout(function () {
     createBanner(
       'not-installed',
-      'Extension not detected. ' +
+      'Extension is not installed or is outdated. ' +
       '<a href="https://github.com/zakititan/arf-bounce-report-generator" target="_blank" rel="noopener">' +
-      'Install the extension</a> to create JIRA tickets directly from this page.'
+      'Install the latest version</a> to create JIRA tickets directly from this page.'
     );
   }, 1500);
 
@@ -761,12 +761,8 @@
   })(0);
 
   window.addEventListener('message', function (event) {
-    if (!event.data || !event.data.type) return;
-
-    if (event.data.type === 'REPORT_GENERATOR_PONG') {
-      onExtensionDetected(event.data.version);
-      return;
-    }
+    if (!event.data || event.data.type !== 'REPORT_GENERATOR_PONG') return;
+    onExtensionDetected(event.data.version);
   });
 
   window.postMessage({ type: 'REPORT_GENERATOR_PING' }, '*');
