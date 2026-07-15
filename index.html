@@ -756,7 +756,7 @@
       return;
     }
 
-    if (!extensionDetected && event.data.type.indexOf('REPORT_GENERATOR_') === 0) {
+    if (!extensionDetected && event.data.type.indexOf('REPORT_GENERATOR_') === 0 && event.data.type !== 'REPORT_GENERATOR_PING') {
       clearTimeout(notInstalledTimer);
       extensionDetected = true;
       createBanner(
