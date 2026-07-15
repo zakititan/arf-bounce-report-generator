@@ -84,7 +84,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
   - 500ms delay between image pastes for TinyMCE processing
   - Fallback chain: paste → execCommand → textarea
   - Supports JIRA Server v7.13+ (Atlassian JEP editor); falls back gracefully if the visual editor isn't found
-  - Install by [downloading the extension zip](https://github.com/zakititan/arf-bounce-report-generator/raw/main/extension/releases/extension.zip), unzipping, and loading the folder as an unpacked extension in `chrome://extensions` (Developer mode)
+  - Install by [downloading the extension zip](https://github.com/zakititan/arf-bounce-report-generator/raw/refs/heads/main/extension/releases/extension.zip), unzipping, and loading the folder as an unpacked extension in `chrome://extensions` (Developer mode)
   - To repackage after changes: `npm run pack-extension`
   - **Version check** — the web app auto-detects the extension via a ping/pong handshake (`REPORT_GENERATOR_PING` / `REPORT_GENERATOR_PONG`); a sticky banner appears at the top of the page:
     - **Green banner** — extension detected and up to date (`Extension vX.X.X detected.`)
