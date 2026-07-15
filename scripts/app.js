@@ -36,6 +36,7 @@ export const parseCsvRow = _parseCsvRow;
 const MAX_SCREENSHOTS = 10;
 const LOOKUP_DEBOUNCE_MS = 1000;
 const _lookupTimers = { arf: null, bounce: null };
+const LATEST_EXTENSION_VERSION = '4.2.1';
 
 // ── State ─────────────────────────────────────────────────────────────
 const state = {
@@ -129,6 +130,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.data && e.data.type === 'PARTNER_PANEL_RESULT') {
       setPartnerPanelResult(e.data.data);
     }
+    if (e.data && e.data.type === 'EXTENSION_VERSION') {
+      checkExtensionVersion(e.data.version);
+    }
   });
 });
 
@@ -141,6 +145,14 @@ function initKeyboardShortcuts() {
     if (lastActivePanel === 'arf') generateARF();
     else if (lastActivePanel === 'bounce') generateBounce();
   });
+}
+
+function checkExtensionVersion(version) {
+  if (!version || sessionStorage.getItem('extVersionChecked')) return;
+  sessionStorage.setItem('extVersionChecked', '1');
+  if (version !== LATEST_EXTENSION_VERSION) {
+    showToast('Extension v' + version + ' is outdated — please update to v' + LATEST_EXTENSION_VERSION, 'warning');
+  }
 }
 
 // ── Domain input: sanitise email → domain + invalidate cache ──────────
