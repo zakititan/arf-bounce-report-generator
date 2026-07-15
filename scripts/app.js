@@ -36,7 +36,7 @@ export const parseCsvRow = _parseCsvRow;
 const MAX_SCREENSHOTS = 10;
 const LOOKUP_DEBOUNCE_MS = 1000;
 const _lookupTimers = { arf: null, bounce: null };
-const LATEST_EXTENSION_VERSION = '4.2.1';
+const LATEST_EXTENSION_VERSION = '4.2.5';
 
 // ── State ─────────────────────────────────────────────────────────────
 const state = {
