@@ -689,11 +689,17 @@
     if (dismissedFor === dismissKey) return;
 
     var banner = document.createElement('div');
-    banner.className = 'ext-version-banner' + (type === 'not-installed' ? ' not-installed' : '');
+    banner.className = 'ext-version-banner';
+    if (type === 'not-installed') banner.className += ' not-installed';
+    else if (type === 'detected') banner.className += ' detected';
     banner.id = 'ext-version-banner';
 
+    var icon = type === 'detected'
+      ? '<svg class="ext-version-banner-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
+      : '<svg class="ext-version-banner-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+
     banner.innerHTML =
-      '<svg class="ext-version-banner-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' +
+      icon +
       '<span class="ext-version-banner-msg">' + message + '</span>' +
       '<button class="ext-version-banner-dismiss" aria-label="Dismiss">' +
       '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
@@ -735,6 +741,11 @@
         'Your extension is outdated (v' + installed + '). ' +
         '<a href="https://github.com/zakititan/arf-bounce-report-generator/tree/main/extension/releases" target="_blank" rel="noopener">' +
         'Download v' + MIN_VERSION + '</a> and reload the extension in Chrome.'
+      );
+    } else {
+      createBanner(
+        'detected',
+        'Extension v' + installed + ' detected.'
       );
     }
   });
