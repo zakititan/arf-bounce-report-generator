@@ -178,16 +178,9 @@
   }
 
   if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getManifest) {
-    var ver = chrome.runtime.getManifest().version;
     window.postMessage({
       type: 'REPORT_GENERATOR_PONG',
-      version: ver
+      version: chrome.runtime.getManifest().version
     }, '*');
-    try {
-      var s = document.createElement('script');
-      s.textContent = 'window.__rgExtensionVersion=' + JSON.stringify(ver) + ';';
-      document.documentElement.appendChild(s);
-      s.remove();
-    } catch (e) {}
   }
 })();

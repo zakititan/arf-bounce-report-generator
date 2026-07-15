@@ -731,38 +731,23 @@
     );
   }, 1500);
 
-  var extensionDetected = false;
-
-  function onExtensionDetected(version) {
-    if (extensionDetected) return;
+  window.addEventListener('message', function (event) {
+    if (!event.data || event.data.type !== 'REPORT_GENERATOR_PONG') return;
     clearTimeout(notInstalledTimer);
-    extensionDetected = true;
-    if (compareVersions(version, MIN_VERSION) < 0) {
+    var installed = event.data.version;
+    if (compareVersions(installed, MIN_VERSION) < 0) {
       createBanner(
         'outdated',
-        'Your extension is outdated (v' + version + '). ' +
+        'Your extension is outdated (v' + installed + '). ' +
         '<a href="https://github.com/zakititan/arf-bounce-report-generator/raw/main/extension/releases/extension.zip" target="_blank" rel="noopener">' +
         'Download v' + MIN_VERSION + '</a> and reload the extension in Chrome.'
       );
     } else {
       createBanner(
         'detected',
-        'Extension v' + version + ' detected.'
+        'Extension v' + installed + ' detected.'
       );
     }
-  }
-
-  (function pollGlobal(attempts) {
-    if (window.__rgExtensionVersion) {
-      onExtensionDetected(window.__rgExtensionVersion);
-    } else if (attempts < 10) {
-      setTimeout(function () { pollGlobal(attempts + 1); }, 100);
-    }
-  })(0);
-
-  window.addEventListener('message', function (event) {
-    if (!event.data || event.data.type !== 'REPORT_GENERATOR_PONG') return;
-    onExtensionDetected(event.data.version);
   });
 
   window.postMessage({ type: 'REPORT_GENERATOR_PING' }, '*');
