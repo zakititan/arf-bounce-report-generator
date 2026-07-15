@@ -616,8 +616,6 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
   transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1), opacity 300ms ease; z-index: 999;
 }
 .toast.show { transform: translateY(0); opacity: 1; }
-.toast-dismiss { background: none; border: none; color: inherit; font-size: 16px; cursor: pointer; margin-left: 12px; opacity: 0.7; padding: 0 4px; }
-.toast-dismiss:hover { opacity: 1; }
 
 /* Responsive */
 @media (max-width: 600px) {

@@ -6,27 +6,13 @@
 // ── Toast ─────────────────────────────────────────────────────────────
 // role=status + aria-live=polite ensures screen readers announce toasts.
 let _toastTimer = null;
-export function showToast(msg, type, persist) {
+export function showToast(msg, type) {
   const t = document.getElementById('toast');
-  t.textContent = '';
+  t.textContent = msg;
   t.setAttribute('data-type', type || 'info');
-  if (persist) {
-    const span = document.createElement('span');
-    span.textContent = msg;
-    t.appendChild(span);
-    const btn = document.createElement('button');
-    btn.className = 'toast-dismiss';
-    btn.textContent = '\u00d7';
-    btn.addEventListener('click', () => t.classList.remove('show'));
-    t.appendChild(btn);
-    t.classList.add('show');
-    clearTimeout(_toastTimer);
-  } else {
-    t.textContent = msg;
-    t.classList.add('show');
-    clearTimeout(_toastTimer);
-    _toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
-  }
+  t.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
 }
 
 // ── Theme toggle ──────────────────────────────────────────────────────
