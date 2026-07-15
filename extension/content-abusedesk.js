@@ -30,7 +30,8 @@
       var reason = result.unsuspendReason;
       if (!reason) { log('No unsuspend reason in storage'); return; }
 
-      var account = new URLSearchParams(window.location.search).get('entity') || 'unknown account';
+      var account = new URLSearchParams(window.location.search).get('entity');
+      if (!account) { log('No entity in URL — skipping automation'); return; }
       log('Starting unsuspend automation for ' + account);
 
       await sleep(2000);
