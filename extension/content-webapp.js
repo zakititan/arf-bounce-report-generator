@@ -132,6 +132,14 @@
       });
     }
 
+    if (event.data.type === 'REPORT_GENERATOR_PING') {
+      var manifest = chrome.runtime.getManifest();
+      window.postMessage({
+        type: 'REPORT_GENERATOR_PONG',
+        version: manifest.version
+      }, '*');
+    }
+
     if (event.data.type === 'REPORT_GENERATOR_PARTNER_PANEL_LOOKUP') {
       var lookupAccount = event.data.account;
       var requestId = 'pp_' + Date.now();
