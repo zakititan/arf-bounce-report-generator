@@ -86,9 +86,9 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
   - Supports JIRA Server v7.13+ (Atlassian JEP editor); falls back gracefully if the visual editor isn't found
   - Install by [downloading the extension zip](https://github.com/zakititan/arf-bounce-report-generator/raw/main/extension/releases/extension.zip), unzipping, and loading the folder as an unpacked extension in `chrome://extensions` (Developer mode)
   - To repackage after changes: `npm run pack-extension`
-  - **Version check** — the web app auto-detects the extension via a ping/pong handshake (`REPORT_GENERATOR_PING` / `REPORT_GENERATOR_PONG`); a sticky banner appears at the top of the page:
+  - **Version check** — the web app auto-detects the extension via a ping/pong handshake (`REPORT_GENERATOR_PING` / `REPORT_GENERATOR_PONG`); also detects old versions by listening for any `REPORT_GENERATOR_*` message from the content script; a sticky banner appears at the top of the page:
     - **Green banner** — extension detected and up to date (`Extension vX.X.X detected.`)
-    - **Yellow banner** — extension outdated, with download link for the latest version
+    - **Yellow banner** — extension outdated (or old version without version handshake), with download link for the latest version
     - **Red banner** — extension not detected, with install link
     - Dismiss persists per `MIN_VERSION` in `localStorage`; reappears when min version is bumped
 
