@@ -86,6 +86,11 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
   - Supports JIRA Server v7.13+ (Atlassian JEP editor); falls back gracefully if the visual editor isn't found
   - Install by [downloading the extension zip](https://github.com/zakititan/arf-bounce-report-generator/raw/main/extension/releases/extension.zip), unzipping, and loading the folder as an unpacked extension in `chrome://extensions` (Developer mode)
   - To repackage after changes: `npm run pack-extension`
+  - **Version check** — the web app auto-detects the extension via a ping/pong handshake (`REPORT_GENERATOR_PING` / `REPORT_GENERATOR_PONG`); a sticky banner appears at the top of the page:
+    - **Green banner** — extension detected and up to date (`Extension vX.X.X detected.`)
+    - **Yellow banner** — extension outdated, with download link for the latest version
+    - **Red banner** — extension not installed or is outdated (pre-v4.3), with install link
+    - Dismiss persists per `MIN_VERSION` in `localStorage`; reappears when min version is bumped
 
 ### Log to Sheet (Google Sheets Integration)
 - **Log to Sheet button** — a "Log to Sheet" button appears in the bottom action row of ARF, Bounce, and SMTP Suspension output sections, next to the JIRA buttons; disabled until a report is generated
@@ -245,7 +250,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ├── styles/
 │   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, extension modal, responsive)
 ├── extension/                      # Chrome extension (Manifest V3) for JIRA integration, Abuse Desk automation, and Google Sheets logging
-│   ├── manifest.json               # Extension config: v4.2, permissions, content scripts for webapp, JIRA, Abuse Desk, and Partner Panel
+│   ├── manifest.json               # Extension config: v4.3, permissions, content scripts for webapp, JIRA, Abuse Desk, and Partner Panel
 │   ├── background.js               # Service worker: create-jira, create-jira-and-done (JIRA + markDone + comment), log-to-sheet, partner-panel-lookup, store/get report
 │   ├── content-webapp.js           # Content script on Report Generator: handles JIRA creation, Unsuspend (create + markDone + AD), partner panel lookup, and sheet logging
 │   ├── content-jira.js             # Content script on JIRA: fallback paste strategy (text first, images one by one)

@@ -668,6 +668,91 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<script>
+(function () {
+  var MIN_VERSION = '4.3.0';
+  var DISMISS_KEY = 'ext_banner_dismissed_for';
+
+  function compareVersions(a, b) {
+    var pa = a.split('.').map(Number);
+    var pb = b.split('.').map(Number);
+    for (var i = 0; i < 3; i++) {
+      if ((pa[i] || 0) > (pb[i] || 0)) return 1;
+      if ((pa[i] || 0) < (pb[i] || 0)) return -1;
+    }
+    return 0;
+  }
+
+  function createBanner(type, message) {
+    var dismissedFor = localStorage.getItem(DISMISS_KEY);
+    var dismissKey = type + '@' + MIN_VERSION;
+    if (dismissedFor === dismissKey) return;
+
+    var banner = document.createElement('div');
+    banner.className = 'ext-version-banner';
+    if (type === 'not-installed') banner.className += ' not-installed';
+    else if (type === 'detected') banner.className += ' detected';
+    banner.id = 'ext-version-banner';
+
+    var icon = type === 'detected'
+      ? '<svg class="ext-version-banner-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>'
+      : '<svg class="ext-version-banner-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+
+    banner.innerHTML =
+      icon +
+      '<span class="ext-version-banner-msg">' + message + '</span>' +
+      '<button class="ext-version-banner-dismiss" aria-label="Dismiss">' +
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+      '</button>';
+
+    document.body.insertBefore(banner, document.body.firstChild);
+
+    banner.querySelector('.ext-version-banner-dismiss').addEventListener('click', function () {
+      localStorage.setItem(DISMISS_KEY, dismissKey);
+      banner.style.transition = 'opacity 200ms ease, max-height 250ms ease';
+      banner.style.maxHeight = banner.offsetHeight + 'px';
+      requestAnimationFrame(function () {
+        banner.style.opacity = '0';
+        banner.style.maxHeight = '0';
+        banner.style.overflow = 'hidden';
+        banner.style.padding = '0';
+        banner.style.borderBottom = 'none';
+      });
+      setTimeout(function () { banner.remove(); }, 260);
+    });
+  }
+
+  var notInstalledTimer = setTimeout(function () {
+    createBanner(
+      'not-installed',
+      'Extension is not installed or is outdated. ' +
+      '<a href="https://github.com/zakititan/arf-bounce-report-generator" target="_blank" rel="noopener">' +
+      'Install the latest version</a> to create JIRA tickets directly from this page.'
+    );
+  }, 1500);
+
+  window.addEventListener('message', function (event) {
+    if (!event.data || event.data.type !== 'REPORT_GENERATOR_PONG') return;
+    clearTimeout(notInstalledTimer);
+    var installed = event.data.version;
+    if (compareVersions(installed, MIN_VERSION) < 0) {
+      createBanner(
+        'outdated',
+        'Your extension is outdated (v' + installed + '). ' +
+        '<a href="https://github.com/zakititan/arf-bounce-report-generator/raw/main/extension/releases/extension.zip" target="_blank" rel="noopener">' +
+        'Download v' + MIN_VERSION + '</a> and reload the extension in Chrome.'
+      );
+    } else {
+      createBanner(
+        'detected',
+        'Extension v' + installed + ' detected.'
+      );
+    }
+  });
+
+  window.postMessage({ type: 'REPORT_GENERATOR_PING' }, '*');
+})();
+</script>
 <script type="module" src="/scripts/app.js"></script>
 </body>
 </html>
