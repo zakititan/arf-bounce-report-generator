@@ -125,16 +125,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (d.sheetId) sheetConfig.sheetId = d.sheetId;
     if (d.appsScriptUrl) sheetConfig.appsScriptUrl = d.appsScriptUrl;
   }).catch(() => {});
-});
 
-// ── Message listener (outside DOMContentLoaded — modules are deferred) ─
-window.addEventListener('message', (e) => {
-  if (e.data && e.data.type === 'PARTNER_PANEL_RESULT') {
-    setPartnerPanelResult(e.data.data);
-  }
-  if (e.data && e.data.type === 'EXTENSION_VERSION') {
-    checkExtensionVersion(e.data.version);
-  }
+  window.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'PARTNER_PANEL_RESULT') {
+      setPartnerPanelResult(e.data.data);
+    }
+    if (e.data && e.data.type === 'EXTENSION_VERSION') {
+      checkExtensionVersion(e.data.version);
+    }
+  });
 });
 
 // ── Keyboard shortcuts (Ctrl/Cmd + Enter) ─────────────────────────────
