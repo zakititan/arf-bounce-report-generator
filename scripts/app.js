@@ -134,16 +134,22 @@ window.addEventListener('message', (e) => {
   }
 });
 
-// ── Extension version check (polls for global set by content script) ───
-(function pollExtensionVersion(attempts) {
-  if (window.__rgExtensionVersion) {
-    checkExtensionVersion(window.__rgExtensionVersion);
-  } else if (attempts < 20) {
-    setTimeout(function () { pollExtensionVersion(attempts + 1); }, 100);
-  } else {
-    showToast('Extension not detected — install it from GitHub', 'warning');
-  }
-})(0);
+// ── Extension version check (web app主动 asks content script) ──────────
+(function checkExtensionInstalled() {
+  window.addEventListener('message', function onVersion(e) {
+    if (e.data && e.data.type === 'EXTENSION_VERSION') {
+      window.removeEventListener('message', onVersion);
+      checkExtensionVersion(e.data.version);
+    }
+  });
+  window.postMessage({ type: 'REQUEST_EXTENSION_VERSION' }, '*');
+  setTimeout(function () {
+    if (!sessionStorage.getItem('extVersionChecked')) {
+      sessionStorage.setItem('extVersionChecked', '1');
+      showToast('Extension not detected \u2014 install it from GitHub', 'warning', true);
+    }
+  }, 3000);
+})();
 
 // ── Keyboard shortcuts (Ctrl/Cmd + Enter) ─────────────────────────────
 // Uses lastActivePanel (set on field focus) instead of a fragile DOM heuristic.

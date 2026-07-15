@@ -170,6 +170,11 @@
   }
 
   if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getManifest) {
-    window.__rgExtensionVersion = chrome.runtime.getManifest().version;
+    window.addEventListener('message', function (e) {
+      if (e.source !== window) return;
+      if (e.data && e.data.type === 'REQUEST_EXTENSION_VERSION') {
+        window.postMessage({ type: 'EXTENSION_VERSION', version: chrome.runtime.getManifest().version }, '*');
+      }
+    });
   }
 })();
