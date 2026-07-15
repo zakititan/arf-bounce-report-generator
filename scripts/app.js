@@ -132,10 +132,18 @@ window.addEventListener('message', (e) => {
   if (e.data && e.data.type === 'PARTNER_PANEL_RESULT') {
     setPartnerPanelResult(e.data.data);
   }
-  if (e.data && e.data.type === 'EXTENSION_VERSION') {
-    checkExtensionVersion(e.data.version);
-  }
 });
+
+// ── Extension version check (polls for global set by content script) ───
+(function pollExtensionVersion(attempts) {
+  if (window.__rgExtensionVersion) {
+    checkExtensionVersion(window.__rgExtensionVersion);
+  } else if (attempts < 20) {
+    setTimeout(function () { pollExtensionVersion(attempts + 1); }, 100);
+  } else {
+    showToast('Extension not detected — install it from GitHub', 'warning');
+  }
+})(0);
 
 // ── Keyboard shortcuts (Ctrl/Cmd + Enter) ─────────────────────────────
 // Uses lastActivePanel (set on field focus) instead of a fragile DOM heuristic.
@@ -152,7 +160,7 @@ function checkExtensionVersion(version) {
   if (!version || sessionStorage.getItem('extVersionChecked')) return;
   sessionStorage.setItem('extVersionChecked', '1');
   if (version !== LATEST_EXTENSION_VERSION) {
-    showToast('Extension v' + version + ' is outdated — please update to v' + LATEST_EXTENSION_VERSION, 'warning');
+    showToast('Extension v' + version + ' is outdated \u2014 please update to v' + LATEST_EXTENSION_VERSION, 'warning', true);
   } else {
     showToast('Extension v' + version + ' is up to date', 'info');
   }
