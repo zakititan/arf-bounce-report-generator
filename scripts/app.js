@@ -152,8 +152,6 @@ function checkExtensionVersion(version) {
   sessionStorage.setItem('extVersionChecked', '1');
   if (version !== LATEST_EXTENSION_VERSION) {
     showToast('Extension v' + version + ' is outdated — please update to v' + LATEST_EXTENSION_VERSION, 'warning');
-  } else {
-    showToast('Extension v' + version + ' is up to date', 'info');
   }
 }
 
