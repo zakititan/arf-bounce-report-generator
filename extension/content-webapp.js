@@ -170,6 +170,12 @@
   }
 
   if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getManifest) {
-    window.postMessage({ type: 'EXTENSION_VERSION', version: chrome.runtime.getManifest().version }, '*');
+    var version = chrome.runtime.getManifest().version;
+    function sendVersion() { window.postMessage({ type: 'EXTENSION_VERSION', version: version }, '*'); }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { setTimeout(sendVersion, 200); });
+    } else {
+      setTimeout(sendVersion, 200);
+    }
   }
 })();
