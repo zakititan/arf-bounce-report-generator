@@ -69,7 +69,7 @@
     <div class="tab-content">
 
     <!-- ARF PANEL -->
-    <div id="panel-arf" class="tab-panel active">
+    <div id="panel-arf" class="tab-panel active" role="tabpanel" aria-labelledby="arf-title" tabindex="0">
       <div class="panel-header">
         <h2 class="panel-title" id="arf-title">ARF Complaint Report</h2>
       </div>
@@ -117,7 +117,7 @@
             <input type="file" id="arf-screenshot-input" accept="image/*" multiple aria-label="Upload screenshots">
             <svg class="upload-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
             <span class="upload-zone-text">Click to upload or drag &amp; drop screenshots</span>
-            <span class="upload-zone-sub">PNG, JPG, GIF, WEBP - multiple files supported</span>
+            <span class="upload-zone-sub">PNG, JPG, GIF, WEBP - multiple files supported · Hover &amp; press Ctrl+V to paste</span>
           </div>
           <div class="screenshot-previews" id="arf-previews"></div>
           <span class="hint">Convert email file to .eml to capture this</span>
@@ -181,7 +181,7 @@
             <input type="file" id="arf-assurance-screenshot-input" accept="image/*" multiple aria-label="Upload assurance screenshots">
             <svg class="upload-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
             <span class="upload-zone-text">Click to upload or drag &amp; drop assurance screenshots</span>
-            <span class="upload-zone-sub">PNG, JPG, GIF, WEBP — multiple files supported</span>
+            <span class="upload-zone-sub">PNG, JPG, GIF, WEBP — multiple files supported · Hover &amp; press Ctrl+V to paste</span>
           </div>
           <div class="screenshot-previews" id="arf-assurance-previews"></div>
           <span class="hint">Screenshot proof of assurances (Mailchimp config, password reset, etc.)</span>
@@ -200,6 +200,7 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Generate ARF Report
         </button>
         <button class="btn btn-secondary" data-action="clear" data-panel="arf">Clear</button>
+        <span class="hint" style="margin-left:auto;align-self:center;white-space:nowrap;">Ctrl+Enter to generate</span>
       </div>
       <div class="panel-body" id="arf-output-section" style="display:none;">
         <hr>
@@ -220,7 +221,7 @@
     </div>
 
     <!-- BOUNCE PANEL -->
-    <div id="panel-bounce" class="tab-panel">
+    <div id="panel-bounce" class="tab-panel" role="tabpanel" aria-labelledby="bounce-title" tabindex="0">
       <div class="panel-header">
         <h2 class="panel-title" id="bounce-title">Bounce Report</h2>
       </div>
@@ -348,7 +349,7 @@
             <input type="file" id="bounce-assurance-screenshot-input" accept="image/*" multiple aria-label="Upload assurance screenshots">
             <svg class="upload-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
             <span class="upload-zone-text">Click to upload or drag &amp; drop assurance screenshots</span>
-            <span class="upload-zone-sub">PNG, JPG, GIF, WEBP — multiple files supported</span>
+            <span class="upload-zone-sub">PNG, JPG, GIF, WEBP — multiple files supported · Hover &amp; press Ctrl+V to paste</span>
           </div>
           <div class="screenshot-previews" id="bounce-assurance-previews"></div>
           <span class="hint">Screenshot proof of assurances (Mailchimp config, password reset, etc.)</span>
@@ -366,6 +367,7 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Generate Bounce Report
         </button>
         <button class="btn btn-secondary" data-action="clear" data-panel="bounce">Clear</button>
+        <span class="hint" style="margin-left:auto;align-self:center;white-space:nowrap;">Ctrl+Enter to generate</span>
       </div>
       <div class="panel-body" id="bounce-output-section" style="display:none;">
         <hr>
@@ -385,7 +387,7 @@
     </div>
 
     <!-- IP SPIKE PANEL -->
-    <div id="panel-ip-spike" class="tab-panel">
+    <div id="panel-ip-spike" class="tab-panel" role="tabpanel" aria-labelledby="ipspike-title" tabindex="0">
       <div class="panel-header">
         <h2 class="panel-title" id="ipspike-title">IP Spike Unsuspend</h2>
       </div>
@@ -451,7 +453,7 @@
     </div>
 
     <!-- SMTP SUSPENSION PANEL -->
-    <div id="panel-smtp-suspension" class="tab-panel">
+    <div id="panel-smtp-suspension" class="tab-panel" role="tabpanel" aria-labelledby="smtpsuspend-title" tabindex="0">
       <div class="panel-header">
         <h2 class="panel-title" id="smtpsuspend-title">SMTP Suspension</h2>
       </div>
@@ -532,7 +534,7 @@
           <label>Screenshots</label>
           <div class="upload-zone" id="smtpsuspend-upload-zone">
             <input type="file" id="smtpsuspend-screenshot-input" accept="image/*" multiple aria-label="Upload screenshots">
-            <p class="upload-zone-text">Drag &amp; drop or click to upload virus scan evidence</p>
+            <p class="upload-zone-text">Drag &amp; drop, click, or hover + Ctrl+V to paste virus scan evidence</p>
           </div>
           <div class="screenshot-previews" id="smtpsuspend-previews"></div>
         </div>
@@ -546,6 +548,7 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> Generate SMTP Suspension Report
         </button>
         <button class="btn btn-secondary" data-action="clear" data-panel="smtpsuspend">Clear</button>
+        <span class="hint" style="margin-left:auto;align-self:center;white-space:nowrap;">Ctrl+Enter to generate</span>
       </div>
       <div class="panel-body" id="smtpsuspend-output-section" style="display:none;">
         <hr>
@@ -707,7 +710,10 @@
 
     document.body.insertBefore(banner, document.body.firstChild);
 
-    banner.querySelector('.ext-version-banner-dismiss').addEventListener('click', function () {
+    var dismissed = false;
+    function dismiss() {
+      if (dismissed) return;
+      dismissed = true;
       localStorage.setItem(DISMISS_KEY, dismissKey);
       banner.style.transition = 'opacity 200ms ease, max-height 250ms ease';
       banner.style.maxHeight = banner.offsetHeight + 'px';
@@ -719,7 +725,11 @@
         banner.style.borderBottom = 'none';
       });
       setTimeout(function () { banner.remove(); }, 260);
-    });
+    }
+
+    banner.querySelector('.ext-version-banner-dismiss').addEventListener('click', dismiss);
+
+    if (type === 'detected') setTimeout(dismiss, 3000);
   }
 
   var notInstalledTimer = setTimeout(function () {

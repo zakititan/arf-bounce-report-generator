@@ -131,7 +131,9 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   display: flex; align-items: center; gap: var(--space-2);
 }
 .validation-banner-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 2px; }
-.validation-banner-list li { font-size: var(--text-xs); color: var(--color-error); padding-left: var(--space-3); }
+.validation-banner-list li { font-size: var(--text-xs); color: var(--color-error); padding-left: var(--space-3); cursor: pointer; }
+.validation-banner-list li:hover { text-decoration: underline; }
+.validation-banner-list li:focus-visible { outline: 2px solid var(--color-error); outline-offset: 2px; border-radius: 2px; }
 .validation-banner-list li::before { content: "\00B7 "; font-weight: 700; }
 
 /* Domain Lookup Widget */
@@ -292,6 +294,9 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   transition: opacity var(--transition-interactive); cursor: pointer; z-index: 2; border: none; padding: 0;
 }
 .screenshot-thumb:hover .remove-btn { opacity: 1; }
+@media (hover: none) {
+  .screenshot-thumb .remove-btn { opacity: 1; width: 22px; height: 22px; font-size: 12px; }
+}
 .screenshot-count { font-size: var(--text-xs); color: var(--color-text-muted); align-self: center; }
 
 /* Progress stepper */
@@ -616,6 +621,8 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
   transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1), opacity 300ms ease; z-index: 999;
 }
 .toast.show { transform: translateY(0); opacity: 1; }
+.toast a { color: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.toast a:hover { opacity: 0.85; }
 
 /* Responsive */
 @media (max-width: 600px) {
@@ -629,6 +636,7 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
   .stepper-connector { min-width: 3px; min-height: 14px; width: 3px; margin-left: 12.5px; }
   .output-bottom-actions { flex-direction: column; }
   .output-bottom-actions .btn { width: 100%; }
+  .toast { right: var(--space-4); left: var(--space-4); bottom: calc(var(--space-6) + 76px); text-align: center; }
 }
 
 /* ── Print ────────────────────────────────────────────────────── */
@@ -640,7 +648,8 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
   .output-bottom-actions { display: none !important; }
   .main-content { display: block; }
   .panel { break-inside: avoid; }
-  .tab-panel { display: block !important; }
+  .tab-panel { display: none !important; }
+  .tab-panel.active { display: block !important; }
   .output-area { border: 1px solid #ccc; }
 }
 
@@ -832,6 +841,12 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
   color: var(--color-primary);
   border-bottom-color: var(--color-primary);
   font-weight: 600;
+}
+
+.tab-btn[data-generated="true"]::after {
+  content: ''; display: inline-block; width: 6px; height: 6px;
+  border-radius: var(--radius-full); background: var(--color-success);
+  margin-left: 6px; vertical-align: middle;
 }
 
 /* ── Tab Content ─────────────────────────────────────────── */

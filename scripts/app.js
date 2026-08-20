@@ -35,7 +35,13 @@ export const parseCsvRow = _parseCsvRow;
 // ── Constants ─────────────────────────────────────────────────────────
 const MAX_SCREENSHOTS = 10;
 const LOOKUP_DEBOUNCE_MS = 1000;
+const DRAFT_DEBOUNCE_MS = 300;
+const BTN_PENDING_TIMEOUT_MS = 90000;
 const _lookupTimers = { arf: null, bounce: null };
+const _draftTimers = {};
+const _btnTimers = new WeakMap();
+// prefix (used in element ids/state) → tab data-tab / panel id suffix
+const TAB_DATA_TAB = { arf: 'arf', bounce: 'bounce', ipspike: 'ip-spike', smtpsuspend: 'smtp-suspension' };
 
 // ── State ─────────────────────────────────────────────────────────────
 const state = {
@@ -83,12 +89,14 @@ function initTabs() {
 
   const tabBtns   = document.querySelectorAll('.tab-btn');
   const tabPanels = document.querySelectorAll('.tab-panel');
+  const tabOrder  = Array.from(tabBtns);
 
   function activateTab(targetTab) {
     tabBtns.forEach(btn => {
       const isActive = btn.dataset.tab === targetTab;
       btn.classList.toggle('active', isActive);
       btn.setAttribute('aria-selected', isActive);
+      btn.setAttribute('tabindex', isActive ? '0' : '-1');
     });
 
     tabPanels.forEach(panel => {
@@ -96,15 +104,37 @@ function initTabs() {
       panel.classList.toggle('active', isActive);
     });
 
-    localStorage.setItem(STORAGE_KEY, targetTab);
+    try { localStorage.setItem(STORAGE_KEY, targetTab); } catch {}
   }
 
-  const savedTab = localStorage.getItem(STORAGE_KEY) ?? DEFAULT_TAB;
-  activateTab(savedTab);
+  // Roving focus: move focus + activate the tab at `index` (wraps around).
+  function focusTab(index) {
+    const btn = tabOrder[(index + tabOrder.length) % tabOrder.length];
+    activateTab(btn.dataset.tab);
+    btn.focus();
+  }
 
-  tabBtns.forEach(btn => {
+  let savedTab = null;
+  try { savedTab = localStorage.getItem(STORAGE_KEY); } catch {}
+  activateTab(savedTab ?? DEFAULT_TAB);
+
+  tabBtns.forEach((btn, index) => {
     btn.addEventListener('click', () => activateTab(btn.dataset.tab));
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight') focusTab(index + 1);
+      else if (e.key === 'ArrowLeft') focusTab(index - 1);
+      else if (e.key === 'Home') focusTab(0);
+      else if (e.key === 'End') focusTab(tabOrder.length - 1);
+      else return;
+      e.preventDefault();
+    });
   });
+}
+
+// ── Tab status dots ────────────────────────────────────────
+function setTabGenerated(prefix, value) {
+  const tabBtn = document.querySelector('.tab-btn[data-tab="' + TAB_DATA_TAB[prefix] + '"]');
+  if (tabBtn) tabBtn.setAttribute('data-generated', value);
 }
 
 // ── Init ──────────────────────────────────────────────────────────────
@@ -116,6 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initEventDelegation();
   initDragDrop();
   initPasteSupport();
+  initDraftPersistence();
   renderPreviews('arf', 'screenshots');
   renderPreviews('arf', 'assuranceScreenshots');
   renderPreviews('bounce', 'assuranceScreenshots');
@@ -129,6 +160,18 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.data && e.data.type === 'PARTNER_PANEL_RESULT') {
       setPartnerPanelResult(e.data.data);
     }
+  });
+
+  // Restore action buttons left in pending state when the extension reports
+  // the corresponding result (safety timeout per button also applies).
+  const PENDING_RESULT_ACTIONS = {
+    REPORT_GENERATOR_JIRA_RESULT: 'create-jira',
+    REPORT_GENERATOR_UNSUSPEND_RESULT: 'unsuspend',
+  };
+  window.addEventListener('message', (e) => {
+    const action = e.data && PENDING_RESULT_ACTIONS[e.data.type];
+    if (!action) return;
+    document.querySelectorAll('[data-action="' + action + '"][data-original-html]').forEach(resetBtn);
   });
 });
 
@@ -388,10 +431,10 @@ function initEventDelegation() {
         if (panel) lookupDomainImmediate(panel);
         break;
       case 'create-jira':
-        createTaeJira(panel);
+        createTaeJira(panel, target);
         break;
       case 'unsuspend':
-        unsuspendAccount(panel);
+        unsuspendAccount(panel, target);
         break;
       case 'log-sheet':
         if (panel) logToSheet(panel);
@@ -983,6 +1026,7 @@ function renderReportOutput(prefix, lines, fullCopyText, inlineScreenshots) {
     renderInlineScreenshots(outputArea, screenshots, label);
   });
   outputSection.style.display = 'block';
+  setTabGenerated(prefix, 'true');
   const logSheetBtn = outputSection.querySelector('.btn-log-sheet');
   if (logSheetBtn) logSheetBtn.disabled = false;
   outputSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -1081,6 +1125,8 @@ function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, af
   if (banner) banner.classList.remove('visible');
   clearFieldErrors(clearFieldErrorIds);
   updateStepper(prefix, '0');
+  setTabGenerated(prefix, 'false');
+  try { localStorage.removeItem(draftKey(prefix)); } catch {}
   if (afterClear) afterClear();
 }
 
@@ -1242,8 +1288,122 @@ function clearSMTPSuspend() {
   );
 }
 
+// ── Pending-button helpers (double-click protection) ──────────────────
+function setBtnPending(btn, label, timeoutMs = BTN_PENDING_TIMEOUT_MS) {
+  if (!btn || btn.disabled || btn.dataset.originalHtml !== undefined) return;
+  btn.dataset.originalHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 0.8s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> ' + label;
+  _btnTimers.set(btn, setTimeout(() => resetBtn(btn), timeoutMs));
+}
+
+function resetBtn(btn) {
+  if (!btn || btn.dataset.originalHtml === undefined) return;
+  clearTimeout(_btnTimers.get(btn));
+  _btnTimers.delete(btn);
+  btn.innerHTML = btn.dataset.originalHtml;
+  delete btn.dataset.originalHtml;
+  btn.disabled = false;
+}
+
+// ── Draft autosave/persistence (protects long-form work) ─────────────
+const DRAFT_FIELDS_SELECTOR = 'input[type=text], input[type=url], input[type=number], select, textarea';
+
+function draftKey(prefix) { return 'rg_draft_' + prefix; }
+
+function collectDraft(prefix) {
+  const panel = document.getElementById('panel-' + TAB_DATA_TAB[prefix]);
+  if (!panel) return null;
+  const body = panel.querySelector('.panel-body');
+  if (!body) return null;
+  const outputSection = document.getElementById(prefix + '-output-section');
+  const fields = {};
+  body.querySelectorAll(DRAFT_FIELDS_SELECTOR).forEach(el => {
+    if (!el.id || el.disabled || el.type === 'file' || el.type === 'password' || el.type === 'hidden') return;
+    if (outputSection && outputSection.contains(el)) return;
+    fields[el.id] = el.value;
+  });
+  const pwdAutoBtn = panel.querySelector('[data-value="Password changed"][data-panel="' + prefix + '"]');
+  const toggles = {};
+  const assurance = [];
+  panel.querySelectorAll('.assurance-btn.active').forEach(b => {
+    if (b === pwdAutoBtn) return;
+    assurance.push(b.getAttribute('data-value'));
+  });
+  if (assurance.length > 0) toggles.assurance = assurance;
+  const suboptions = [];
+  panel.querySelectorAll('.website-suboption-btn.active').forEach(b => suboptions.push(b.getAttribute('data-value')));
+  if (suboptions.length > 0) toggles.suboptions = suboptions;
+  return { fields, toggles };
+}
+
+function saveDraft(prefix) {
+  clearTimeout(_draftTimers[prefix]);
+  _draftTimers[prefix] = setTimeout(() => {
+    try {
+      const data = collectDraft(prefix);
+      if (!data) return;
+      const empty = Object.keys(data.fields).length === 0 && Object.keys(data.toggles).length === 0;
+      if (empty) localStorage.removeItem(draftKey(prefix));
+      else localStorage.setItem(draftKey(prefix), JSON.stringify(data));
+    } catch {}
+  }, DRAFT_DEBOUNCE_MS);
+}
+
+// Mirror toggleAssurance's activation state without stealing focus.
+function pressAssuranceBtn(btn, prefix) {
+  if (!btn || btn.classList.contains('active')) return;
+  btn.classList.add('active');
+  btn.setAttribute('aria-pressed', 'true');
+  if (btn.getAttribute('data-value') === 'Other') {
+    const f = document.getElementById(prefix + '-other-field');
+    if (f) f.classList.add('visible');
+  } else if (btn.getAttribute('data-value') === 'Contact Form' && prefix === 'bounce') {
+    const sub = document.getElementById('bounce-contact-form-suboptions');
+    if (sub) sub.classList.add('visible');
+  }
+}
+
+function restoreDraft(prefix) {
+  let data = null;
+  try { data = JSON.parse(localStorage.getItem(draftKey(prefix))); } catch { return; }
+  if (!data || typeof data !== 'object') return;
+  const panel = document.getElementById('panel-' + TAB_DATA_TAB[prefix]);
+  if (!panel) return;
+
+  Object.keys(data.fields || {}).forEach(id => {
+    const el = document.getElementById(id);
+    if (!el || el.disabled || el.type === 'password' || el.type === 'hidden') return;
+    if (el.tagName === 'SELECT' && !Array.from(el.options).some(o => o.value === data.fields[id])) return;
+    if (el.value === data.fields[id]) return;
+    el.value = data.fields[id];
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  (data.toggles?.assurance || []).forEach(val => {
+    // SMTP "Password changed" button is auto-managed by partner-panel checks
+    if (prefix === 'smtpsuspend' && val === 'Password changed') return;
+    pressAssuranceBtn(panel.querySelector('.assurance-btn[data-value="' + val + '"]'), prefix);
+  });
+  (data.toggles?.suboptions || []).forEach(val => {
+    const btn = panel.querySelector('.website-suboption-btn[data-value="' + val + '"]');
+    if (!btn || btn.classList.contains('active')) return;
+    btn.classList.add('active');
+    btn.setAttribute('aria-pressed', 'true');
+  });
+}
+
+function initDraftPersistence() {
+  ['arf', 'bounce', 'ipspike', 'smtpsuspend'].forEach(prefix => {
+    const panel = document.getElementById('panel-' + TAB_DATA_TAB[prefix]);
+    if (!panel) return;
+    ['input', 'change', 'click'].forEach(evt => panel.addEventListener(evt, () => saveDraft(prefix)));
+    restoreDraft(prefix);
+  });
+}
+
 // ── JIRA integration ──────────────────────────────────────────────
-function createTaeJira(prefix) {
+function createTaeJira(prefix, btn) {
   const outputSection = document.getElementById(prefix + '-output-section');
   if (!outputSection || outputSection.style.display === 'none') {
     showToast('Please generate the report first.', 'warning');
@@ -1267,6 +1427,7 @@ function createTaeJira(prefix) {
     .filter(el => !el.classList?.contains('copy-btn-wrap'))
     .map(el => el.outerHTML).join('') : '';
   const region = (prefix === 'arf' ? state.arf : state.bounce).region === 'eu' ? 'eu-central-1' : 'us-east-1';
+  setBtnPending(btn, 'Creating…');
   window.postMessage({
     type: 'REPORT_GENERATOR_JIRA',
     text: reportText,
@@ -1281,7 +1442,7 @@ function createTaeJira(prefix) {
   showToast('Creating JIRA ticket...', 'info');
 }
 
-function unsuspendAccount(prefix) {
+function unsuspendAccount(prefix, btn) {
   const outputSection = document.getElementById(prefix + '-output-section');
   if (outputSection && outputSection.style.display === 'none') {
     showToast('Please generate the report first.', 'warning');
@@ -1323,6 +1484,7 @@ function unsuspendAccount(prefix) {
     .filter(el => !el.classList?.contains('copy-btn-wrap'))
     .map(el => el.outerHTML).join('') : '';
 
+  setBtnPending(btn, 'Working…');
   window.postMessage({
     type: prefix === 'ipspike' ? 'REPORT_GENERATOR_UNSUSPEND_NO_JIRA' : 'REPORT_GENERATOR_UNSUSPEND',
     accounts: accounts,
@@ -1347,6 +1509,7 @@ function logToSheet(prefix) {
     showToast('Please generate the report first.', 'warning');
     return;
   }
+  const btn = document.querySelector('[data-action="log-sheet"][data-panel="' + prefix + '"]');
 
   const account   = document.getElementById(prefix + '-account')?.value.trim() || '';
   const zdLink    = document.getElementById(prefix + '-zd-link')?.value.trim() || '';
@@ -1368,6 +1531,7 @@ function logToSheet(prefix) {
     if (e.data && e.data.type === 'REPORT_GENERATOR_LOG_SHEET_RESULT') {
       window.removeEventListener('message', listener);
       clearTimeout(timeout);
+      resetBtn(btn);
       if (e.data.success) {
         showToast('Logged to Sheet ✓', 'success');
       } else {
@@ -1378,6 +1542,7 @@ function logToSheet(prefix) {
   window.addEventListener('message', listener);
   const timeout = setTimeout(() => window.removeEventListener('message', listener), 15000);
 
+  setBtnPending(btn, 'Logging…', 15000);
   window.postMessage({
     type: 'REPORT_GENERATOR_LOG_SHEET',
     date,

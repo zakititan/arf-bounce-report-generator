@@ -5,14 +5,16 @@
 
 // ── Toast ─────────────────────────────────────────────────────────────
 // role=status + aria-live=polite ensures screen readers announce toasts.
+// opts.html allows HTML content (default textContent); opts.durationMs overrides hide delay.
 let _toastTimer = null;
-export function showToast(msg, type) {
+export function showToast(msg, type, { html = false, durationMs = 2500 } = {}) {
   const t = document.getElementById('toast');
-  t.textContent = msg;
+  if (html) t.innerHTML = msg;
+  else t.textContent = msg;
   t.setAttribute('data-type', type || 'info');
   t.classList.add('show');
   clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+  _toastTimer = setTimeout(() => t.classList.remove('show'), durationMs);
 }
 
 // ── Theme toggle ──────────────────────────────────────────────────────
@@ -59,9 +61,27 @@ export function showValidationErrors(prefix, errors) {
     return false;
   }
   list.innerHTML = '';
+  const focusField = id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.focus({ preventScroll: true });
+  };
   errors.forEach(e => {
     const li = document.createElement('li');
     li.textContent = e.label;
+    if (e.id) {
+      li.dataset.targetId = e.id;
+      li.setAttribute('role', 'button');
+      li.tabIndex = 0;
+      li.addEventListener('click', () => focusField(e.id));
+      li.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter' || ev.key === ' ') {
+          ev.preventDefault();
+          focusField(e.id);
+        }
+      });
+    }
     list.appendChild(li);
   });
   banner.classList.add('visible');

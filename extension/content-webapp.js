@@ -38,12 +38,14 @@
         { action: 'create-jira', data: { text: text, html: html, panel: panel, account: account, zdLink: zdLink } },
         function (response) {
           if (chrome.runtime.lastError) {
+            window.postMessage({ type: 'REPORT_GENERATOR_JIRA_RESULT', success: false }, '*');
             fallbackToStorage(text, html, panel, account);
             return;
           }
 
           if (response && response.success === true) {
             var jiraUrl = response.issueUrl;
+            window.postMessage({ type: 'REPORT_GENERATOR_JIRA_RESULT', success: true, issueKey: response.issueKey, url: jiraUrl }, '*');
             var msg = '<span>JIRA <a href="' + jiraUrl + '" target="_blank" style="color:#5b9bd5;text-decoration:underline;">' + response.issueKey + '</a> created</span>';
             if (response.imagesUploaded < response.imagesTotal) {
               msg += ' — ' + response.imagesUploaded + '/' + response.imagesTotal + ' images attached';
@@ -52,6 +54,7 @@
 
             chrome.storage.local.set({ lastJiraUrl: jiraUrl });
           } else {
+            window.postMessage({ type: 'REPORT_GENERATOR_JIRA_RESULT', success: false }, '*');
             fallbackToStorage(text, html, panel, account);
           }
         }
@@ -73,6 +76,7 @@
         function (response) {
           if (chrome.runtime.lastError || !response || !response.success) {
             var err = (response && response.error) || (chrome.runtime.lastError && chrome.runtime.lastError.message) || 'JIRA creation failed';
+            window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', success: false, error: err }, '*');
             showToast('Failed to create JIRA: ' + err);
             return;
           }
@@ -84,6 +88,7 @@
                 encodeURIComponent(accounts[i]) + '&region=' + unsuspendData.region;
               window.open(abuseDeskUrl, '_blank');
             }
+            window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', success: true, issueKey: response.issueKey, url: jiraUrl }, '*');
             var msg = '<span>JIRA <a href="' + jiraUrl + '" target="_blank" style="color:#5b9bd5;text-decoration:underline;">' + response.issueKey + '</a> created — opening ' + accounts.length + ' Abuse Desk tab(s)</span>';
             showToast(msg);
           });
@@ -96,11 +101,16 @@
       var noJiraAccounts = noJiraData.accounts || [noJiraData.account];
 
       chrome.storage.local.set({ unsuspendReason: noJiraData.reason || 'Password Changed' }, function () {
+        if (chrome.runtime.lastError) {
+          window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', success: false, error: chrome.runtime.lastError.message }, '*');
+          return;
+        }
         for (var n = 0; n < noJiraAccounts.length; n++) {
           var adUrl = 'https://abusedesk.ops.titan.email/blocked_users.html?entity=' +
             encodeURIComponent(noJiraAccounts[n]) + '&region=' + noJiraData.region;
           window.open(adUrl, '_blank');
         }
+        window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', success: true }, '*');
         showToast('Opening ' + noJiraAccounts.length + ' Abuse Desk tab(s)…');
       });
     }
