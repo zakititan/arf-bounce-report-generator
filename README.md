@@ -447,7 +447,7 @@ APPS_SCRIPT_URL=https://script.google.com/macros/s/.../exec  # optional — for 
 - **`AUTH_SECRET`** and **`APP_PASSWORD`** are never committed to the repo — always set via environment variables
 - **Hostname validation** rejects IPv4/IPv6 addresses, localhost names, `.localhost`/`.local`/`.internal` TLDs (SSRF prevention), consecutive dots, hyphen-leading labels, and email local-parts
 - **Extension host permissions** — declares `host_permissions` for `https://jira.directi.com/*` and `https://admin.titan.email/*` to enable authenticated REST API calls and Partner Panel automation using browser session cookies
-- **Narrow content-script injection** — the webapp content script matches only the production deployment domain (wildcard `*.vercel.app` injection removed), so it never runs on unrelated Vercel sites
+- **Content-script injection scope** — the webapp content script matches the production domain, Vercel preview deployments, and `localhost:3000` (for `vercel dev`) so the version check works everywhere the tool actually runs
 - **One-shot unsuspend reason** — the Abuse Desk automation reason is timestamped and expires after 90 seconds, preventing stale stored state from triggering unintended unsuspensions on manual page visits
 - **Session expiry handling** — frontend API calls redirect to `login.html` on HTTP 401
 

@@ -11,7 +11,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://arf-bounce-report-generator.vercel.app/*"],
+      "matches": ["https://arf-bounce-report-generator.vercel.app/*", "https://*.vercel.app/*", "http://localhost:3000/*"],
       "js": ["content-webapp.js"]
     },
     {
