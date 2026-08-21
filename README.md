@@ -115,6 +115,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ### Unsuspend (Abuse Desk Integration)
 - **"Create TAE JIRA and Unsuspend" button** — creates JIRA → transitions to Done → adds "Unsuspended" comment → opens Abuse Desk
 - **Multi-account unsuspend** — if "Other Blocked Email in Domain?" is set to Yes, the blocked accounts from the "Blocked Email Account(s)" field are also unsuspended; one JIRA is created listing all accounts, and one Abuse Desk tab is opened per account; tabs are opened by the background service worker via `chrome.tabs.create` so popup blockers can't swallow them
+- **Auto-closing tabs** — Abuse Desk tabs opened by the unsuspension flow clean up after themselves: each tab reports completion to the service worker, which closes it ~3s later (8s on failure so error toasts stay readable); manually opened Abuse Desk tabs are never touched
 - **One-shot unsuspend reason** — the stored reason is timestamped `{reason, ts}` and only valid for 90 seconds, then ignored — stale reasons can never auto-trigger unsuspension on later manual visits to Abuse Desk pages
 - **Abuse Desk automation** — the extension's content script on `abusedesk.ops.titan.email` automatically:
   1. Waits for the **Unblock** button (element polling, no fixed delays)
@@ -273,7 +274,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 │   ├── background.js               # Module service worker: create-jira (+optional markDone), log-to-sheet with verified response, partner-panel-lookup (closes its tab, analyzes raw events), open-abusedesk-tabs
 │   ├── content-webapp.js           # Content script on Report Generator: handles JIRA creation, Unsuspend (create + markDone + AD via background), partner panel lookup, sheet logging with cellUrl result
 │   ├── content-jira.js             # Content script on JIRA: fallback paste strategy (text first, images one by one)
-│   ├── content-abusedesk.js        # Content script on Abuse Desk: freshness-checked reason (90s TTL), element-polling automation, save verification
+│   ├── content-abusedesk.js        # Content script on Abuse Desk: freshness-checked reason (90s TTL), element-polling automation, save verification, auto-close report
 │   ├── content-partner-panel.js    # Content script on admin.titan.email: automates account lookup, order view, account history scraping; login-expiry detection; sends raw events
 │   ├── releases/extension.zip      # Packaged extension for easy distribution
 │   └── icons/                      # Extension icons (16/48/128px)
