@@ -2,6 +2,7 @@ import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueB
 
 const EXPIRY_MS = 10 * 60 * 1000;
 let _partnerPanelPending = null;
+const _openAdTabIds = new Set();
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -138,7 +139,8 @@ async function openAbuseDeskTabs(accounts, region) {
   for (const account of accounts) {
     const url = 'https://abusedesk.ops.titan.email/blocked_users.html?entity=' +
       encodeURIComponent(account) + '&region=' + region;
-    await new Promise(resolve => chrome.tabs.create({ url, active: false }, resolve));
+    const tab = await new Promise(resolve => chrome.tabs.create({ url, active: false }, resolve));
+    _openAdTabIds.add(tab.id);
     opened++;
   }
   return opened;
@@ -232,6 +234,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'partner-panel-lookup') {
     handlePartnerPanelLookup(message.data, sendResponse);
     return true;
+  }
+
+  if (message.action === 'ad-tab-done') {
+    const tid = sender && sender.tab && sender.tab.id;
+    if (typeof tid === 'number' && _openAdTabIds.has(tid)) {
+      _openAdTabIds.delete(tid);
+      // Give the user time to read the on-page toast: short on success, longer on failure.
+      const delay = message.data && message.data.failed ? 8000 : 3000;
+      setTimeout(() => { chrome.tabs.remove(tid).catch(() => {}); }, delay);
+    }
+    return;
   }
 
   if (message.action === 'partner-panel-result') {

@@ -38,6 +38,14 @@
     el.click();
   }
 
+  // Tell the service worker this tab's automation run ended. The worker only
+  // closes tabs it opened itself (tracked by tab id); manual visits are ignored.
+  function reportDone(failed) {
+    try {
+      chrome.runtime.sendMessage({ action: 'ad-tab-done', data: { failed: !!failed } });
+    } catch (e) { /* extension context gone — nothing to do */ }
+  }
+
   async function run() {
     chrome.storage.local.get(['unsuspendReason'], async function (result) {
       var rec = result.unsuspendReason;
@@ -60,12 +68,12 @@
         }
         return el || null;
       }, 10000);
-      if (!unblockBtn) { log('Unblock button not found'); showToast('Unblock button not found for ' + account); return; }
+      if (!unblockBtn) { log('Unblock button not found'); showToast('Unblock button not found for ' + account); reportDone(true); return; }
       log('Clicking Unblock for ' + account);
       simulateClick(unblockBtn);
 
       var textarea = await waitForElement(function () { return document.querySelector('textarea'); }, 5000);
-      if (!textarea) { log('Textarea not found'); showToast('Textarea not found for ' + account); return; }
+      if (!textarea) { log('Textarea not found'); showToast('Textarea not found for ' + account); reportDone(true); return; }
       log('Pasting reason for ' + account);
       textarea.focus();
       textarea.value = reason;
@@ -76,7 +84,7 @@
         var el = document.getElementById('submitBtn');
         return (el && el.offsetParent !== null) ? el : null;
       }, 5000);
-      if (!saveBtn) { log('submitBtn not found'); showToast('Save button not found for ' + account); return; }
+      if (!saveBtn) { log('submitBtn not found'); showToast('Save button not found for ' + account); reportDone(true); return; }
       log('Clicking Save for ' + account);
       simulateClick(saveBtn);
 
@@ -91,6 +99,7 @@
         showToast('Unsuspend completed for ' + account);
       }
       log('Automation complete for ' + account);
+      reportDone(!!failed);
     });
   }
 
