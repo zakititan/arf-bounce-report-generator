@@ -235,8 +235,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === 'partner-panel-result') {
-    if (_partnerPanelPending && message.data &&
-        message.data.requestId === _partnerPanelPending.requestId) {
+    const resultReqId = message.requestId !== undefined
+      ? message.requestId
+      : (message.data && message.data.requestId);
+    if (_partnerPanelPending && resultReqId === _partnerPanelPending.requestId) {
       _partnerPanelPending.resolve(message.data);
       _partnerPanelPending = null;
     }
