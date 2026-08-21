@@ -674,7 +674,7 @@
 
 <script>
 (function () {
-  var MIN_VERSION = '4.3.0';
+  var MIN_VERSION = '4.4.0';
   var DISMISS_KEY = 'ext_banner_dismissed_for';
 
   function compareVersions(a, b) {
@@ -691,6 +691,9 @@
     var dismissedFor = localStorage.getItem(DISMISS_KEY);
     var dismissKey = type + '@' + MIN_VERSION;
     if (dismissedFor === dismissKey) return;
+
+    var existing = document.getElementById('ext-version-banner');
+    if (existing) existing.remove();
 
     var banner = document.createElement('div');
     banner.className = 'ext-version-banner';

@@ -173,6 +173,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const action = e.data && PENDING_RESULT_ACTIONS[e.data.type];
     if (!action) return;
     document.querySelectorAll('[data-action="' + action + '"][data-original-html]').forEach(resetBtn);
+    const status = e.data.unsuspendStatus;
+    if (status && status.done === false) {
+      showToast('JIRA created but could not be marked Done: ' + (status.error || 'unknown error'), 'warning', { durationMs: 6000 });
+    } else if (status && status.done && status.commented === false) {
+      showToast('JIRA marked Done, but the "Unsuspended" comment failed: ' + (status.error || 'unknown error'), 'warning', { durationMs: 6000 });
+    }
   });
 });
 
@@ -1581,9 +1587,15 @@ function logToSheet(prefix) {
       clearTimeout(timeout);
       resetBtn(btn);
       if (e.data.success) {
-        showToast('Logged to Sheet ✓', 'success');
+        if (e.data.cellUrl) {
+          showToast('Logged to Sheet ✓ <a href="' + e.data.cellUrl + '" target="_blank" rel="noopener">View row</a>', 'success', { html: true, durationMs: 8000 });
+        } else if (e.data.unverified) {
+          showToast('Sent to Sheet (delivery unverified)', 'success');
+        } else {
+          showToast('Logged to Sheet ✓', 'success');
+        }
       } else {
-        showToast('Sheet logging failed — check console', 'error');
+        showToast('Sheet logging failed' + (e.data.error ? ' — ' + e.data.error : ''), 'error', { durationMs: 5000 });
       }
     }
   };

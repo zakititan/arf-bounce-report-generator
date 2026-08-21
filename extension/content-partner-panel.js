@@ -143,52 +143,17 @@
     return events;
   }
 
-  function analyzeHistory(events) {
-    var suspensionIdx = -1;
-    var passwordResetAfterSuspension = false;
-    var suspensionDate = 'N/A';
-    var lastPasswordResetDate = 'N/A';
-
-    for (var i = 0; i < events.length; i++) {
-      var action = events[i].action.toLowerCase();
-      if (action.indexOf('suspens') !== -1 && action.indexOf('un') === -1 && action.indexOf('removed') === -1) {
-        suspensionIdx = i;
-        suspensionDate = events[i].date || 'N/A';
-        break;
-      }
-    }
-
-    if (suspensionIdx > 0) {
-      for (var j = 0; j < suspensionIdx; j++) {
-        var jAction = events[j].action.toLowerCase();
-        if (jAction.indexOf('password reset') !== -1 || jAction.indexOf('password changed') !== -1) {
-          passwordResetAfterSuspension = true;
-          break;
-        }
-      }
-    }
-
-    for (var k = 0; k < events.length; k++) {
-      var kAction = events[k].action.toLowerCase();
-      if (kAction.indexOf('password reset') !== -1 || kAction.indexOf('password changed') !== -1) {
-        lastPasswordResetDate = events[k].date || 'N/A';
-        break;
-      }
-    }
-
-    return {
-      passwordChanged: passwordResetAfterSuspension,
-      suspensionDate: suspensionDate,
-      lastPasswordResetDate: lastPasswordResetDate,
-      events: events
-    };
-  }
-
-  async function runPartnerPanelLookup(account) {
+  async function runPartnerPanelLookup(account, currentRequestId) {
     try {
+      var pwField = document.querySelector('input[type="password"]');
+      if (pwField || /login/i.test(location.pathname)) {
+        chrome.runtime.sendMessage({ action: 'partner-panel-result', requestId: currentRequestId, data: { success: false, error: 'Partner Panel session expired — log in to admin.titan.email and retry' } });
+        return;
+      }
+
       var input = document.querySelector('input[name="domainName"], input.dashboard-input, input[type="text"]');
       if (!input) {
-        chrome.runtime.sendMessage({ action: 'partner-panel-result', data: { success: false, error: 'Input field not found' } });
+        chrome.runtime.sendMessage({ action: 'partner-panel-result', requestId: currentRequestId, data: { success: false, error: 'Input field not found' } });
         return;
       }
 
@@ -199,7 +164,7 @@
 
       var getInfoBtn = document.querySelector('button[name="btndashBoard"], button.dashboard-button, button.button-primary');
       if (!getInfoBtn) {
-        chrome.runtime.sendMessage({ action: 'partner-panel-result', data: { success: false, error: 'Get Info button not found' } });
+        chrome.runtime.sendMessage({ action: 'partner-panel-result', requestId: currentRequestId, data: { success: false, error: 'Get Info button not found' } });
         return;
       }
       getInfoBtn.click();
@@ -208,7 +173,7 @@
       if (!found) {
         var errorMsg = document.querySelector('.error, .dashboard-error');
         var errText = errorMsg ? errorMsg.textContent.trim() : '';
-        chrome.runtime.sendMessage({ action: 'partner-panel-result', data: { success: false, error: errText || 'No orders found for this account' } });
+        chrome.runtime.sendMessage({ action: 'partner-panel-result', requestId: currentRequestId, data: { success: false, error: errText || 'No orders found for this account' } });
         return;
       }
 
@@ -243,7 +208,7 @@
       }
 
       if (!activeViewBtn) {
-        chrome.runtime.sendMessage({ action: 'partner-panel-result', data: { success: false, error: 'No View button found' } });
+        chrome.runtime.sendMessage({ action: 'partner-panel-result', requestId: currentRequestId, data: { success: false, error: 'No View button found' } });
         return;
       }
 
@@ -261,7 +226,7 @@
       }
 
       if (!viewHistoryBtn) {
-        chrome.runtime.sendMessage({ action: 'partner-panel-result', data: { success: false, error: 'View Account History button not found' } });
+        chrome.runtime.sendMessage({ action: 'partner-panel-result', requestId: currentRequestId, data: { success: false, error: 'View Account History button not found' } });
         return;
       }
 
@@ -280,35 +245,28 @@
       });
 
       if (!historyReady) {
-        chrome.runtime.sendMessage({ action: 'partner-panel-result', data: { success: false, error: 'Action History rows did not load' } });
+        chrome.runtime.sendMessage({ action: 'partner-panel-result', requestId: currentRequestId, data: { success: false, error: 'Action History rows did not load' } });
         return;
       }
 
       await sleep(500);
       var events = parseAccountHistory();
-      var analysis = analyzeHistory(events);
 
       chrome.runtime.sendMessage({
         action: 'partner-panel-result',
-        data: {
-          success: true,
-          account: account,
-          passwordChanged: analysis.passwordChanged,
-          suspensionDate: analysis.suspensionDate,
-          lastPasswordResetDate: analysis.lastPasswordResetDate,
-          events: events
-        }
+        requestId: currentRequestId,
+        data: { success: true, account: account, events: events }
       });
 
     } catch (e) {
-      chrome.runtime.sendMessage({ action: 'partner-panel-result', data: { success: false, error: e.message } });
+      chrome.runtime.sendMessage({ action: 'partner-panel-result', requestId: currentRequestId, data: { success: false, error: e.message } });
     }
   }
 
   chrome.runtime.onMessage.addListener(function(message, sender, sendResponse) {
     if (message.action === 'run-partner-panel-lookup') {
       sendResponse({ received: true });
-      runPartnerPanelLookup(message.account);
+      runPartnerPanelLookup(message.account, message.requestId);
       return true;
     }
   });

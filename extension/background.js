@@ -1,6 +1,7 @@
+import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh } from './rg-lib.js';
+
 const EXPIRY_MS = 10 * 60 * 1000;
-const DEFAULT_SHEET_ID = '10YgqLp3L66K27jx2KNumtfwe5sKl1VjFzXwQX5pGE3k';
-var _partnerPanelResolver = null;
+let _partnerPanelPending = null;
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -21,47 +22,71 @@ function waitForTabLoad(tabId, maxMs) {
 }
 
 async function openSheetAndLog(rowData) {
+  const url = rowData.appsScriptUrl;
+  if (!url) {
+    console.warn('[Report→Sheet] No appsScriptUrl provided');
+    return { success: false, error: 'No appsScriptUrl provided' };
+  }
+
+  const payload = JSON.stringify({
+    date: rowData.date || '',
+    zdTicketId: rowData.zdLink || '',
+    jiraLink: rowData.jiraLink || '',
+    domainEmail: rowData.domainEmail || '',
+    type: rowData.type || '',
+    reason: rowData.reason || '',
+  });
+
+  let response;
   try {
-    var url = rowData.appsScriptUrl;
-    if (!url) {
-      console.warn('[Report→Sheet] No appsScriptUrl provided');
-      return false;
-    }
     console.log('[Report→Sheet] Posting to Apps Script', url);
-    var response = await fetch(url, {
+    response = await fetch(url, {
       method: 'POST',
-      mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        date: rowData.date || '',
-        zdTicketId: rowData.zdLink || '',
-        jiraLink: rowData.jiraLink || '',
-        domainEmail: rowData.domainEmail || '',
-        type: rowData.type || '',
-        reason: rowData.reason || '',
-      })
+      body: payload
     });
-    console.log('[Report→Sheet] Sent (opaque response)');
-    return true;
   } catch (e) {
     console.warn('[Report→Sheet] Exception:', e.message);
-    return false;
+    try {
+      await fetch(url, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload
+      });
+      return { success: true, unverified: true };
+    } catch (e2) {
+      return { success: false, error: e2.message };
+    }
   }
+
+  let parsed = null;
+  try {
+    parsed = await response.json();
+  } catch (e) {
+    parsed = null;
+  }
+  if (parsed && parsed.status === 'success') {
+    return { success: true, row: parsed.row, cellUrl: parsed.cellUrl };
+  }
+  return { success: false, error: (parsed && parsed.message) || 'Apps Script error' };
 }
 
 async function handlePartnerPanelLookup(data, sendResponse) {
+  let tab = null;
   try {
-    var account = data.account;
+    const account = data.account;
     if (!account) {
       sendResponse({ success: false, error: 'No account provided' });
       return;
     }
+    const requestId = data.requestId;
 
-    var tab = await new Promise(function(resolve) {
+    tab = await new Promise(function(resolve) {
       chrome.tabs.create({ url: 'https://admin.titan.email', active: false }, resolve);
     });
 
-    var loaded = await waitForTabLoad(tab.id, 15000);
+    const loaded = await waitForTabLoad(tab.id, 15000);
     if (!loaded) {
       sendResponse({ success: false, error: 'Tab failed to load' });
       return;
@@ -69,28 +94,54 @@ async function handlePartnerPanelLookup(data, sendResponse) {
 
     await sleep(3000);
 
-    var result = await new Promise(function(resolve) {
-      _partnerPanelResolver = resolve;
-      chrome.tabs.sendMessage(tab.id, { action: 'run-partner-panel-lookup', account: account }, function(r) {
+    const result = await new Promise(function(resolve) {
+      _partnerPanelPending = { requestId, resolve };
+      chrome.tabs.sendMessage(tab.id, { action: 'run-partner-panel-lookup', account, requestId }, function(r) {
         if (chrome.runtime.lastError) {
           console.warn('[PartnerPanel] sendMessage error:', chrome.runtime.lastError.message);
-          _partnerPanelResolver = null;
+          _partnerPanelPending = null;
           resolve({ success: false, error: chrome.runtime.lastError.message });
         }
       });
       setTimeout(function() {
-        if (_partnerPanelResolver) {
-          _partnerPanelResolver = null;
+        if (_partnerPanelPending && _partnerPanelPending.requestId === requestId) {
+          _partnerPanelPending = null;
           resolve({ success: false, error: 'Timeout waiting for partner panel result' });
         }
       }, 60000);
     });
 
-    sendResponse(result);
+    if (result && result.success && Array.isArray(result.events)) {
+      const history = analyzeHistory(result.events);
+      sendResponse({
+        success: true,
+        account: result.account,
+        passwordChanged: history.passwordChanged,
+        suspensionDate: history.suspensionDate,
+        lastPasswordResetDate: history.lastPasswordResetDate
+      });
+    } else {
+      sendResponse(result);
+    }
   } catch (e) {
     console.warn('[PartnerPanel] Exception:', e.message);
     sendResponse({ success: false, error: e.message });
+  } finally {
+    if (tab && tab.id != null) {
+      chrome.tabs.remove(tab.id).catch(() => {});
+    }
   }
+}
+
+async function openAbuseDeskTabs(accounts, region) {
+  let opened = 0;
+  for (const account of accounts) {
+    const url = 'https://abusedesk.ops.titan.email/blocked_users.html?entity=' +
+      encodeURIComponent(account) + '&region=' + region;
+    await new Promise(resolve => chrome.tabs.create({ url, active: false }, resolve));
+    opened++;
+  }
+  return opened;
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -129,19 +180,52 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === 'create-jira') {
-    handleCreateJira(message.data, sendResponse);
+    handleCreateJira(message.data, false)
+      .then(sendResponse)
+      .catch(e => sendResponse({ success: false, error: e.message, status: 0 }));
     return true;
   }
 
   if (message.action === 'log-to-sheet') {
     openSheetAndLog(message.data)
-      .then(success => sendResponse({ success }))
+      .then(result => sendResponse(result))
       .catch(() => sendResponse({ success: false }));
     return true;
   }
 
   if (message.action === 'create-jira-and-done') {
-    handleCreateJiraAndDone(message.data, sendResponse);
+    handleCreateJira(message.data, true)
+      .then(async result => {
+        if (result.success === true) {
+          chrome.storage.local.set({
+            unsuspendReason: { reason: result.issueUrl, ts: Date.now() }
+          });
+          const accounts = String(message.data.account || '')
+            .split(', ')
+            .map(s => s.trim())
+            .filter(Boolean);
+          try {
+            result.opened = await openAbuseDeskTabs(accounts, message.data.region);
+          } catch (e) {
+            console.warn('[Report→JIRA] opening Abuse Desk tabs failed:', e.message);
+          }
+        }
+        sendResponse(result);
+      })
+      .catch(e => sendResponse({ success: false, error: e.message, status: 0 }));
+    return true;
+  }
+
+  if (message.action === 'open-abusedesk-tabs') {
+    const d = message.data || {};
+    if (!Array.isArray(d.accounts) || d.accounts.length === 0 ||
+        !d.accounts.every(a => typeof a === 'string' && a.trim())) {
+      sendResponse({ success: false, error: 'Invalid accounts array' });
+      return true;
+    }
+    openAbuseDeskTabs(d.accounts, typeof d.region === 'string' ? d.region : '')
+      .then(opened => sendResponse({ success: true, opened }))
+      .catch(e => sendResponse({ success: false, error: e.message }));
     return true;
   }
 
@@ -151,34 +235,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === 'partner-panel-result') {
-    if (_partnerPanelResolver) {
-      _partnerPanelResolver(message.data);
-      _partnerPanelResolver = null;
+    if (_partnerPanelPending && message.data &&
+        message.data.requestId === _partnerPanelPending.requestId) {
+      _partnerPanelPending.resolve(message.data);
+      _partnerPanelPending = null;
     }
     return;
   }
 });
 
-async function handleCreateJira(data, sendResponse) {
+async function handleCreateJira(data, andDone) {
   try {
     const { text, html, panel, account, zdLink } = data;
-    const typeLabel = panel === 'arf' ? 'ARF' : panel === 'smtpsuspend' ? 'SMTP Compromised' : 'Bounce';
-    const label = panel === 'arf' ? 'ARF_unsuspension' : panel === 'smtpsuspend' ? 'SMTP_unsuspension' : 'Bounce_unsuspension';
-    const summary = `${typeLabel} unsuspension request: ${account}`;
 
-    const images = extractImages(html);
-
-    const issueBody = {
-      fields: {
-        project: { id: "12900" },
-        issuetype: { id: "10902" },
-        priority: { id: "10000" },
-        summary,
-        description: text,
-        labels: [label],
-        ...(zdLink ? { customfield_12211: zdLink } : {})
-      }
-    };
+    const issueBody = buildJiraIssueBody({ text, panel, account, zdLink });
+    const images = extractImagesRegex(html);
 
     const issueResponse = await fetch('https://jira.directi.com/rest/api/2/issue', {
       method: 'POST',
@@ -189,8 +260,7 @@ async function handleCreateJira(data, sendResponse) {
 
     if (!issueResponse.ok) {
       const errorText = await issueResponse.text();
-      sendResponse({ success: false, error: errorText, status: issueResponse.status });
-      return;
+      return { success: false, error: errorText, status: issueResponse.status };
     }
 
     const issueData = await issueResponse.json();
@@ -221,161 +291,61 @@ async function handleCreateJira(data, sendResponse) {
       }
     }
 
-    sendResponse({
+    const result = {
       success: true,
       issueKey,
       issueUrl,
       imagesUploaded,
       imagesTotal: images.length
-    });
-  } catch (error) {
-    sendResponse({ success: false, error: error.message, status: 0 });
-  }
-}
-
-async function handleCreateJiraAndDone(data, sendResponse) {
-  try {
-    const { text, html, panel, account, zdLink } = data;
-    const typeLabel = panel === 'arf' ? 'ARF' : panel === 'smtpsuspend' ? 'SMTP Compromised' : 'Bounce';
-    const label = panel === 'arf' ? 'ARF_unsuspension' : panel === 'smtpsuspend' ? 'SMTP_unsuspension' : 'Bounce_unsuspension';
-    const summary = `${typeLabel} unsuspension request: ${account}`;
-
-    const images = extractImages(html);
-
-    const issueBody = {
-      fields: {
-        project: { id: "12900" },
-        issuetype: { id: "10902" },
-        priority: { id: "10000" },
-        summary,
-        description: text,
-        labels: [label],
-        ...(zdLink ? { customfield_12211: zdLink } : {})
-      }
     };
 
-    const issueResponse = await fetch('https://jira.directi.com/rest/api/2/issue', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(issueBody)
-    });
-
-    if (!issueResponse.ok) {
-      const errorText = await issueResponse.text();
-      sendResponse({ success: false, error: errorText, status: issueResponse.status });
-      return;
+    if (andDone) {
+      result.unsuspendStatus = await markDone(issueKey);
     }
 
-    const issueData = await issueResponse.json();
-    const issueKey = issueData.key;
-    const issueUrl = `https://jira.directi.com/browse/${issueKey}`;
-
-    let imagesUploaded = 0;
-    for (const image of images) {
-      try {
-        const binary = atob(image.base64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) {
-          bytes[i] = binary.charCodeAt(i);
-        }
-        const blob = new Blob([bytes], { type: image.mimeType });
-        const formData = new FormData();
-        formData.append('file', blob, image.filename);
-
-        await fetch(`https://jira.directi.com/rest/api/2/issue/${issueKey}/attachments`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'X-Atlassian-Token': 'no-check' },
-          body: formData
-        });
-        imagesUploaded++;
-      } catch (e) {
-        // Continue with other images
-      }
-    }
-
-    await markDone(issueKey);
-
-    sendResponse({
-      success: true,
-      issueKey,
-      issueUrl,
-      imagesUploaded,
-      imagesTotal: images.length
-    });
+    return result;
   } catch (error) {
-    sendResponse({ success: false, error: error.message, status: 0 });
+    return { success: false, error: error.message, status: 0 };
   }
 }
 
 async function markDone(issueKey) {
   try {
-    const transResp = await fetch(
-      `https://jira.directi.com/rest/api/2/issue/${issueKey}/transitions`,
-      { method: 'GET', credentials: 'include', headers: { 'Accept': 'application/json' } }
-    );
-    if (!transResp.ok) return;
-    const transData = await transResp.json();
-    const transitions = transData.transitions;
-
-    const doneTransition = transitions.find(t => t.id === '71');
-
-    if (!doneTransition) return;
-
     const transPostResp = await fetch(
       `https://jira.directi.com/rest/api/2/issue/${issueKey}/transitions`,
       {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transition: { id: '71' } })
+        body: JSON.stringify({ transition: { id: JIRA_DONE_TRANSITION_ID } })
       }
     );
 
-    if (transPostResp.ok) {
-      const commentResp = await fetch(
-        `https://jira.directi.com/rest/api/2/issue/${issueKey}/comment`,
-        {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ body: 'Unsuspended' })
-        }
-      );
-      if (!commentResp.ok) {
-        const err = await commentResp.text();
-        console.warn('[Report→JIRA] comment failed:', commentResp.status, err);
-      }
+    if (!transPostResp.ok) {
+      const errText = await transPostResp.text();
+      console.warn('[Report→JIRA] transition failed:', transPostResp.status, errText);
+      return { done: false, commented: false, error: `Transition failed (${transPostResp.status}): ${errText}` };
     }
+
+    const commentResp = await fetch(
+      `https://jira.directi.com/rest/api/2/issue/${issueKey}/comment`,
+      {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: 'Unsuspended' })
+      }
+    );
+
+    if (!commentResp.ok) {
+      const errText = await commentResp.text();
+      console.warn('[Report→JIRA] comment failed:', commentResp.status, errText);
+      return { done: true, commented: false, error: `Comment failed (${commentResp.status}): ${errText}` };
+    }
+
+    return { done: true, commented: true };
   } catch (e) {
     console.warn('[Report→JIRA] markDone failed:', e.message);
+    return { done: false, commented: false, error: e.message };
   }
-}
-
-function extractImages(html) {
-  const images = [];
-  const imgRegex = /<img\s+[^>]*src="(data:image\/([^;]+);base64,([^"]+))"[^>]*>/gi;
-  let match;
-  let index = 0;
-
-  while ((match = imgRegex.exec(html)) !== null) {
-    index++;
-    const fullSrc = match[1];
-    const imageType = match[2];
-    const base64Data = match[3];
-    const altRegex = /alt="([^"]*)"/i;
-    const altMatch = altRegex.exec(match[0]);
-    const altText = altMatch ? altMatch[1] : '';
-    const filename = altText ? `${altText.replace(/[^a-z0-9]/gi, '_')}.png` : `screenshot-${index}.png`;
-
-    images.push({
-      base64: base64Data,
-      mimeType: `image/${imageType}`,
-      filename,
-      dataUrl: fullSrc
-    });
-  }
-
-  return images;
 }

@@ -20,6 +20,19 @@
 
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
+  function waitForElement(find, timeoutMs) {
+    return new Promise(function (resolve) {
+      var start = Date.now();
+      var check = function () {
+        var el = find();
+        if (el) { resolve(el); return; }
+        if (Date.now() - start > timeoutMs) { resolve(null); return; }
+        setTimeout(check, 200);
+      };
+      check();
+    });
+  }
+
   function simulateClick(el) {
     el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     el.click();
@@ -27,29 +40,31 @@
 
   async function run() {
     chrome.storage.local.get(['unsuspendReason'], async function (result) {
-      var reason = result.unsuspendReason;
-      if (!reason) { log('No unsuspend reason in storage'); return; }
+      var rec = result.unsuspendReason;
+      var fresh = rec && typeof rec === 'object' && typeof rec.reason === 'string' && rec.reason !== '' &&
+                  typeof rec.ts === 'number' && (Date.now() - rec.ts) <= 90000;
+      if (!fresh) { log('No fresh unsuspend reason in storage'); return; }
+      var reason = rec.reason;
 
       var account = new URLSearchParams(window.location.search).get('entity');
       if (!account) { log('No entity in URL — skipping automation'); return; }
       log('Starting unsuspend automation for ' + account);
 
-      await sleep(2000);
-
-      var unblockBtn = document.getElementById('unblockBtn');
-      if (!unblockBtn) {
-        var btns = document.querySelectorAll('button');
-        for (var i = 0; i < btns.length; i++) {
-          if (btns[i].textContent.trim() === 'Unblock') { unblockBtn = btns[i]; break; }
+      var unblockBtn = await waitForElement(function () {
+        var el = document.getElementById('unblockBtn');
+        if (!el) {
+          var btns = document.querySelectorAll('button');
+          for (var i = 0; i < btns.length; i++) {
+            if (btns[i].textContent.trim() === 'Unblock') { el = btns[i]; break; }
+          }
         }
-      }
+        return el || null;
+      }, 10000);
       if (!unblockBtn) { log('Unblock button not found'); showToast('Unblock button not found for ' + account); return; }
       log('Clicking Unblock for ' + account);
       simulateClick(unblockBtn);
 
-      await sleep(1500);
-
-      var textarea = document.querySelector('textarea');
+      var textarea = await waitForElement(function () { return document.querySelector('textarea'); }, 5000);
       if (!textarea) { log('Textarea not found'); showToast('Textarea not found for ' + account); return; }
       log('Pasting reason for ' + account);
       textarea.focus();
@@ -57,15 +72,24 @@
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
       textarea.dispatchEvent(new Event('change', { bubbles: true }));
 
-      await sleep(1000);
-
-      var saveBtn = document.getElementById('submitBtn');
+      var saveBtn = await waitForElement(function () {
+        var el = document.getElementById('submitBtn');
+        return (el && el.offsetParent !== null) ? el : null;
+      }, 5000);
       if (!saveBtn) { log('submitBtn not found'); showToast('Save button not found for ' + account); return; }
       log('Clicking Save for ' + account);
       simulateClick(saveBtn);
 
-      await sleep(500);
-      showToast('Unsuspend completed for ' + account);
+      var failed = await waitForElement(function () {
+        var err = document.querySelector('.error, .alert-danger, [class*="error"]');
+        return (err && err.offsetParent !== null && (err.textContent || '').trim()) ? err : null;
+      }, 3000);
+      if (failed) {
+        showToast('Unsuspend may have failed for ' + account);
+        log('Error indicator shown after save for ' + account);
+      } else {
+        showToast('Unsuspend completed for ' + account);
+      }
       log('Automation complete for ' + account);
     });
   }

@@ -8,6 +8,7 @@
   const POLL_INTERVAL = 300;
   const MAX_WAIT_MS = 15000;
   const EXPIRY_MS = 10 * 60 * 1000;
+  const DEBUG = false;
 
   function log(msg) { console.log('[Report→JIRA] ' + msg); }
   function warn(msg) { console.warn('[Report→JIRA] ' + msg); }
@@ -230,7 +231,7 @@
     }
 
     // Step 3: Debug DOM state
-    debugDomState();
+    if (DEBUG) { debugDomState(); }
 
     // Step 4: Find description editor
     const ce = await waitForDescriptionEditor(5000);
