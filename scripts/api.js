@@ -54,6 +54,10 @@ async function apiFetch(url) {
       throw new Error('Request timed out — please try again.');
     throw new Error('Network error — could not reach the server.');
   }
+  if (res.status === 401) {
+    window.location.replace('/login.html');
+    throw new Error('Session expired — redirecting to login…');
+  }
   let data;
   try {
     data = await res.json();

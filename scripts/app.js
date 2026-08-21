@@ -144,6 +144,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initKeyboardShortcuts();
   initDomainInputs();
   initEventDelegation();
+  initLiveErrorClear();
   initDragDrop();
   initPasteSupport();
   initDraftPersistence();
@@ -183,6 +184,7 @@ function initKeyboardShortcuts() {
     if (!lastActivePanel) return; // no panel active yet
     if (lastActivePanel === 'arf') generateARF();
     else if (lastActivePanel === 'bounce') generateBounce();
+    else if (lastActivePanel === 'smtpsuspend') generateSMTPSuspend();
   });
 }
 
@@ -194,12 +196,21 @@ function resetWhoisState(prefix) {
   document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error', 'open');
 }
 
+function setRegionChip(prefix) {
+  const chip = document.getElementById(prefix + '-region-chip');
+  if (!chip) return;
+  chip.textContent = state[prefix].region === 'eu' ? 'EU' : 'NA';
+  chip.hidden = false;
+}
+
 async function detectRegion(prefix, domain) {
   try {
     const result = await lookupMx(domain);
     state[prefix].region = result.region;
+    setRegionChip(prefix);
   } catch {
     state[prefix].region = 'na';
+    setRegionChip(prefix);
   }
   const accountInput = document.getElementById(prefix + '-account');
   if (accountInput) accountInput.dispatchEvent(new Event('regionchange'));
@@ -254,10 +265,18 @@ function initDomainInputs() {
 
   // On input: sanitise account value, sync sanitised domain and trigger lookup
   accountInput.addEventListener('input', () => {
-    accountInput.value = sanitiseAccountInput(accountInput.value);
-    const sanitised = sanitiseDomainInput(accountInput.value);
+    const raw = accountInput.value;
+    const sanitised = sanitiseAccountInput(raw);
+    if (sanitised !== raw) {
+      const pos = accountInput.selectionStart ?? raw.length;
+      const diff = raw.length - sanitised.length;
+      accountInput.value = sanitised;
+      const newPos = Math.max(0, Math.min(pos - diff, sanitised.length));
+      try { accountInput.setSelectionRange(newPos, newPos); } catch {}
+    }
+    const sanitisedDomain = sanitiseDomainInput(accountInput.value);
     const domainInput = document.getElementById(prefix + '-domain-input');
-    if (domainInput) domainInput.value = sanitised;
+    if (domainInput) domainInput.value = sanitisedDomain;
     resetWhoisState(prefix);
     lookupDomain(prefix);
   });
@@ -407,6 +426,7 @@ function initEventDelegation() {
     if (panel.id === 'panel-arf') lastActivePanel = 'arf';
     else if (panel.id === 'panel-bounce') lastActivePanel = 'bounce';
     else if (panel.id === 'panel-ip-spike') lastActivePanel = 'ipspike';
+    else if (panel.id === 'panel-smtp-suspension') lastActivePanel = 'smtpsuspend';
   });
 
   shell.addEventListener('click', (e) => {
@@ -484,6 +504,25 @@ function initEventDelegation() {
   document.getElementById('arf-assurance-screenshot-input')?.addEventListener('change', (e) => handleFileSelect(e, 'arf', 'assuranceScreenshots'));
   document.getElementById('bounce-assurance-screenshot-input')?.addEventListener('change', (e) => handleFileSelect(e, 'bounce', 'assuranceScreenshots'));
   document.getElementById('bounce-csv-input')?.addEventListener('change', (e) => handleCsvSelect(e));
+}
+
+// ── Live validation-error clearing ────────────────────────────────────
+function initLiveErrorClear() {
+  ['arf', 'bounce', 'ipspike', 'smtpsuspend'].forEach(prefix => {
+    const panel = document.getElementById('panel-' + TAB_DATA_TAB[prefix]);
+    if (!panel) return;
+    ['input', 'change'].forEach(evt => panel.addEventListener(evt, (e) => {
+      const el = e.target.closest('input, select, textarea');
+      if (!el || !el.classList.contains('field-error')) return;
+      el.classList.remove('field-error');
+      const list = document.getElementById(prefix + '-validation-list');
+      if (!list) return;
+      list.querySelectorAll('li[data-target-id="' + el.id + '"]').forEach(li => li.remove());
+      if (list.children.length === 0) {
+        document.getElementById(prefix + '-validation-banner')?.classList.remove('visible');
+      }
+    }));
+  });
 }
 
 // ── Drag-and-drop init ───────────────────────────────────────────────
@@ -605,6 +644,8 @@ function processCsv(file) {
       state.bounce.csvFromDate = rawLast ? rawLast.substring(0, 10) : null;
       updateUserAgentHref();
     }
+    const datesEl = document.getElementById('bounce-csv-dates');
+    if (datesEl) datesEl.textContent = (state.bounce.csvFromDate && state.bounce.csvToDate) ? state.bounce.csvFromDate + ' → ' + state.bounce.csvToDate : '';
     if (lines.length >= 2) {
       // Domain is taken from the 2nd column (index 1) if it yields a valid
       // domain/email, otherwise falls back to the 3rd column (index 2).
@@ -640,6 +681,8 @@ function clearCsv() {
   document.getElementById('bounce-csv-count').textContent = '—';
   document.getElementById('bounce-csv-name').textContent = '';
   document.getElementById('bounce-lt40-badge').textContent = '';
+  const datesEl = document.getElementById('bounce-csv-dates');
+  if (datesEl) datesEl.textContent = '';
   document.getElementById('bounce-csv-input').value = '';
   updateUserAgentHref();
 }
@@ -679,6 +722,12 @@ async function _doLookup(prefix) {
   if (websiteEl) websiteEl.innerHTML = '<div class="skeleton skeleton-sm"></div>';
   if (dkimEl) dkimEl.innerHTML = '<div class="skeleton skeleton-sm"></div>';
   if (sourceEl) sourceEl.textContent = '—';
+  if (prefix === 'smtpsuspend') {
+    ['laravel', 'xmlrpc', 'wordpress'].forEach(name => {
+      const el = document.getElementById(prefix + '-result-' + name);
+      if (el) el.innerHTML = '<div class="skeleton skeleton-sm"></div>';
+    });
+  }
 
   try {
     const data = await fetchWhois(domain);
@@ -692,7 +741,6 @@ async function _doLookup(prefix) {
     if (summaryEl) summaryEl.textContent = data.domain_age ? data.creation_date + ' — ' + data.domain_age : data.creation_date;
     updateStepper(prefix, '1');
     applyDomainAgeColor(prefix);
-    showToast('Domain info fetched! Checking website & DKIM…');
   } catch (err) {
     state[prefix].whois = null;
     createdEl.textContent = err.message || 'Lookup failed';

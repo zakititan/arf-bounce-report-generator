@@ -82,7 +82,7 @@
           <div class="stepper-step" data-step="3"><div class="stepper-dot">3</div><span class="stepper-label">DKIM</span></div>
         </div>
         <div class="field">
-          <label for="arf-account">Account<span class="req">*</span></label>
+          <label for="arf-account">Account<span class="req">*</span><span class="region-chip" id="arf-region-chip" hidden></span></label>
           <input type="text" id="arf-account" aria-required="true" placeholder="e.g. user@example.com or example.com">
           <a class="btn btn-secondary btn-tool-link btn-mailboards" href="https://mailboards.ops.titan.email/home?env=prod" target="_blank" rel="noopener noreferrer">Check on Mailboards</a>
         </div>
@@ -234,7 +234,7 @@
           <div class="stepper-step" data-step="3"><div class="stepper-dot">3</div><span class="stepper-label">DKIM</span></div>
         </div>
         <div class="field">
-          <label for="bounce-account">Account<span class="req">*</span></label>
+          <label for="bounce-account">Account<span class="req">*</span><span class="region-chip" id="bounce-region-chip" hidden></span></label>
           <input type="text" id="bounce-account" aria-required="true" placeholder="e.g. user@example.com or example.com">
           <a class="btn btn-secondary btn-tool-link btn-mailboards" href="https://mailboards.ops.titan.email/home?env=prod" target="_blank" rel="noopener noreferrer">Check on Mailboards</a>
           <a class="btn btn-secondary btn-tool-link btn-user-agent" href="https://mailboards.ops.titan.email/mail_analytics?env=prod&mail_type=outgoing&mail_status=&sender=&recipient=&from_date=&to_date=" target="_blank" rel="noopener noreferrer">Check User Agent</a>
@@ -262,6 +262,7 @@
             <div class="csv-result-info">
               <span class="csv-result-count" id="bounce-csv-count">—</span>
               <span class="csv-result-name" id="bounce-csv-name"></span>
+              <span class="csv-result-dates" id="bounce-csv-dates"></span>
             </div>
             <span class="csv-lt40-badge" id="bounce-lt40-badge"></span>
             <button class="csv-clear-btn" data-action="clear-csv" title="Remove CSV" aria-label="Remove CSV">
@@ -400,7 +401,7 @@
           <div class="stepper-step" data-step="3"><div class="stepper-dot">3</div><span class="stepper-label">DKIM</span></div>
         </div>
         <div class="field">
-          <label for="ipspike-account">Account<span class="req">*</span></label>
+          <label for="ipspike-account">Account<span class="req">*</span><span class="region-chip" id="ipspike-region-chip" hidden></span></label>
           <input type="text" id="ipspike-account" aria-required="true" placeholder="e.g. user@example.com or example.com">
           <a class="btn btn-secondary btn-tool-link btn-partner-panel" href="https://admin.titan.email" target="_blank" rel="noopener noreferrer">Check on Partner Panel</a>
           <span class="hint">On Partner Panel: Get Info → View → View Account History — check for password reset entries after suspension</span>
@@ -466,7 +467,7 @@
           <div class="stepper-step" data-step="3"><div class="stepper-dot">3</div><span class="stepper-label">DKIM</span></div>
         </div>
         <div class="field">
-          <label for="smtpsuspend-account">Account<span class="req">*</span></label>
+          <label for="smtpsuspend-account">Account<span class="req">*</span><span class="region-chip" id="smtpsuspend-region-chip" hidden></span></label>
           <input type="text" id="smtpsuspend-account" aria-required="true" placeholder="e.g. user@example.com or example.com">
         </div>
         <div class="field">

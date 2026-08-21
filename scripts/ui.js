@@ -152,19 +152,6 @@ export function updateStepper(prefix, step) {
   });
 }
 
-// ── Form progress bar ─────────────────────────────────────────────
-export function updateFormProgress(prefix) {
-  const bar = document.getElementById(prefix + '-form-progress-fill');
-  if (!bar) return;
-  const fields = bar.getAttribute('data-fields') ? bar.getAttribute('data-fields').split(',') : [];
-  const filled = fields.filter(id => {
-    const el = document.getElementById(id);
-    return el && el.value && el.value.trim() !== '' && el.value !== 'Select...';
-  }).length;
-  const pct = fields.length ? Math.round((filled / fields.length) * 100) : 0;
-  bar.style.width = pct + '%';
-}
-
 // ── Domain age color ──────────────────────────────────────────────
 export function parseAgeToDays(text) {
   const years = text.match(/(\d+)\s*years?/i);
