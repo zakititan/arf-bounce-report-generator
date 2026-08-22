@@ -53,7 +53,7 @@
   --color-success-border:#3e5631;--color-neutral-bg:#211f1e;--color-neutral:#8f8e8a;
   --accent-ipspike:#9b8cf0;
 }
-:root:not([data-theme]) body::before { background: radial-gradient(ellipse 42% 42% at 84% -6%, color-mix(in oklch, var(--accent-ipspike) 8%, transparent), transparent 70%), radial-gradient(ellipse 80% 50% at 50% -10%, color-mix(in oklch, var(--color-primary) 9%, transparent), transparent 70%); }
+:root:not([data-theme]) body::before { background: radial-gradient(ellipse 42% 42% at 84% -6%, color-mix(in oklch, var(--accent-ipspike) 12%, transparent), transparent 70%), radial-gradient(ellipse 80% 50% at 50% -10%, color-mix(in oklch, var(--color-primary) 14%, transparent), transparent 70%); }
 :root:not([data-theme]) .panel { box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.06), 0 12px 32px oklch(0 0 0 / 0.45); }
 }
 
@@ -61,8 +61,8 @@
 html { -webkit-font-smoothing: antialiased; scroll-behavior: smooth; }
 body { min-height: 100dvh; font-family: var(--font-body); font-size: var(--text-base); color: var(--color-text); background: var(--color-bg); }
 body::before { content: ''; position: fixed; inset: 0; pointer-events: none; z-index: -1;
-  background: radial-gradient(ellipse 80% 50% at 50% -10%, color-mix(in oklch, var(--color-primary) 5%, transparent), transparent 70%); }
-[data-theme="dark"] body::before { background: radial-gradient(ellipse 42% 42% at 84% -6%, color-mix(in oklch, var(--accent-ipspike) 8%, transparent), transparent 70%), radial-gradient(ellipse 80% 50% at 50% -10%, color-mix(in oklch, var(--color-primary) 9%, transparent), transparent 70%); }
+  background: radial-gradient(ellipse 80% 50% at 50% -10%, color-mix(in oklch, var(--color-primary) 8%, transparent), transparent 70%); }
+[data-theme="dark"] body::before { background: radial-gradient(ellipse 42% 42% at 84% -6%, color-mix(in oklch, var(--accent-ipspike) 12%, transparent), transparent 70%), radial-gradient(ellipse 80% 50% at 50% -10%, color-mix(in oklch, var(--color-primary) 14%, transparent), transparent 70%); }
 img, svg { display: block; max-width: 100%; }
 input, select, button, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; background: none; border: none; }
