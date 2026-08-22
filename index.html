@@ -86,7 +86,7 @@
         <div class="field">
           <label for="arf-account">Account<span class="req">*</span><span class="region-chip" id="arf-region-chip" hidden></span></label>
           <input type="text" id="arf-account" aria-required="true" placeholder="e.g. user@example.com or example.com">
-          <a class="btn btn-secondary btn-tool-link btn-mailboards" href="https://mailboards.ops.titan.email/home?env=prod" target="_blank" rel="noopener noreferrer">Check on Mailboards</a>
+          <a class="btn btn-secondary btn-tool-link btn-mailboards" href="https://mailboards.ops.titan.email/home?env=prod" target="_blank" rel="noopener noreferrer">Check on Mailboards<svg class="ext-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17L17 7M7 7h10v10"/></svg></a>
         </div>
         <div class="field">
           <label for="arf-zd-link">Zendesk Ticket Link<span class="req">*</span></label>
@@ -97,7 +97,7 @@
             <label for="arf-complaints">No. of ARF Complaints<span class="req">*</span></label>
             <input type="number" id="arf-complaints" aria-required="true" placeholder="0" min="0">
           </div>
-          <a class="btn btn-secondary btn-tool-link btn-abusedesk" href="https://abusedesk.ops.titan.email/history.html?entity=&region=us-east-1" target="_blank" rel="noopener noreferrer">Check on AD</a>
+          <a class="btn btn-secondary btn-tool-link btn-abusedesk" href="https://abusedesk.ops.titan.email/history.html?entity=&region=us-east-1" target="_blank" rel="noopener noreferrer">Check on AD<svg class="ext-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17L17 7M7 7h10v10"/></svg></a>
         </div>
         <div class="field-row">
           <div class="field">
@@ -207,10 +207,12 @@
       <div class="panel-body" id="arf-output-section" style="display:none;">
         <hr>
         <div class="output-header">Generated Report</div>
-        <span class="output-report-type arf" id="arf-report-type">ARF Report</span>
-        <span class="output-timestamp" id="arf-output-timestamp"></span>
+        <div class="output-meta">
+          <span class="output-report-type arf" id="arf-report-type">ARF Report</span>
+          <span class="output-timestamp" id="arf-output-timestamp"></span>
+        </div>
         <div class="output-area">
-          <div class="copy-btn-wrap"><button class="btn btn-secondary" data-action="copy" data-target="arf-output-text">Copy</button></div>
+          <div class="copy-btn-wrap"><button class="btn btn-secondary" data-action="copy" data-target="arf-output-text"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy</button></div>
           <pre id="arf-output-text" class="output-text"></pre>
           <div id="arf-output-images"></div>
         </div>
@@ -238,8 +240,8 @@
         <div class="field">
           <label for="bounce-account">Account<span class="req">*</span><span class="region-chip" id="bounce-region-chip" hidden></span></label>
           <input type="text" id="bounce-account" aria-required="true" placeholder="e.g. user@example.com or example.com">
-          <a class="btn btn-secondary btn-tool-link btn-mailboards" href="https://mailboards.ops.titan.email/home?env=prod" target="_blank" rel="noopener noreferrer">Check on Mailboards</a>
-          <a class="btn btn-secondary btn-tool-link btn-user-agent" href="https://mailboards.ops.titan.email/mail_analytics?env=prod&mail_type=outgoing&mail_status=&sender=&recipient=&from_date=&to_date=" target="_blank" rel="noopener noreferrer">Check User Agent</a>
+          <a class="btn btn-secondary btn-tool-link btn-mailboards" href="https://mailboards.ops.titan.email/home?env=prod" target="_blank" rel="noopener noreferrer">Check on Mailboards<svg class="ext-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17L17 7M7 7h10v10"/></svg></a>
+          <a class="btn btn-secondary btn-tool-link btn-user-agent" href="https://mailboards.ops.titan.email/mail_analytics?env=prod&mail_type=outgoing&mail_status=&sender=&recipient=&from_date=&to_date=" target="_blank" rel="noopener noreferrer">Check User Agent<svg class="ext-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17L17 7M7 7h10v10"/></svg></a>
         </div>
         <div class="field">
           <label for="bounce-zd-link">Zendesk Ticket Link<span class="req">*</span></label>
@@ -375,10 +377,12 @@
       <div class="panel-body" id="bounce-output-section" style="display:none;">
         <hr>
         <div class="output-header">Generated Report</div>
-        <span class="output-report-type bounce" id="bounce-report-type">Bounce Report</span>
-        <span class="output-timestamp" id="bounce-output-timestamp"></span>
+        <div class="output-meta">
+          <span class="output-report-type bounce" id="bounce-report-type">Bounce Report</span>
+          <span class="output-timestamp" id="bounce-output-timestamp"></span>
+        </div>
         <div class="output-area">
-          <div class="copy-btn-wrap"><button class="btn btn-secondary" data-action="copy" data-target="bounce-output-text">Copy</button></div>
+          <div class="copy-btn-wrap"><button class="btn btn-secondary" data-action="copy" data-target="bounce-output-text"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy</button></div>
           <pre id="bounce-output-text" class="output-text"></pre>
         </div>
         <div class="output-bottom-actions">
@@ -405,7 +409,7 @@
         <div class="field">
           <label for="ipspike-account">Account<span class="req">*</span><span class="region-chip" id="ipspike-region-chip" hidden></span></label>
           <input type="text" id="ipspike-account" aria-required="true" placeholder="e.g. user@example.com or example.com">
-          <a class="btn btn-secondary btn-tool-link btn-partner-panel" href="https://admin.titan.email" target="_blank" rel="noopener noreferrer">Check on Partner Panel</a>
+          <a class="btn btn-secondary btn-tool-link btn-partner-panel" href="https://admin.titan.email" target="_blank" rel="noopener noreferrer">Check on Partner Panel<svg class="ext-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17L17 7M7 7h10v10"/></svg></a>
           <span class="hint">On Partner Panel: Get Info → View → View Account History — check for password reset entries after suspension</span>
         </div>
         <!-- Domain Lookup (IP Spike) -->
@@ -556,10 +560,12 @@
       <div class="panel-body" id="smtpsuspend-output-section" style="display:none;">
         <hr>
         <div class="output-header">Generated Report</div>
-        <span class="output-report-type smtpsuspend" id="smtpsuspend-report-type">SMTP Suspension Report</span>
-        <span class="output-timestamp" id="smtpsuspend-output-timestamp"></span>
+        <div class="output-meta">
+          <span class="output-report-type smtpsuspend" id="smtpsuspend-report-type">SMTP Suspension Report</span>
+          <span class="output-timestamp" id="smtpsuspend-output-timestamp"></span>
+        </div>
         <div class="output-area">
-          <div class="copy-btn-wrap"><button class="btn btn-secondary" data-action="copy" data-target="smtpsuspend-output-text">Copy</button></div>
+          <div class="copy-btn-wrap"><button class="btn btn-secondary" data-action="copy" data-target="smtpsuspend-output-text"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy</button></div>
           <pre id="smtpsuspend-output-text" class="output-text"></pre>
           <div id="smtpsuspend-output-images"></div>
         </div>

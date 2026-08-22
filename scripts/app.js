@@ -366,10 +366,10 @@ function copyOutputWithFeedback(id) {
       showToast('Copied to clipboard!');
       const btn = outputArea?.querySelector('.copy-btn-wrap button');
       if (btn) {
-        const original = btn.textContent;
-        btn.textContent = 'Copied ✓';
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<span aria-hidden="true">✓</span> Copied';
         btn.style.color = 'var(--color-success)';
-        setTimeout(() => { btn.textContent = original; btn.style.color = ''; }, 2000);
+        setTimeout(() => { btn.innerHTML = originalHtml; btn.style.color = ''; }, 2000);
       }
     }).catch(() => showToast('Copy failed — please copy manually.'));
   };
