@@ -7,10 +7,14 @@
     var toast = document.createElement('div');
     toast.id = 'rg-unsuspend-toast';
     toast.textContent = message;
+    var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    var bg = dark ? '#1a1a2e' : '#ffffff';
+    var fg = dark ? '#e0e0e0' : '#1f2328';
+    var shadow = dark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.18)';
     toast.style.cssText =
-      'position:fixed;bottom:24px;right:24px;background:#1a1a2e;color:#e0e0e0;' +
+      'position:fixed;bottom:24px;right:24px;background:' + bg + ';color:' + fg + ';' +
       'padding:12px 20px;border-radius:8px;font-size:13px;font-family:system-ui,sans-serif;' +
-      'z-index:999999;box-shadow:0 4px 12px rgba(0,0,0,0.3);transition:opacity 300ms ease;';
+      'z-index:999999;box-shadow:0 4px 12px ' + shadow + ';transition:opacity 300ms ease;';
     document.body.appendChild(toast);
     setTimeout(function () {
       toast.style.opacity = '0';

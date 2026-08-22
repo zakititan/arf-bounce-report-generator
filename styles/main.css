@@ -1,4 +1,5 @@
 :root, [data-theme="light"] {
+  color-scheme: light;
   --color-bg: #f7f6f2; --color-surface: #f9f8f5; --color-surface-2: #fbfbf9;
   --color-surface-offset: #f3f0ec; --color-divider: #dcd9d5; --color-border: #d4d1ca;
   --color-text: #28251d; --color-text-muted: #7a7974; --color-text-faint: #bab9b4;
@@ -6,6 +7,8 @@
   --color-primary: #01696f; --color-primary-hover: #0c4e54; --color-primary-highlight: #cedcd8;
   --color-error: #a12c7b; --color-success: #437a22; --color-success-highlight: #d4dfcc;
   --color-warning: #964219; --color-warning-highlight: #ddcfc6;
+  --color-error-bg: #fdeef8; --color-error-border: #f0c4dd; --color-success-bg: #eef6e8;
+  --color-success-border: #c6deb5; --color-neutral-bg: #f3f0ec; --color-neutral: #7a7974;
   --radius-sm: 0.375rem; --radius-md: 0.5rem; --radius-lg: 0.75rem;
   --radius-xl: 1rem; --radius-full: 9999px;
   --shadow-sm: 0 1px 2px oklch(0.2 0.01 80 / 0.06);
@@ -25,22 +28,27 @@
   /* manual toggle */
   --color-bg: #0c0c0b; --color-surface: #141312; --color-surface-2: #181716;
   --color-surface-offset: #11100f; --color-divider: #1f1e1c; --color-border: #2b2a28;
-  --color-text: #d4d3d0; --color-text-muted: #807f7c; --color-text-faint: #5c5b58;
+  --color-text: #d4d3d0; --color-text-muted: #807f7c; --color-text-faint: #6e6d69;
   --color-text-inverse: #11110f;
   --color-primary: #5aa6b0; --color-primary-hover: #3d8a94; --color-primary-highlight: #283536;
   --color-error: #d870b0; --color-success: #78b850; --color-success-highlight: #2e3d2a;
   --color-warning: #c97a4e; --color-warning-highlight: #4a3f37;
+  --color-error-bg: #2c1722; --color-error-border: #5c3049; --color-success-bg: #1e2a17;
+  --color-success-border: #3e5631; --color-neutral-bg: #211f1e; --color-neutral: #8f8e8a;
   --shadow-sm: 0 1px 3px oklch(0 0 0 / 0.35); --shadow-md: 0 4px 16px oklch(0 0 0 / 0.45);
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme]) {
   /* system preference */
+  color-scheme: dark;
   --color-bg:#0c0c0b;--color-surface:#141312;--color-surface-2:#181716;
   --color-surface-offset:#11100f;--color-divider:#1f1e1c;--color-border:#2b2a28;
-  --color-text:#d4d3d0;--color-text-muted:#807f7c;--color-text-faint:#5c5b58;
+  --color-text:#d4d3d0;--color-text-muted:#807f7c;--color-text-faint:#6e6d69;
   --color-text-inverse:#11110f;--color-primary:#5aa6b0;--color-primary-hover:#3d8a94;
   --color-primary-highlight:#283536;--color-error:#d870b0;--color-success:#78b850;
   --color-success-highlight:#2e3d2a;--color-warning:#c97a4e;--color-warning-highlight:#4a3f37;
   --shadow-sm:0 1px 3px oklch(0 0 0/.35);--shadow-md:0 4px 16px oklch(0 0 0/.45);
+  --color-error-bg:#2c1722;--color-error-border:#5c3049;--color-success-bg:#1e2a17;
+  --color-success-border:#3e5631;--color-neutral-bg:#211f1e;--color-neutral:#8f8e8a;
 }}
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -51,6 +59,13 @@ input, select, button, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; background: none; border: none; }
 :focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; border-radius: var(--radius-sm); }
 a, button, input, select, textarea { transition: color var(--transition-interactive), background var(--transition-interactive), border-color var(--transition-interactive), box-shadow var(--transition-interactive); }
+::selection { background: var(--color-primary-highlight); color: var(--color-text); }
+/* Themed scrollbars */
+* { scrollbar-width: thin; scrollbar-color: var(--color-border) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: var(--radius-full); border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background-color: var(--color-text-faint); }
 
 /* Layout */
 .app-shell { display: grid; grid-template-rows: auto 1fr auto; min-height: 100dvh; }
@@ -199,21 +214,21 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 }
 
 .vuln-badge.exposed {
-  background: var(--color-error-bg, #fef2f2);
-  color: var(--color-error, #dc2626);
-  border: 1px solid var(--color-error-border, #fca5a5);
+  background: var(--color-error-bg);
+  color: var(--color-error);
+  border: 1px solid var(--color-error-border);
 }
 
 .vuln-badge.safe {
-  background: var(--color-success-bg, #f0fdf4);
-  color: var(--color-success, #16a34a);
-  border: 1px solid var(--color-success-border, #86efac);
+  background: var(--color-success-bg);
+  color: var(--color-success);
+  border: 1px solid var(--color-success-border);
 }
 
 .vuln-badge.unknown {
-  background: var(--color-neutral-bg, #f5f5f4);
-  color: var(--color-neutral, #78716c);
-  border: 1px solid var(--color-border, #e7e5e4);
+  background: var(--color-neutral-bg);
+  color: var(--color-neutral);
+  border: 1px solid var(--color-border);
 }
 
 /* CSV Upload */
@@ -431,6 +446,7 @@ html.theme-transitioning, html.theme-transitioning * { transition: background 25
 @keyframes fadeScaleIn { from { opacity: 0; transform: scale(0.88); } to { opacity: 1; transform: scale(1); } }
 @keyframes fadeSlideDown { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes reportFlash { 0% { box-shadow: 0 0 0 3px color-mix(in oklch, var(--color-primary) 35%, transparent); } 100% { box-shadow: 0 0 0 0 transparent; } }
 
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
@@ -566,6 +582,7 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
   color: var(--color-text); position: relative;
   overflow-x: auto;
 }
+[id$="-output-section"] .output-area { animation: reportFlash 900ms ease-out; }
 .output-text {
   white-space: pre-wrap;
   font-size: var(--text-xs);
@@ -866,9 +883,8 @@ hr { border: none; border-top: 1px solid var(--color-divider); margin: var(--spa
   display: none;
 }
 
-.tab-panel.active {
-  display: block;
-}
+.tab-panel.active { display: block; animation: panelIn 200ms cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes panelIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 /* Extension Version Banner */
 .ext-version-banner {

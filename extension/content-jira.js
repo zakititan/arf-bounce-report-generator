@@ -16,12 +16,14 @@
   function showToast(message) {
     const toast = document.createElement('div');
     toast.textContent = message;
+    const dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
     Object.assign(toast.style, {
       position: 'fixed', bottom: '24px', right: '24px',
-      background: '#1a1a2e', color: '#e0e0e0',
+      background: dark ? '#1a1a2e' : '#ffffff',
+      color: dark ? '#e0e0e0' : '#1f2328',
       padding: '12px 20px', borderRadius: '8px',
       fontSize: '13px', fontFamily: 'system-ui, sans-serif',
-      zIndex: '999999', boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+      zIndex: '999999', boxShadow: dark ? '0 4px 12px rgba(0,0,0,0.3)' : '0 4px 12px rgba(0,0,0,0.18)',
       transition: 'opacity 0.3s', opacity: '1',
     });
     document.body.appendChild(toast);
