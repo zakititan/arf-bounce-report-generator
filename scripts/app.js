@@ -42,6 +42,8 @@ const _draftTimers = {};
 const _btnTimers = new WeakMap();
 // prefix (used in element ids/state) → tab data-tab / panel id suffix
 const TAB_DATA_TAB = { arf: 'arf', bounce: 'bounce', ipspike: 'ip-spike', smtpsuspend: 'smtp-suspension' };
+// Fields counted by updateReqCounter (required-field chips)
+const REQ_SELECTOR = '[aria-required="true"]';
 
 // ── State ─────────────────────────────────────────────────────────────
 const state = {
@@ -81,6 +83,16 @@ const state = {
 };
 let lastActivePanel = null; // tracks which panel the user last interacted with (for Ctrl/Cmd+Enter)
 let sheetConfig = { sheetId: '', appsScriptUrl: '' };
+
+// ── Value crossfade ───────────────────────────────────────────────────
+// Replays an element's stylesheet animation (valIn) on content updates by
+// toggling inline animation off, forcing reflow, then clearing inline style.
+function setValueFade(el) {
+  if (!el) return;
+  el.style.animation = 'none';
+  void el.offsetHeight;
+  el.style.animation = '';
+}
 
 // ── Tab Navigation ─────────────────────────────────────────
 function initTabs() {
@@ -148,6 +160,17 @@ document.addEventListener('DOMContentLoaded', () => {
   initDragDrop();
   initPasteSupport();
   initDraftPersistence();
+  initTextareaAutosize();
+  ['arf', 'bounce', 'smtpsuspend'].forEach(updateReqCounter);
+
+  // Topbar scroll shadow
+  const topbar = document.querySelector('.topbar');
+  if (topbar) {
+    const onScroll = () => topbar.classList.toggle('scrolled', window.scrollY > 8);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+  }
+
   renderPreviews('arf', 'screenshots');
   renderPreviews('arf', 'assuranceScreenshots');
   renderPreviews('bounce', 'assuranceScreenshots');
@@ -723,7 +746,7 @@ async function _doLookup(prefix) {
   state[prefix].lookupInFlight = true;
   setGenerateBtnState(prefix);
   btn.disabled = true;
-  btn.textContent = 'Looking up…';
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 0.8s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Looking up…';
   card.classList.remove('visible', 'error', 'open');
   if (websiteEl) websiteEl.innerHTML = '<div class="skeleton skeleton-sm"></div>';
   if (dkimEl) dkimEl.innerHTML = '<div class="skeleton skeleton-sm"></div>';
@@ -740,21 +763,27 @@ async function _doLookup(prefix) {
     state[prefix].whois = { creation_date: data.creation_date, domain_age: data.domain_age, source: data.source };
     createdEl.textContent = data.creation_date;
     ageEl.textContent = data.domain_age || '—';
+    setValueFade(createdEl);
+    setValueFade(ageEl);
     if (sourceEl) sourceEl.textContent = data.source === 'rdap' ? 'RDAP' : 'WhoisJSON';
     card.classList.remove('error');
     card.classList.add('visible', 'open');
     const summaryEl = document.getElementById(prefix + '-result-summary');
     if (summaryEl) summaryEl.textContent = data.domain_age ? data.creation_date + ' — ' + data.domain_age : data.creation_date;
+    setValueFade(summaryEl);
     updateStepper(prefix, '1');
     applyDomainAgeColor(prefix);
   } catch (err) {
     state[prefix].whois = null;
     createdEl.textContent = err.message || 'Lookup failed';
     ageEl.textContent = '—';
+    setValueFade(createdEl);
+    setValueFade(ageEl);
     if (sourceEl) sourceEl.textContent = '—';
     card.classList.add('visible', 'error', 'open');
     const summaryEl = document.getElementById(prefix + '-result-summary');
     if (summaryEl) summaryEl.textContent = err.message || 'Lookup failed';
+    setValueFade(summaryEl);
     updateStepper(prefix, '1');
     showToast('WHOIS lookup failed — still checking website & DKIM…');
   } finally {
@@ -787,6 +816,7 @@ async function checkWebsite(prefix, domain) {
     if (websiteEl) {
       websiteEl.innerHTML = '<span class="website-badge ' + bc + '"></span>';
       websiteEl.firstChild.textContent = verdict;
+      setValueFade(websiteEl);
     }
     if (websiteSelect && websiteSelect.value === '') {
       const mapped = verdict === 'Valid Website' ? 'Valid Website' : 'No website';
@@ -795,7 +825,11 @@ async function checkWebsite(prefix, domain) {
     }
     updateStepper(prefix, '2');
     showToast('Website: ' + verdict);
-  } catch { if (websiteEl) websiteEl.innerHTML = '<span class="website-badge nosite">Check failed</span>'; updateStepper(prefix, '2'); }
+  } catch {
+    if (websiteEl) websiteEl.innerHTML = '<span class="website-badge nosite">Check failed</span>';
+    setValueFade(websiteEl);
+    updateStepper(prefix, '2');
+  }
 }
 
 async function checkDkim(prefix, domain) {
@@ -810,6 +844,7 @@ async function checkDkim(prefix, domain) {
       if (dkimEl) {
         dkimEl.innerHTML = '<span class="dkim-badge set"></span>';
         dkimEl.firstChild.textContent = 'Set — ' + selectors.join(', ');
+        setValueFade(dkimEl);
       }
       if (dkimSelect && dkimSelect.value === '') {
         dkimSelect.value = 'Set';
@@ -818,6 +853,7 @@ async function checkDkim(prefix, domain) {
       showToast('DKIM: Set (' + selectors.join(', ') + ')');
     } else {
       if (dkimEl) dkimEl.innerHTML = '<span class="dkim-badge notset">Not Set</span>';
+      setValueFade(dkimEl);
       if (dkimSelect && dkimSelect.value === '') {
         dkimSelect.value = 'Not Set';
         if (hintEl) hintEl.textContent = 'Auto-detected: no titan/neo DKIM record found';
@@ -825,7 +861,11 @@ async function checkDkim(prefix, domain) {
       showToast('DKIM: Not Set');
     }
     updateStepper(prefix, '3');
-  } catch { if (dkimEl) dkimEl.innerHTML = '<span class="dkim-badge notset">Check failed</span>'; updateStepper(prefix, '3'); }
+  } catch {
+    if (dkimEl) dkimEl.innerHTML = '<span class="dkim-badge notset">Check failed</span>';
+    setValueFade(dkimEl);
+    updateStepper(prefix, '3');
+  }
 }
 
 async function checkLaravelVuln(domain) {
@@ -838,11 +878,13 @@ async function checkLaravelVuln(domain) {
       const cls = data.vulnerable ? 'vuln-badge exposed' : 'vuln-badge safe';
       const label = data.vulnerable ? '⚠ Exposed' : '✓ Not Found';
       el.innerHTML = `<span class="${cls}" title="${escapeHtml(data.reason)}">${label}</span>`;
+      setValueFade(el);
     }
     showToast('Laravel .env: ' + (data.vulnerable ? 'Exposed!' : 'Not found'));
   } catch {
     state.smtpsuspend.laravelVulnerable = null;
     if (el) el.innerHTML = '<span class="vuln-badge unknown">Check failed</span>';
+    setValueFade(el);
   }
 }
 
@@ -856,11 +898,13 @@ async function checkXmlrpcVuln(domain) {
       const cls = data.vulnerable ? 'vuln-badge exposed' : 'vuln-badge safe';
       const label = data.vulnerable ? '⚠ Accessible' : '✓ Not Found';
       el.innerHTML = `<span class="${cls}" title="${escapeHtml(data.reason)}">${label}</span>`;
+      setValueFade(el);
     }
     showToast('XML-RPC: ' + (data.vulnerable ? 'Accessible!' : 'Not found'));
   } catch {
     state.smtpsuspend.xmlrpcVulnerable = null;
     if (el) el.innerHTML = '<span class="vuln-badge unknown">Check failed</span>';
+    setValueFade(el);
   }
 }
 
@@ -874,11 +918,13 @@ async function checkWordPressVuln(domain) {
       const cls = data.detected ? 'vuln-badge exposed' : 'vuln-badge safe';
       const label = data.detected ? '⚠ Detected' : '✓ Not Found';
       el.innerHTML = `<span class="${cls}" title="${escapeHtml(data.reason)}">${label}</span>`;
+      setValueFade(el);
     }
     showToast('WordPress: ' + (data.detected ? 'Detected!' : 'Not found'));
   } catch {
     state.smtpsuspend.wordpressDetected = null;
     if (el) el.innerHTML = '<span class="vuln-badge unknown">Check failed</span>';
+    setValueFade(el);
   }
 }
 
@@ -1447,12 +1493,53 @@ function restoreDraft(prefix) {
   });
 }
 
+// ── Required-fields counter (per-panel sticky-row chip) ───────────────
+function updateReqCounter(prefix) {
+  const chip = document.getElementById(prefix + '-req-counter');
+  if (!chip) return;
+  const panel = document.getElementById('panel-' + TAB_DATA_TAB[prefix]);
+  if (!panel) return;
+  const body = panel.querySelector('.panel-body');
+  const output = document.getElementById(prefix + '-output-section');
+  let fields = [];
+  if (body) fields = Array.from(body.querySelectorAll(REQ_SELECTOR))
+    .filter(el => !(output && output.contains(el)));
+  const filled = fields.filter(el => {
+    const v = (el.value || '').trim();
+    return v !== '' && v !== 'Select...';
+  }).length;
+  chip.textContent = filled + '/' + fields.length;
+  chip.hidden = fields.length === 0;
+  chip.classList.toggle('done', fields.length > 0 && filled === fields.length);
+}
+
 function initDraftPersistence() {
   ['arf', 'bounce', 'ipspike', 'smtpsuspend'].forEach(prefix => {
     const panel = document.getElementById('panel-' + TAB_DATA_TAB[prefix]);
     if (!panel) return;
-    ['input', 'change', 'click'].forEach(evt => panel.addEventListener(evt, () => saveDraft(prefix)));
+    ['input', 'change', 'click'].forEach(evt => panel.addEventListener(evt, () => {
+      saveDraft(prefix);
+      updateReqCounter(prefix);
+    }));
     restoreDraft(prefix);
+    updateReqCounter(prefix);
+  });
+}
+
+// ── Textarea auto-grow ("Other assurance" notes) ──────────────────────
+function resizeTextarea(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+}
+function initTextareaAutosize() {
+  ['arf-other-text', 'bounce-other-text', 'smtpsuspend-other-text'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const onResize = () => resizeTextarea(el);
+    el.addEventListener('input', onResize);
+    // Normalize height after draft restore / clear resets the value.
+    setTimeout(onResize, 0);
   });
 }
 
@@ -1679,6 +1766,8 @@ function setPartnerPanelResult(result) {
     resultsPanel.style.display = 'flex';
     if (suspDateEl) suspDateEl.textContent = result.suspensionDate || 'N/A';
     if (pwdDateEl) pwdDateEl.textContent = result.lastPasswordResetDate || 'N/A';
+    setValueFade(suspDateEl);
+    setValueFade(pwdDateEl);
   }
 
   const msg = result.passwordChanged
@@ -1714,8 +1803,16 @@ function setPartnerPanelResult(result) {
     if (e.target === modal) closeModal();
   });
 
-  // Close on Escape key
+  // Close on Escape key + Tab focus trap while open
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !modal.hidden) closeModal();
+    if (modal.hidden) return;
+    if (e.key === 'Escape') { closeModal(); return; }
+    if (e.key !== 'Tab') return;
+    const focusables = Array.from(modal.querySelectorAll('a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'))
+      .filter(el => el.offsetParent !== null);
+    if (!focusables.length) return;
+    const first = focusables[0], last = focusables[focusables.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   });
 })();
