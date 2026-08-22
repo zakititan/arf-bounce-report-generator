@@ -41,6 +41,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - Header row is always excluded from the bounce count
 
 ### UX & Polish
+- **Visual design system** — per-panel accent colors (ARF teal, Bounce amber, IP Spike violet, SMTP red) tint the active tab underline, panel-title dot, and report-type pill; ambient top-of-page teal glow; layered panel elevation with inset highlights; gradient primary buttons with pressed states; uppercase mini-headers with hairline rules on Domain Lookup/Assurances/upload sections; accent bars on result cards; sliding tab underline; toast type icons; harmonized 2px icon strokes; version chip in the footer; gradient favicon badge
 - **Email → domain sanitisation** — pasting or typing a full email address (`user@example.com`) in the domain field automatically strips the local-part to `example.com`; also strips `http(s)://`, trailing paths, and ports
 - **Account field sanitisation** — the Account field sanitises pasted input: domain-like values get HTML/protocol stripping and control char removal; email addresses (containing `@`) pass through untouched; rewriting only happens when the value actually changes and the caret position is preserved while typing
 - **Auto-lookup on paste** — pasting a domain or email into either panel's domain field automatically fires the WHOIS/Website/DKIM lookup without needing to click the Lookup button

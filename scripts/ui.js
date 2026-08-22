@@ -6,12 +6,25 @@
 // ── Toast ─────────────────────────────────────────────────────────────
 // role=status + aria-live=polite ensures screen readers announce toasts.
 // opts.html allows HTML content (default textContent); opts.durationMs overrides hide delay.
+const ICONS = {
+  success: '<polyline points="20 6 9 17 4 12"/>',
+  error: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+  warning: '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+};
 let _toastTimer = null;
 export function showToast(msg, type, { html = false, durationMs = 2500 } = {}) {
   const t = document.getElementById('toast');
-  if (html) t.innerHTML = msg;
-  else t.textContent = msg;
-  t.setAttribute('data-type', type || 'info');
+  const type_ = type || 'info';
+  const icSpan = document.createElement('span');
+  icSpan.className = 'toast-ic';
+  icSpan.setAttribute('aria-hidden', 'true');
+  icSpan.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">' + (ICONS[type_] || ICONS.info) + '</svg>';
+  const wrap = document.createElement('span');
+  if (html) wrap.innerHTML = msg;
+  else wrap.textContent = msg;
+  t.replaceChildren(icSpan, wrap);
+  t.setAttribute('data-type', type_);
   t.classList.add('show');
   clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => t.classList.remove('show'), durationMs);
