@@ -627,6 +627,8 @@ html.theme-transitioning, html.theme-transitioning * { transition: background 25
   cursor: pointer;
   transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
 }
+/* Standalone tool links follow the capped input width instead of stretching */
+.field > .btn-tool-link { max-width: 520px; align-self: flex-start; }
 .btn-tool-link:hover {
   background: var(--color-primary-highlight);
   border-color: var(--color-primary);
