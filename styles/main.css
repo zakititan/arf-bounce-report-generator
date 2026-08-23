@@ -164,7 +164,6 @@ input[type="text"], input[type="number"], input[type="url"], select, textarea {
   border-radius: var(--radius-md); font-size: var(--text-sm); color: var(--color-text);
   box-shadow: inset 0 1px 2px oklch(0.2 0.01 80 / 0.06);
 }
-input[type="text"], input[type="url"], select { max-width: 520px; }
 input[type="text"]:hover, input[type="number"]:hover, input[type="url"]:hover, select:hover, textarea:hover { border-color: var(--color-text-faint); }
 input[type="text"]:focus, input[type="number"]:focus, input[type="url"]:focus, select:focus, textarea:focus {
   outline: none; border-color: var(--color-primary);
@@ -627,8 +626,6 @@ html.theme-transitioning, html.theme-transitioning * { transition: background 25
   cursor: pointer;
   transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
 }
-/* Standalone tool links follow the capped input width instead of stretching */
-.field > .btn-tool-link { max-width: 520px; align-self: flex-start; }
 .btn-tool-link:hover {
   background: var(--color-primary-highlight);
   border-color: var(--color-primary);
