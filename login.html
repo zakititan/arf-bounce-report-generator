@@ -57,6 +57,17 @@ body {
   color: var(--color-text); background: var(--color-bg);
   padding: var(--space-4);
 }
+body::before { content: ''; position: fixed; inset: 0; pointer-events: none; z-index: -1;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, color-mix(in srgb, var(--color-primary) 9%, transparent), transparent 70%),
+    radial-gradient(ellipse 36% 32% at 84% -6%, color-mix(in srgb, #7c3aed 5%, transparent), transparent 72%);
+}
+[data-theme="dark"] body::before {
+  background:
+    radial-gradient(ellipse 46% 40% at 10% 108%, color-mix(in srgb, #a78bfa 10%, transparent), transparent 70%),
+    radial-gradient(ellipse 42% 40% at 90% -10%, color-mix(in srgb, var(--color-primary) 13%, transparent), transparent 70%),
+    radial-gradient(ellipse 80% 52% at 50% -14%, color-mix(in srgb, var(--color-primary) 16%, transparent), transparent 72%);
+}
 input, button { font: inherit; color: inherit; }
 button { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; border-radius: var(--radius-md); }
