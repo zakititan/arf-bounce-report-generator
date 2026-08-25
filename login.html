@@ -10,11 +10,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..700&display=swap" rel="stylesheet">
 <style>
 :root {
-  --color-bg: #f6f7f9; --color-surface: #ffffff;
-  --color-border: #dfe3ea; --color-divider: #e6e8ee;
+  --color-bg: #f6f9f7; --color-surface: #ffffff;
+  --color-border: #dbe4df; --color-divider: #e2e9e5;
   --color-text: #111827; --color-text-muted: #4b5563; --color-text-faint: #6b7280;
   --color-text-inverse: #ffffff;
-  --color-primary: #4f46e5; --color-primary-hover: #4338ca;
+  --color-primary: #047857; --color-primary-hover: #064e3b;
   --color-error: #dc2626;
   --radius-md: 0.5rem; --radius-lg: 0.625rem; --radius-xl: 1rem;
   --shadow-sm: 0 1px 2px rgb(16 24 40 / 0.06);
@@ -26,11 +26,11 @@
   --text-xs: 0.8rem; --text-sm: 0.9rem; --text-base: 1rem; --text-lg: 1.25rem;
 }
 [data-theme="dark"] {
-  --color-bg:#0b0c0e; --color-surface:#15171a;
-  --color-border:#2c3036; --color-divider:#22252a;
-  --color-text:#f4f5f6; --color-text-muted:#9ba1aa; --color-text-faint:#737a85;
-  --color-text-inverse:#101114;
-  --color-primary:#818cf8; --color-primary-hover:#6366f1;
+  --color-bg:#0a0d0c; --color-surface:#141a17;
+  --color-border:#2a342f; --color-divider:#212a25;
+  --color-text:#f3f6f4; --color-text-muted:#9aa4a0; --color-text-faint:#707b75;
+  --color-text-inverse:#0e1310;
+  --color-primary:#6ee7b7; --color-primary-hover:#10b981;
   --color-error:#f87171;
   --shadow-sm:0 1px 2px rgb(0 0 0/.35);
   --shadow-md:0 1px 3px rgb(0 0 0/.35), 0 8px 28px -10px rgb(0 0 0/.45);
@@ -38,11 +38,11 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --color-bg:#0b0c0e; --color-surface:#15171a;
-    --color-border:#2c3036; --color-divider:#22252a;
-    --color-text:#f4f5f6; --color-text-muted:#9ba1aa; --color-text-faint:#737a85;
-    --color-text-inverse:#101114;
-    --color-primary:#818cf8; --color-primary-hover:#6366f1;
+    --color-bg:#0a0d0c; --color-surface:#141a17;
+    --color-border:#2a342f; --color-divider:#212a25;
+    --color-text:#f3f6f4; --color-text-muted:#9aa4a0; --color-text-faint:#707b75;
+    --color-text-inverse:#0e1310;
+    --color-primary:#6ee7b7; --color-primary-hover:#10b981;
     --color-error:#f87171;
     --shadow-sm:0 1px 2px rgb(0 0 0/.35);
     --shadow-md:0 1px 3px rgb(0 0 0/.35), 0 8px 28px -10px rgb(0 0 0/.45);
@@ -60,11 +60,11 @@ body {
 body::before { content: ''; position: fixed; inset: 0; pointer-events: none; z-index: -1;
   background:
     radial-gradient(ellipse 80% 50% at 50% -10%, color-mix(in srgb, var(--color-primary) 9%, transparent), transparent 70%),
-    radial-gradient(ellipse 36% 32% at 84% -6%, color-mix(in srgb, #7c3aed 5%, transparent), transparent 72%);
+    radial-gradient(ellipse 36% 32% at 84% -6%, color-mix(in srgb, var(--color-primary) 6%, transparent), transparent 72%);
 }
 [data-theme="dark"] body::before {
   background:
-    radial-gradient(ellipse 46% 40% at 10% 108%, color-mix(in srgb, #a78bfa 10%, transparent), transparent 70%),
+    radial-gradient(ellipse 46% 40% at 10% 108%, color-mix(in srgb, var(--color-primary) 11%, transparent), transparent 70%),
     radial-gradient(ellipse 42% 40% at 90% -10%, color-mix(in srgb, var(--color-primary) 13%, transparent), transparent 70%),
     radial-gradient(ellipse 80% 52% at 50% -14%, color-mix(in srgb, var(--color-primary) 16%, transparent), transparent 72%);
 }
