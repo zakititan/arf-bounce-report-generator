@@ -203,6 +203,45 @@ document.addEventListener('DOMContentLoaded', () => {
       showToast('JIRA marked Done, but the "Unsuspended" comment failed: ' + (status.error || 'unknown error'), 'warning', { durationMs: 6000 });
     }
   });
+
+  // ── Unsuspension confirmation (verdicts relayed from Abuse Desk tabs) ──
+  let _unsuspendConfirm = null;
+
+  function finishUnsuspendTracking() {
+    const session = _unsuspendConfirm;
+    _unsuspendConfirm = null;
+    if (!session) return;
+    const r = session.results;
+    // Legacy extensions never send verdicts — stay quiet instead of nagging.
+    if (r.length === 0) return;
+    const ok  = r.filter(x => x.outcome === 'confirmed');
+    const bad = r.filter(x => x.outcome === 'failed');
+    const unk = r.filter(x => x.outcome !== 'confirmed' && x.outcome !== 'failed');
+    const total = session.expected;
+    if (bad.length === 0 && unk.length === 0 && ok.length > 0) {
+      showToast('Unsuspension verified in Abuse Desk \u2713 (' + ok.length + '/' + total + ')', 'success', { durationMs: 7000 });
+      return;
+    }
+    const parts = [];
+    if (ok.length)  parts.push(ok.length + ' verified');
+    if (bad.length) parts.push(bad.length + ' failed: ' + bad.map(x => x.account || '?').join(', '));
+    if (unk.length) parts.push(unk.length + ' unverified — check AD manually');
+    showToast('Unsuspend result: ' + parts.join(' \u00B7 ') + ' (' + r.length + '/' + total + ' reported)',
+      bad.length ? 'error' : 'warning', { durationMs: 9000 });
+  }
+
+  function beginUnsuspendTracking(expected) {
+    clearTimeout(_unsuspendConfirm && _unsuspendConfirm.timer);
+    _unsuspendConfirm = { expected, results: [], timer: setTimeout(finishUnsuspendTracking, 45000) };
+  }
+
+  window.addEventListener('message', (e) => {
+    const outcome = e.data && e.data.type === 'REPORT_GENERATOR_UNSUSPEND_OUTCOME' ? e.data.outcome : null;
+    if (!outcome || !_unsuspendConfirm) return;
+    if (_unsuspendConfirm.results.some(x => x.account && x.account === outcome.account)) return; // dedupe
+    _unsuspendConfirm.results.push(outcome);
+    if (_unsuspendConfirm.results.length >= _unsuspendConfirm.expected) finishUnsuspendTracking();
+  });
 });
 
 // ── Keyboard shortcuts (Ctrl/Cmd + Enter) ─────────────────────────────
@@ -1665,6 +1704,7 @@ function unsuspendAccount(prefix, btn) {
     ? 'Opening Abuse Desk for ' + accounts.length + ' accounts...'
     : 'Opening Abuse Desk to unsuspend ' + account + '...';
   showToast(msg, 'info');
+  beginUnsuspendTracking(accounts.length);
 }
 
 function logToSheet(prefix) {

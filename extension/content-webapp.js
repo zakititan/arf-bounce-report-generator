@@ -20,6 +20,14 @@
     }, 6000);
   }
 
+  // Service worker relays per-account unsuspension verdicts here; forward
+  // them into the page so app.js can aggregate and confirm to the user.
+  chrome.runtime.onMessage.addListener(function (msg) {
+    if (msg && msg.action === 'unsuspend-outcome' && msg.data) {
+      window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_OUTCOME', outcome: msg.data }, '*');
+    }
+  });
+
   window.addEventListener('message', function (event) {
     if (event.source !== window) return;
     if (!event.data) return;

@@ -19,7 +19,7 @@
     setTimeout(function () {
       toast.style.opacity = '0';
       setTimeout(function () { toast.remove(); }, 300);
-    }, 5000);
+    }, 6000);
   }
 
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
@@ -44,10 +44,68 @@
 
   // Tell the service worker this tab's automation run ended. The worker only
   // closes tabs it opened itself (tracked by tab id); manual visits are ignored.
-  function reportDone(failed) {
+  function reportDone(result) {
+    var r = result || {};
     try {
-      chrome.runtime.sendMessage({ action: 'ad-tab-done', data: { failed: !!failed } });
+      chrome.runtime.sendMessage({
+        action: 'ad-tab-done',
+        data: {
+          failed: !!r.failed,
+          outcome: r.outcome || (r.failed ? 'failed' : 'unknown'),
+          account: r.account || ''
+        }
+      });
     } catch (e) { /* extension context gone — nothing to do */ }
+  }
+
+  function findUnblockButton() {
+    var el = document.getElementById('unblockBtn');
+    if (!el) {
+      var btns = document.querySelectorAll('button');
+      for (var i = 0; i < btns.length; i++) {
+        if (btns[i].textContent.trim() === 'Unblock') { el = btns[i]; break; }
+      }
+    }
+    return el || null;
+  }
+
+  function detectError() {
+    var err = document.querySelector('.error, .alert-danger, [class*="error"]');
+    return (err && err.offsetParent !== null && (err.textContent || '').trim()) ? err : null;
+  }
+
+  // Look for an on-page success indicator: success/alert elements or toast/
+  // notification containers whose text mentions unblocking. Our own overlay
+  // toast is excluded from matching.
+  function detectSuccess() {
+    var sel = '.success, .alert-success, [class*="success"], .toast, .notification, [role="status"], [role="alert"]';
+    var els = document.querySelectorAll(sel);
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      if (!el.offsetParent) continue;
+      if (el.id === 'rg-unsuspend-toast' || el.closest('#rg-unsuspend-toast')) continue;
+      var t = (el.textContent || '').trim();
+      if (t && /unsuspend|unblock|success|completed/i.test(t)) return el;
+    }
+    return null;
+  }
+
+  // Wait up to 8s for a definitive signal after clicking Save:
+  //   error indicator          -> 'failed'
+  //   success indicator OR the Unblock button disappearing -> 'confirmed'
+  //   nothing definitive       -> 'unknown'
+  function awaitVerdict() {
+    return new Promise(function (resolve) {
+      var start = Date.now();
+      var tick = function () {
+        if (detectError()) return resolve('failed');
+        if (detectSuccess()) return resolve('confirmed');
+        if (!findUnblockButton() && Date.now() - start > 1500) return resolve('confirmed');
+        if (Date.now() - start > 8000) return resolve('unknown');
+        setTimeout(tick, 300);
+      };
+      tick();
+    });
   }
 
   async function run() {
@@ -62,22 +120,23 @@
       if (!account) { log('No entity in URL — skipping automation'); return; }
       log('Starting unsuspend automation for ' + account);
 
-      var unblockBtn = await waitForElement(function () {
-        var el = document.getElementById('unblockBtn');
-        if (!el) {
-          var btns = document.querySelectorAll('button');
-          for (var i = 0; i < btns.length; i++) {
-            if (btns[i].textContent.trim() === 'Unblock') { el = btns[i]; break; }
-          }
-        }
-        return el || null;
-      }, 10000);
-      if (!unblockBtn) { log('Unblock button not found'); showToast('Unblock button not found for ' + account); reportDone(true); return; }
+      var unblockBtn = await waitForElement(findUnblockButton, 10000);
+      if (!unblockBtn) {
+        log('Unblock button not found');
+        showToast('Unblock button not found for ' + account);
+        reportDone({ outcome: 'failed', account: account });
+        return;
+      }
       log('Clicking Unblock for ' + account);
       simulateClick(unblockBtn);
 
       var textarea = await waitForElement(function () { return document.querySelector('textarea'); }, 5000);
-      if (!textarea) { log('Textarea not found'); showToast('Textarea not found for ' + account); reportDone(true); return; }
+      if (!textarea) {
+        log('Textarea not found');
+        showToast('Textarea not found for ' + account);
+        reportDone({ outcome: 'failed', account: account });
+        return;
+      }
       log('Pasting reason for ' + account);
       textarea.focus();
       textarea.value = reason;
@@ -88,22 +147,27 @@
         var el = document.getElementById('submitBtn');
         return (el && el.offsetParent !== null) ? el : null;
       }, 5000);
-      if (!saveBtn) { log('submitBtn not found'); showToast('Save button not found for ' + account); reportDone(true); return; }
+      if (!saveBtn) {
+        log('submitBtn not found');
+        showToast('Save button not found for ' + account);
+        reportDone({ outcome: 'failed', account: account });
+        return;
+      }
       log('Clicking Save for ' + account);
       simulateClick(saveBtn);
 
-      var failed = await waitForElement(function () {
-        var err = document.querySelector('.error, .alert-danger, [class*="error"]');
-        return (err && err.offsetParent !== null && (err.textContent || '').trim()) ? err : null;
-      }, 3000);
-      if (failed) {
-        showToast('Unsuspend may have failed for ' + account);
+      var outcome = await awaitVerdict();
+      if (outcome === 'confirmed') {
+        showToast('\u2705 Unsuspension verified for ' + account);
+        log('Unsuspension confirmed via page signals for ' + account);
+      } else if (outcome === 'failed') {
+        showToast('\u274C Unsuspension failed for ' + account + ' — see error on page');
         log('Error indicator shown after save for ' + account);
       } else {
-        showToast('Unsuspend completed for ' + account);
+        showToast('\u26A0\uFE0F Could not verify unsuspension for ' + account + ' — please check manually');
+        log('No confirmation signal within timeout for ' + account);
       }
-      log('Automation complete for ' + account);
-      reportDone(!!failed);
+      reportDone({ outcome: outcome, account: account });
     });
   }
 

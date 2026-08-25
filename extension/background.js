@@ -146,6 +146,23 @@ async function openAbuseDeskTabs(accounts, region) {
   return opened;
 }
 
+const WEBAPP_TAB_MATCHES = [
+  'https://arf-bounce-report-generator.vercel.app/*',
+  'https://*.vercel.app/*',
+  'http://localhost:3000/*'
+];
+
+function forwardUnsuspendOutcome(data) {
+  chrome.tabs.query({ url: WEBAPP_TAB_MATCHES }, tabs => {
+    if (chrome.runtime.lastError || !tabs || !tabs.length) return;
+    for (const tab of tabs) {
+      chrome.tabs.sendMessage(tab.id, { action: 'unsuspend-outcome', data }, () => {
+        void chrome.runtime.lastError; // tab may have navigated — ignore
+      });
+    }
+  });
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'store-report') {
     const reportData = {
@@ -238,10 +255,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === 'ad-tab-done') {
     const tid = sender && sender.tab && sender.tab.id;
+    const d = message.data || {};
+    const outcome = d.outcome || (d.failed ? 'failed' : 'unknown');
+    // Relay the verdict back to the report page so the user gets an explicit
+    // confirmation there, not just the transient on-page toast.
+    forwardUnsuspendOutcome({ outcome, account: d.account || '' });
     if (typeof tid === 'number' && _openAdTabIds.has(tid)) {
       _openAdTabIds.delete(tid);
-      // Give the user time to read the on-page toast: short on success, longer on failure.
-      const delay = message.data && message.data.failed ? 8000 : 3000;
+      // Let the user read the on-page toast: short on verified, longer otherwise.
+      const delay = outcome === 'confirmed' ? 3000 : outcome === 'failed' ? 12000 : 10000;
       setTimeout(() => { chrome.tabs.remove(tid).catch(() => {}); }, delay);
     }
     return;
