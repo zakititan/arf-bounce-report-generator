@@ -834,8 +834,6 @@ async function checkWebsite(prefix, domain) {
 
 async function checkDkim(prefix, domain) {
   const dkimEl = document.getElementById(prefix + '-result-dkim');
-  const dkimSelect = document.getElementById(prefix + '-dkim');
-  const hintEl = document.getElementById(prefix + '-dkim-hint');
   try {
     const data = await fetchDkimCheck(domain);
     const status = data.status || 'Not Set';
@@ -846,18 +844,10 @@ async function checkDkim(prefix, domain) {
         dkimEl.firstChild.textContent = 'Set — ' + selectors.join(', ');
         setValueFade(dkimEl);
       }
-      if (dkimSelect && dkimSelect.value === '') {
-        dkimSelect.value = 'Set';
-        if (hintEl) hintEl.textContent = 'Auto-detected via selector: ' + selectors.join(', ');
-      }
       showToast('DKIM: Set (' + selectors.join(', ') + ')');
     } else {
       if (dkimEl) dkimEl.innerHTML = '<span class="dkim-badge notset">Not Set</span>';
       setValueFade(dkimEl);
-      if (dkimSelect && dkimSelect.value === '') {
-        dkimSelect.value = 'Not Set';
-        if (hintEl) hintEl.textContent = 'Auto-detected: no titan/neo DKIM record found';
-      }
       showToast('DKIM: Not Set');
     }
     updateStepper(prefix, '3');
@@ -1070,8 +1060,25 @@ function clearAssurances(prefix) {
 // ── Validation ────────────────────────────────────────────────────────
 function v(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
 
+// DKIM is auto-checked via Domain Lookup — never user-settable (all panels)
+function dkimLookupText(prefix) {
+  return document.getElementById(prefix + '-result-dkim')?.textContent?.trim() || '';
+}
+function dkimFromLookup(prefix) {
+  const t = dkimLookupText(prefix);
+  return t.startsWith('Set') ? 'Set' : (t || '-');
+}
+function dkimLookupError(prefix) {
+  const t = dkimLookupText(prefix);
+  if (t.startsWith('Set')) return null;
+  const id = prefix + '-domain-input';
+  return t.includes('Not Set')
+    ? { id, label: 'DKIM Status is Not Set — report cannot be generated' }
+    : { id, label: 'DKIM unverified — run Domain Lookup before generating' };
+}
+
 function validateARF() {
-  const fieldIds = ['arf-account','arf-zd-link','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim'];
+  const fieldIds = ['arf-account','arf-zd-link','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-domain-input'];
   clearFieldErrors(fieldIds);
   const errors = [];
   if (!v('arf-account')) errors.push({ id: 'arf-account', label: 'Account' });
@@ -1081,9 +1088,8 @@ function validateARF() {
   if (!v('arf-blocked-lt2'))  errors.push({ id: 'arf-blocked-lt2',  label: 'Blocked Email Accounts < 2' });
   if (!v('arf-email-type'))   errors.push({ id: 'arf-email-type',   label: 'Email Content Type' });
   if (!v('arf-website'))      errors.push({ id: 'arf-website',      label: 'Valid Website' });
-  if (!v('arf-dkim'))         errors.push({ id: 'arf-dkim',         label: 'DKIM Status' });
-  else if (v('arf-dkim') === 'Not Set')
-    errors.push({ id: 'arf-dkim', label: 'DKIM Status is Not Set — report cannot be generated' });
+  const dkimErr = dkimLookupError('arf');
+  if (dkimErr) errors.push(dkimErr);
   const arfAssurances = getActiveAssurances('arf');
   if (arfAssurances.length === 0)
     errors.push({ id: null, label: 'Assurances (select at least one)' });
@@ -1091,7 +1097,7 @@ function validateARF() {
 }
 
 function validateBounce() {
-  const fieldIds = ['bounce-account','bounce-zd-link','bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-other-blocked-detail'];
+  const fieldIds = ['bounce-account','bounce-zd-link','bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-domain-input','bounce-other-blocked-detail'];
   clearFieldErrors(fieldIds);
   const errors = [];
   if (!v('bounce-account')) errors.push({ id: 'bounce-account', label: 'Account' });
@@ -1102,9 +1108,8 @@ function validateBounce() {
   if (v('bounce-other-blocked') === 'Yes' && !v('bounce-other-blocked-detail'))
     errors.push({ id: 'bounce-other-blocked-detail', label: 'Blocked Email Account(s) in Same Domain' });
   if (!v('bounce-website'))       errors.push({ id: 'bounce-website',       label: 'Valid Website' });
-  if (!v('bounce-dkim'))          errors.push({ id: 'bounce-dkim',          label: 'DKIM Status' });
-  else if (v('bounce-dkim') === 'Not Set')
-    errors.push({ id: 'bounce-dkim', label: 'DKIM Status is Not Set — report cannot be generated' });
+  const dkimErr = dkimLookupError('bounce');
+  if (dkimErr) errors.push(dkimErr);
   const bounceAssurances = getActiveAssurances('bounce');
   if (bounceAssurances.length === 0)
     errors.push({ id: null, label: 'Assurances (select at least one)' });
@@ -1155,7 +1160,7 @@ function generateARF() {
       'Domain Creation Date : ' + (whois ? whois.creation_date : '-'),
       'Domain Age : ' + (whois ? whois.domain_age : '-'),
       'Valid Website or not : ' + (v('arf-website') || '-'),
-      'DKIM: ' + (v('arf-dkim') || '-'),
+      'DKIM: ' + dkimFromLookup('arf'),
       'Assurances : ' + (assurances.length > 0 ? assurances.join(', ') : '-'),
     ];
 
@@ -1209,6 +1214,18 @@ function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, af
     if (el) el.textContent = '';
   });
 
+  // Reset Domain Lookup result card — DKIM/WHOIS must be re-verified after Clear
+  ['result-summary', 'result-created', 'result-age', 'result-source'].forEach(s => {
+    const el = document.getElementById(prefix + '-' + s);
+    if (el) el.textContent = '—';
+  });
+  ['result-website', 'result-dkim'].forEach(s => {
+    const el = document.getElementById(prefix + '-' + s);
+    if (el) el.innerHTML = '<div class="skeleton skeleton-sm"></div>';
+  });
+  const resultCard = document.getElementById(prefix + '-domain-result');
+  if (resultCard) resultCard.classList.remove('open');
+
   const outputSection = document.getElementById(prefix + '-output-section');
   if (outputSection) {
     outputSection.style.display = 'none';
@@ -1236,8 +1253,8 @@ function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, af
 
 function clearARF() {
   clearPanel('arf',
-    ['arf-account','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim','arf-domain-input','arf-zd-link'],
-    ['arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-dkim'],
+    ['arf-account','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-domain-input','arf-zd-link'],
+    ['arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website'],
     { clearScreenshots: true }
   );
 }
@@ -1265,7 +1282,7 @@ function generateBounce() {
       'Domain Creation Date : ' + (whois ? whois.creation_date : '-'),
       'Domain Age : ' + (whois ? whois.domain_age : '-'),
       'Valid Website or not : ' + (v('bounce-website') || '-'),
-      'DKIM: ' + (v('bounce-dkim') || '-'),
+      'DKIM: ' + dkimFromLookup('bounce'),
       'Assurances : ' + (assurances.length > 0 ? assurances.join(', ') : '-')
     );
 
@@ -1284,8 +1301,8 @@ function generateBounce() {
 // clearBounce: confirm before destroying form data
 function clearBounce() {
   clearPanel('bounce',
-    ['bounce-account','bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-domain-input','bounce-other-blocked-detail','bounce-zd-link'],
-    ['bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-dkim','bounce-other-blocked-detail'],
+    ['bounce-account','bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-domain-input','bounce-other-blocked-detail','bounce-zd-link'],
+    ['bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-other-blocked-detail'],
     { clearScreenshots: false }
   );
 }
@@ -1320,14 +1337,8 @@ function validateSMTPSuspend() {
   const errors = [];
   if (!v('smtpsuspend-account')) errors.push({ id: 'smtpsuspend-account', label: 'Account' });
   if (!v('smtpsuspend-zd-link')) errors.push({ id: 'smtpsuspend-zd-link', label: 'Zendesk Ticket Link' });
-  const smtpDkimText = document.getElementById('smtpsuspend-result-dkim')?.textContent?.trim() || '';
-  if (smtpDkimText.startsWith('Set')) {
-    // DKIM confirmed set via Domain Lookup
-  } else if (smtpDkimText.includes('Not Set')) {
-    errors.push({ id: 'smtpsuspend-domain-input', label: 'DKIM Status is Not Set — report cannot be generated' });
-  } else {
-    errors.push({ id: 'smtpsuspend-domain-input', label: 'DKIM unverified — run Domain Lookup before generating' });
-  }
+  const smtpDkimErr = dkimLookupError('smtpsuspend');
+  if (smtpDkimErr) errors.push(smtpDkimErr);
   const assurances = getActiveAssurances('smtpsuspend');
   if (assurances.length === 0)
     errors.push({ id: null, label: 'Assurances (select at least one)' });
@@ -1365,7 +1376,7 @@ function generateSMTPSuspend() {
     const lines = [
       'Domain Creation Date : ' + (whois ? whois.creation_date : '-'),
       'Domain Age : ' + (whois ? whois.domain_age : '-'),
-      'DKIM: ' + (() => { const t = (document.getElementById('smtpsuspend-result-dkim')?.textContent?.trim() || '-'); return t.startsWith('Set') ? 'Set' : t; })(),
+      'DKIM: ' + dkimFromLookup('smtpsuspend'),
       'Laravel SMTP Compromise : ' + laravelStatus,
       'XML-RPC SMTP Vulnerability : ' + xmlrpcStatus,
       'Hosted on WordPress : ' + wordpressStatus,
