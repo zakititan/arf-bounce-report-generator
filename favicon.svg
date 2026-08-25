@@ -1,18 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
 <defs>
   <linearGradient id="badgeGrad" x1="0" y1="0" x2="0" y2="1">
-    <stop offset="0" stop-color="#6ee7b7"/>
-    <stop offset="1" stop-color="#10b981"/>
+    <stop offset="0" stop-color="#93c5fd"/>
+    <stop offset="1" stop-color="#3b82f6"/>
   </linearGradient>
 </defs>
-  <!-- Emerald rounded background -->
-  <rect width="32" height="32" rx="8" fill="#047857"/>
+  <!-- Sapphire rounded background -->
+  <rect width="32" height="32" rx="8" fill="#1d4ed8"/>
   <!-- Document lines -->
   <rect x="6" y="8" width="10" height="2" rx="1" fill="white" opacity="0.9"/>
   <rect x="6" y="13" width="16" height="2" rx="1" fill="white" opacity="0.9"/>
   <rect x="6" y="18" width="12" height="2" rx="1" fill="white" opacity="0.9"/>
   <!-- Checkmark badge -->
-  <circle cx="24" cy="9" r="5" fill="#064e3b"/>
+  <circle cx="24" cy="9" r="5" fill="#1e3a8a"/>
   <circle cx="24" cy="9" r="4" fill="url(#badgeGrad)"/>
   <path d="M21.8 9.1 L23.3 10.7 L26.2 7.4" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
