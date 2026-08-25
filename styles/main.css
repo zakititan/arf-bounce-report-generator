@@ -144,7 +144,22 @@ img, svg { display: block; max-width: 100%; }
 input, select, button, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; background: none; border: none; }
 :focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; border-radius: var(--radius-sm); }
-a, button, input, select, textarea { transition: color var(--transition-interactive), background var(--transition-interactive), border-color var(--transition-interactive), box-shadow var(--transition-interactive); }
+a, button, input, select, textarea { transition: color var(--transition-interactive), background var(--transition-interactive), border-color var(--transition-interactive), box-shadow var(--transition-interactive), transform 140ms cubic-bezier(0.16, 1, 0.3, 1), opacity 180ms ease; }
+
+/* ── Micro-interactions — fast (<200ms), subtle press & hover feedback ── */
+.btn:active:not(:disabled),
+.btn-lookup:active:not(:disabled),
+.btn-check-pwd:active:not(:disabled),
+.tab-btn:active,
+.assurance-btn:active,
+.website-suboption-btn:active { transform: translateY(1px); }
+.btn-primary:hover:not(:disabled) { transform: translateY(-1px); }
+.csv-clear-btn:active, .modal-close:active, .ext-version-banner-dismiss:active, .screenshot-thumb .remove-btn:active { transform: scale(0.9); }
+.tab-btn:not(.active):hover { background: color-mix(in srgb, var(--color-text) 5%, transparent); }
+.btn-tool-link .ext-arrow { transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1); }
+.btn-tool-link:hover .ext-arrow { transform: translate(1px, -1px); }
+.screenshot-thumb { transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 160ms ease, border-color 160ms ease; }
+.screenshot-thumb:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--color-text-faint); }
 ::selection { background: var(--color-primary-highlight); color: var(--color-text); }
 * { scrollbar-width: thin; scrollbar-color: var(--color-border) transparent; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -520,7 +535,7 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   border: 1px solid var(--color-border); background: var(--color-surface);
   color: var(--color-text-muted); user-select: none; min-height: 32px;
   box-shadow: var(--shadow-xs);
-  transition: background var(--transition-interactive), color var(--transition-interactive), border-color var(--transition-interactive), box-shadow var(--transition-interactive);
+  transition: background var(--transition-interactive), color var(--transition-interactive), border-color var(--transition-interactive), box-shadow var(--transition-interactive), transform 140ms ease;
 }
 .assurance-btn:hover { background: var(--color-surface-2); color: var(--color-text); border-color: var(--color-text-faint); }
 .assurance-btn.active { background: var(--color-primary); color: var(--color-on-primary); border-color: var(--color-primary); font-weight: 600; box-shadow: var(--shadow-sm); animation: chipPop 180ms cubic-bezier(0.34, 1.56, 0.64, 1); }
@@ -546,7 +561,7 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   border: 1px solid color-mix(in srgb, var(--color-primary) 30%, var(--color-border));
   background: var(--color-surface); color: var(--color-text-muted);
   user-select: none; min-height: 28px;
-  transition: background var(--transition-interactive), color var(--transition-interactive), border-color var(--transition-interactive);
+  transition: background var(--transition-interactive), color var(--transition-interactive), border-color var(--transition-interactive), transform 140ms ease;
 }
 .website-suboption-btn:hover { background: var(--color-primary-highlight); color: var(--color-primary-hover); border-color: var(--color-primary); }
 .website-suboption-btn.active { background: var(--color-primary); color: var(--color-on-primary); border-color: var(--color-primary); font-weight: 600; animation: chipPop 180ms cubic-bezier(0.34, 1.56, 0.64, 1); }
@@ -571,7 +586,7 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   color: var(--color-text-muted);
   border: 1px solid var(--color-border);
   text-decoration: none; cursor: pointer;
-  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, transform 140ms ease;
 }
 .btn-tool-link:hover {
   background: var(--color-primary-highlight);
@@ -872,7 +887,7 @@ html.theme-transitioning, html.theme-transitioning * { transition: background 25
   font-size: 0.875rem; font-weight: 500;
   color: var(--color-text-muted);
   cursor: pointer;
-  transition: color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+  transition: color 160ms ease, background 160ms ease, box-shadow 160ms ease, transform 140ms ease;
   white-space: nowrap;
 }
 .tab-btn::before { display: none; }
