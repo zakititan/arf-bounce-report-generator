@@ -35,7 +35,15 @@ export const parseCsvRow = _parseCsvRow;
 // ── Constants ─────────────────────────────────────────────────────────
 const MAX_SCREENSHOTS = 10;
 const LOOKUP_DEBOUNCE_MS = 1000;
+const DRAFT_DEBOUNCE_MS = 300;
+const BTN_PENDING_TIMEOUT_MS = 90000;
 const _lookupTimers = { arf: null, bounce: null };
+const _draftTimers = {};
+const _btnTimers = new WeakMap();
+// prefix (used in element ids/state) → tab data-tab / panel id suffix
+const TAB_DATA_TAB = { arf: 'arf', bounce: 'bounce', ipspike: 'ip-spike', smtpsuspend: 'smtp-suspension' };
+// Fields counted by updateReqCounter (required-field chips)
+const REQ_SELECTOR = '[aria-required="true"]';
 
 // ── State ─────────────────────────────────────────────────────────────
 const state = {
@@ -76,6 +84,16 @@ const state = {
 let lastActivePanel = null; // tracks which panel the user last interacted with (for Ctrl/Cmd+Enter)
 let sheetConfig = { sheetId: '', appsScriptUrl: '' };
 
+// ── Value crossfade ───────────────────────────────────────────────────
+// Replays an element's stylesheet animation (valIn) on content updates by
+// toggling inline animation off, forcing reflow, then clearing inline style.
+function setValueFade(el) {
+  if (!el) return;
+  el.style.animation = 'none';
+  void el.offsetHeight;
+  el.style.animation = '';
+}
+
 // ── Tab Navigation ─────────────────────────────────────────
 function initTabs() {
   const STORAGE_KEY = 'activeTab';
@@ -83,12 +101,14 @@ function initTabs() {
 
   const tabBtns   = document.querySelectorAll('.tab-btn');
   const tabPanels = document.querySelectorAll('.tab-panel');
+  const tabOrder  = Array.from(tabBtns);
 
   function activateTab(targetTab) {
     tabBtns.forEach(btn => {
       const isActive = btn.dataset.tab === targetTab;
       btn.classList.toggle('active', isActive);
       btn.setAttribute('aria-selected', isActive);
+      btn.setAttribute('tabindex', isActive ? '0' : '-1');
     });
 
     tabPanels.forEach(panel => {
@@ -96,15 +116,37 @@ function initTabs() {
       panel.classList.toggle('active', isActive);
     });
 
-    localStorage.setItem(STORAGE_KEY, targetTab);
+    try { localStorage.setItem(STORAGE_KEY, targetTab); } catch {}
   }
 
-  const savedTab = localStorage.getItem(STORAGE_KEY) ?? DEFAULT_TAB;
-  activateTab(savedTab);
+  // Roving focus: move focus + activate the tab at `index` (wraps around).
+  function focusTab(index) {
+    const btn = tabOrder[(index + tabOrder.length) % tabOrder.length];
+    activateTab(btn.dataset.tab);
+    btn.focus();
+  }
 
-  tabBtns.forEach(btn => {
+  let savedTab = null;
+  try { savedTab = localStorage.getItem(STORAGE_KEY); } catch {}
+  activateTab(savedTab ?? DEFAULT_TAB);
+
+  tabBtns.forEach((btn, index) => {
     btn.addEventListener('click', () => activateTab(btn.dataset.tab));
+    btn.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight') focusTab(index + 1);
+      else if (e.key === 'ArrowLeft') focusTab(index - 1);
+      else if (e.key === 'Home') focusTab(0);
+      else if (e.key === 'End') focusTab(tabOrder.length - 1);
+      else return;
+      e.preventDefault();
+    });
   });
+}
+
+// ── Tab status dots ────────────────────────────────────────
+function setTabGenerated(prefix, value) {
+  const tabBtn = document.querySelector('.tab-btn[data-tab="' + TAB_DATA_TAB[prefix] + '"]');
+  if (tabBtn) tabBtn.setAttribute('data-generated', value);
 }
 
 // ── Init ──────────────────────────────────────────────────────────────
@@ -114,8 +156,21 @@ document.addEventListener('DOMContentLoaded', () => {
   initKeyboardShortcuts();
   initDomainInputs();
   initEventDelegation();
+  initLiveErrorClear();
   initDragDrop();
   initPasteSupport();
+  initDraftPersistence();
+  initTextareaAutosize();
+  ['arf', 'bounce', 'smtpsuspend'].forEach(updateReqCounter);
+
+  // Topbar scroll shadow
+  const topbar = document.querySelector('.topbar');
+  if (topbar) {
+    const onScroll = () => topbar.classList.toggle('scrolled', window.scrollY > 8);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+  }
+
   renderPreviews('arf', 'screenshots');
   renderPreviews('arf', 'assuranceScreenshots');
   renderPreviews('bounce', 'assuranceScreenshots');
@@ -130,6 +185,24 @@ document.addEventListener('DOMContentLoaded', () => {
       setPartnerPanelResult(e.data.data);
     }
   });
+
+  // Restore action buttons left in pending state when the extension reports
+  // the corresponding result (safety timeout per button also applies).
+  const PENDING_RESULT_ACTIONS = {
+    REPORT_GENERATOR_JIRA_RESULT: 'create-jira',
+    REPORT_GENERATOR_UNSUSPEND_RESULT: 'unsuspend',
+  };
+  window.addEventListener('message', (e) => {
+    const action = e.data && PENDING_RESULT_ACTIONS[e.data.type];
+    if (!action) return;
+    document.querySelectorAll('[data-action="' + action + '"][data-original-html]').forEach(resetBtn);
+    const status = e.data.unsuspendStatus;
+    if (status && status.done === false) {
+      showToast('JIRA created but could not be marked Done: ' + (status.error || 'unknown error'), 'warning', { durationMs: 6000 });
+    } else if (status && status.done && status.commented === false) {
+      showToast('JIRA marked Done, but the "Unsuspended" comment failed: ' + (status.error || 'unknown error'), 'warning', { durationMs: 6000 });
+    }
+  });
 });
 
 // ── Keyboard shortcuts (Ctrl/Cmd + Enter) ─────────────────────────────
@@ -140,6 +213,7 @@ function initKeyboardShortcuts() {
     if (!lastActivePanel) return; // no panel active yet
     if (lastActivePanel === 'arf') generateARF();
     else if (lastActivePanel === 'bounce') generateBounce();
+    else if (lastActivePanel === 'smtpsuspend') generateSMTPSuspend();
   });
 }
 
@@ -151,12 +225,21 @@ function resetWhoisState(prefix) {
   document.getElementById(prefix + '-domain-result')?.classList.remove('visible', 'error', 'open');
 }
 
+function setRegionChip(prefix) {
+  const chip = document.getElementById(prefix + '-region-chip');
+  if (!chip) return;
+  chip.textContent = state[prefix].region === 'eu' ? 'EU' : 'NA';
+  chip.hidden = false;
+}
+
 async function detectRegion(prefix, domain) {
   try {
     const result = await lookupMx(domain);
     state[prefix].region = result.region;
+    setRegionChip(prefix);
   } catch {
     state[prefix].region = 'na';
+    setRegionChip(prefix);
   }
   const accountInput = document.getElementById(prefix + '-account');
   if (accountInput) accountInput.dispatchEvent(new Event('regionchange'));
@@ -211,10 +294,18 @@ function initDomainInputs() {
 
   // On input: sanitise account value, sync sanitised domain and trigger lookup
   accountInput.addEventListener('input', () => {
-    accountInput.value = sanitiseAccountInput(accountInput.value);
-    const sanitised = sanitiseDomainInput(accountInput.value);
+    const raw = accountInput.value;
+    const sanitised = sanitiseAccountInput(raw);
+    if (sanitised !== raw) {
+      const pos = accountInput.selectionStart ?? raw.length;
+      const diff = raw.length - sanitised.length;
+      accountInput.value = sanitised;
+      const newPos = Math.max(0, Math.min(pos - diff, sanitised.length));
+      try { accountInput.setSelectionRange(newPos, newPos); } catch {}
+    }
+    const sanitisedDomain = sanitiseDomainInput(accountInput.value);
     const domainInput = document.getElementById(prefix + '-domain-input');
-    if (domainInput) domainInput.value = sanitised;
+    if (domainInput) domainInput.value = sanitisedDomain;
     resetWhoisState(prefix);
     lookupDomain(prefix);
   });
@@ -298,10 +389,10 @@ function copyOutputWithFeedback(id) {
       showToast('Copied to clipboard!');
       const btn = outputArea?.querySelector('.copy-btn-wrap button');
       if (btn) {
-        const original = btn.textContent;
-        btn.textContent = 'Copied ✓';
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<span aria-hidden="true">✓</span> Copied';
         btn.style.color = 'var(--color-success)';
-        setTimeout(() => { btn.textContent = original; btn.style.color = ''; }, 2000);
+        setTimeout(() => { btn.innerHTML = originalHtml; btn.style.color = ''; }, 2000);
       }
     }).catch(() => showToast('Copy failed — please copy manually.'));
   };
@@ -364,6 +455,7 @@ function initEventDelegation() {
     if (panel.id === 'panel-arf') lastActivePanel = 'arf';
     else if (panel.id === 'panel-bounce') lastActivePanel = 'bounce';
     else if (panel.id === 'panel-ip-spike') lastActivePanel = 'ipspike';
+    else if (panel.id === 'panel-smtp-suspension') lastActivePanel = 'smtpsuspend';
   });
 
   shell.addEventListener('click', (e) => {
@@ -388,10 +480,10 @@ function initEventDelegation() {
         if (panel) lookupDomainImmediate(panel);
         break;
       case 'create-jira':
-        createTaeJira(panel);
+        createTaeJira(panel, target);
         break;
       case 'unsuspend':
-        unsuspendAccount(panel);
+        unsuspendAccount(panel, target);
         break;
       case 'log-sheet':
         if (panel) logToSheet(panel);
@@ -441,6 +533,25 @@ function initEventDelegation() {
   document.getElementById('arf-assurance-screenshot-input')?.addEventListener('change', (e) => handleFileSelect(e, 'arf', 'assuranceScreenshots'));
   document.getElementById('bounce-assurance-screenshot-input')?.addEventListener('change', (e) => handleFileSelect(e, 'bounce', 'assuranceScreenshots'));
   document.getElementById('bounce-csv-input')?.addEventListener('change', (e) => handleCsvSelect(e));
+}
+
+// ── Live validation-error clearing ────────────────────────────────────
+function initLiveErrorClear() {
+  ['arf', 'bounce', 'ipspike', 'smtpsuspend'].forEach(prefix => {
+    const panel = document.getElementById('panel-' + TAB_DATA_TAB[prefix]);
+    if (!panel) return;
+    ['input', 'change'].forEach(evt => panel.addEventListener(evt, (e) => {
+      const el = e.target.closest('input, select, textarea');
+      if (!el || !el.classList.contains('field-error')) return;
+      el.classList.remove('field-error');
+      const list = document.getElementById(prefix + '-validation-list');
+      if (!list) return;
+      list.querySelectorAll('li[data-target-id="' + el.id + '"]').forEach(li => li.remove());
+      if (list.children.length === 0) {
+        document.getElementById(prefix + '-validation-banner')?.classList.remove('visible');
+      }
+    }));
+  });
 }
 
 // ── Drag-and-drop init ───────────────────────────────────────────────
@@ -562,6 +673,8 @@ function processCsv(file) {
       state.bounce.csvFromDate = rawLast ? rawLast.substring(0, 10) : null;
       updateUserAgentHref();
     }
+    const datesEl = document.getElementById('bounce-csv-dates');
+    if (datesEl) datesEl.textContent = (state.bounce.csvFromDate && state.bounce.csvToDate) ? state.bounce.csvFromDate + ' → ' + state.bounce.csvToDate : '';
     if (lines.length >= 2) {
       // Domain is taken from the 2nd column (index 1) if it yields a valid
       // domain/email, otherwise falls back to the 3rd column (index 2).
@@ -597,6 +710,8 @@ function clearCsv() {
   document.getElementById('bounce-csv-count').textContent = '—';
   document.getElementById('bounce-csv-name').textContent = '';
   document.getElementById('bounce-lt40-badge').textContent = '';
+  const datesEl = document.getElementById('bounce-csv-dates');
+  if (datesEl) datesEl.textContent = '';
   document.getElementById('bounce-csv-input').value = '';
   updateUserAgentHref();
 }
@@ -631,33 +746,44 @@ async function _doLookup(prefix) {
   state[prefix].lookupInFlight = true;
   setGenerateBtnState(prefix);
   btn.disabled = true;
-  btn.textContent = 'Looking up…';
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 0.8s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Looking up…';
   card.classList.remove('visible', 'error', 'open');
   if (websiteEl) websiteEl.innerHTML = '<div class="skeleton skeleton-sm"></div>';
   if (dkimEl) dkimEl.innerHTML = '<div class="skeleton skeleton-sm"></div>';
   if (sourceEl) sourceEl.textContent = '—';
+  if (prefix === 'smtpsuspend') {
+    ['laravel', 'xmlrpc', 'wordpress'].forEach(name => {
+      const el = document.getElementById(prefix + '-result-' + name);
+      if (el) el.innerHTML = '<div class="skeleton skeleton-sm"></div>';
+    });
+  }
 
   try {
     const data = await fetchWhois(domain);
     state[prefix].whois = { creation_date: data.creation_date, domain_age: data.domain_age, source: data.source };
     createdEl.textContent = data.creation_date;
     ageEl.textContent = data.domain_age || '—';
+    setValueFade(createdEl);
+    setValueFade(ageEl);
     if (sourceEl) sourceEl.textContent = data.source === 'rdap' ? 'RDAP' : 'WhoisJSON';
     card.classList.remove('error');
     card.classList.add('visible', 'open');
     const summaryEl = document.getElementById(prefix + '-result-summary');
     if (summaryEl) summaryEl.textContent = data.domain_age ? data.creation_date + ' — ' + data.domain_age : data.creation_date;
+    setValueFade(summaryEl);
     updateStepper(prefix, '1');
     applyDomainAgeColor(prefix);
-    showToast('Domain info fetched! Checking website & DKIM…');
   } catch (err) {
     state[prefix].whois = null;
     createdEl.textContent = err.message || 'Lookup failed';
     ageEl.textContent = '—';
+    setValueFade(createdEl);
+    setValueFade(ageEl);
     if (sourceEl) sourceEl.textContent = '—';
     card.classList.add('visible', 'error', 'open');
     const summaryEl = document.getElementById(prefix + '-result-summary');
     if (summaryEl) summaryEl.textContent = err.message || 'Lookup failed';
+    setValueFade(summaryEl);
     updateStepper(prefix, '1');
     showToast('WHOIS lookup failed — still checking website & DKIM…');
   } finally {
@@ -690,6 +816,7 @@ async function checkWebsite(prefix, domain) {
     if (websiteEl) {
       websiteEl.innerHTML = '<span class="website-badge ' + bc + '"></span>';
       websiteEl.firstChild.textContent = verdict;
+      setValueFade(websiteEl);
     }
     if (websiteSelect && websiteSelect.value === '') {
       const mapped = verdict === 'Valid Website' ? 'Valid Website' : 'No website';
@@ -698,7 +825,11 @@ async function checkWebsite(prefix, domain) {
     }
     updateStepper(prefix, '2');
     showToast('Website: ' + verdict);
-  } catch { if (websiteEl) websiteEl.innerHTML = '<span class="website-badge nosite">Check failed</span>'; updateStepper(prefix, '2'); }
+  } catch {
+    if (websiteEl) websiteEl.innerHTML = '<span class="website-badge nosite">Check failed</span>';
+    setValueFade(websiteEl);
+    updateStepper(prefix, '2');
+  }
 }
 
 async function checkDkim(prefix, domain) {
@@ -713,6 +844,7 @@ async function checkDkim(prefix, domain) {
       if (dkimEl) {
         dkimEl.innerHTML = '<span class="dkim-badge set"></span>';
         dkimEl.firstChild.textContent = 'Set — ' + selectors.join(', ');
+        setValueFade(dkimEl);
       }
       if (dkimSelect && dkimSelect.value === '') {
         dkimSelect.value = 'Set';
@@ -721,6 +853,7 @@ async function checkDkim(prefix, domain) {
       showToast('DKIM: Set (' + selectors.join(', ') + ')');
     } else {
       if (dkimEl) dkimEl.innerHTML = '<span class="dkim-badge notset">Not Set</span>';
+      setValueFade(dkimEl);
       if (dkimSelect && dkimSelect.value === '') {
         dkimSelect.value = 'Not Set';
         if (hintEl) hintEl.textContent = 'Auto-detected: no titan/neo DKIM record found';
@@ -728,7 +861,11 @@ async function checkDkim(prefix, domain) {
       showToast('DKIM: Not Set');
     }
     updateStepper(prefix, '3');
-  } catch { if (dkimEl) dkimEl.innerHTML = '<span class="dkim-badge notset">Check failed</span>'; updateStepper(prefix, '3'); }
+  } catch {
+    if (dkimEl) dkimEl.innerHTML = '<span class="dkim-badge notset">Check failed</span>';
+    setValueFade(dkimEl);
+    updateStepper(prefix, '3');
+  }
 }
 
 async function checkLaravelVuln(domain) {
@@ -741,11 +878,13 @@ async function checkLaravelVuln(domain) {
       const cls = data.vulnerable ? 'vuln-badge exposed' : 'vuln-badge safe';
       const label = data.vulnerable ? '⚠ Exposed' : '✓ Not Found';
       el.innerHTML = `<span class="${cls}" title="${escapeHtml(data.reason)}">${label}</span>`;
+      setValueFade(el);
     }
     showToast('Laravel .env: ' + (data.vulnerable ? 'Exposed!' : 'Not found'));
   } catch {
     state.smtpsuspend.laravelVulnerable = null;
     if (el) el.innerHTML = '<span class="vuln-badge unknown">Check failed</span>';
+    setValueFade(el);
   }
 }
 
@@ -759,11 +898,13 @@ async function checkXmlrpcVuln(domain) {
       const cls = data.vulnerable ? 'vuln-badge exposed' : 'vuln-badge safe';
       const label = data.vulnerable ? '⚠ Accessible' : '✓ Not Found';
       el.innerHTML = `<span class="${cls}" title="${escapeHtml(data.reason)}">${label}</span>`;
+      setValueFade(el);
     }
     showToast('XML-RPC: ' + (data.vulnerable ? 'Accessible!' : 'Not found'));
   } catch {
     state.smtpsuspend.xmlrpcVulnerable = null;
     if (el) el.innerHTML = '<span class="vuln-badge unknown">Check failed</span>';
+    setValueFade(el);
   }
 }
 
@@ -777,11 +918,13 @@ async function checkWordPressVuln(domain) {
       const cls = data.detected ? 'vuln-badge exposed' : 'vuln-badge safe';
       const label = data.detected ? '⚠ Detected' : '✓ Not Found';
       el.innerHTML = `<span class="${cls}" title="${escapeHtml(data.reason)}">${label}</span>`;
+      setValueFade(el);
     }
     showToast('WordPress: ' + (data.detected ? 'Detected!' : 'Not found'));
   } catch {
     state.smtpsuspend.wordpressDetected = null;
     if (el) el.innerHTML = '<span class="vuln-badge unknown">Check failed</span>';
+    setValueFade(el);
   }
 }
 
@@ -983,6 +1126,7 @@ function renderReportOutput(prefix, lines, fullCopyText, inlineScreenshots) {
     renderInlineScreenshots(outputArea, screenshots, label);
   });
   outputSection.style.display = 'block';
+  setTabGenerated(prefix, 'true');
   const logSheetBtn = outputSection.querySelector('.btn-log-sheet');
   if (logSheetBtn) logSheetBtn.disabled = false;
   outputSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -1081,6 +1225,8 @@ function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, af
   if (banner) banner.classList.remove('visible');
   clearFieldErrors(clearFieldErrorIds);
   updateStepper(prefix, '0');
+  setTabGenerated(prefix, 'false');
+  try { localStorage.removeItem(draftKey(prefix)); } catch {}
   if (afterClear) afterClear();
 }
 
@@ -1242,8 +1388,163 @@ function clearSMTPSuspend() {
   );
 }
 
+// ── Pending-button helpers (double-click protection) ──────────────────
+function setBtnPending(btn, label, timeoutMs = BTN_PENDING_TIMEOUT_MS) {
+  if (!btn || btn.disabled || btn.dataset.originalHtml !== undefined) return;
+  btn.dataset.originalHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 0.8s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> ' + label;
+  _btnTimers.set(btn, setTimeout(() => resetBtn(btn), timeoutMs));
+}
+
+function resetBtn(btn) {
+  if (!btn || btn.dataset.originalHtml === undefined) return;
+  clearTimeout(_btnTimers.get(btn));
+  _btnTimers.delete(btn);
+  btn.innerHTML = btn.dataset.originalHtml;
+  delete btn.dataset.originalHtml;
+  btn.disabled = false;
+}
+
+// ── Draft autosave/persistence (protects long-form work) ─────────────
+const DRAFT_FIELDS_SELECTOR = 'input[type=text], input[type=url], input[type=number], select, textarea';
+
+function draftKey(prefix) { return 'rg_draft_' + prefix; }
+
+function collectDraft(prefix) {
+  const panel = document.getElementById('panel-' + TAB_DATA_TAB[prefix]);
+  if (!panel) return null;
+  const body = panel.querySelector('.panel-body');
+  if (!body) return null;
+  const outputSection = document.getElementById(prefix + '-output-section');
+  const fields = {};
+  body.querySelectorAll(DRAFT_FIELDS_SELECTOR).forEach(el => {
+    if (!el.id || el.disabled || el.type === 'file' || el.type === 'password' || el.type === 'hidden') return;
+    if (outputSection && outputSection.contains(el)) return;
+    fields[el.id] = el.value;
+  });
+  const pwdAutoBtn = panel.querySelector('[data-value="Password changed"][data-panel="' + prefix + '"]');
+  const toggles = {};
+  const assurance = [];
+  panel.querySelectorAll('.assurance-btn.active').forEach(b => {
+    if (b === pwdAutoBtn) return;
+    assurance.push(b.getAttribute('data-value'));
+  });
+  if (assurance.length > 0) toggles.assurance = assurance;
+  const suboptions = [];
+  panel.querySelectorAll('.website-suboption-btn.active').forEach(b => suboptions.push(b.getAttribute('data-value')));
+  if (suboptions.length > 0) toggles.suboptions = suboptions;
+  return { fields, toggles };
+}
+
+function saveDraft(prefix) {
+  clearTimeout(_draftTimers[prefix]);
+  _draftTimers[prefix] = setTimeout(() => {
+    try {
+      const data = collectDraft(prefix);
+      if (!data) return;
+      const empty = Object.keys(data.fields).length === 0 && Object.keys(data.toggles).length === 0;
+      if (empty) localStorage.removeItem(draftKey(prefix));
+      else localStorage.setItem(draftKey(prefix), JSON.stringify(data));
+    } catch {}
+  }, DRAFT_DEBOUNCE_MS);
+}
+
+// Mirror toggleAssurance's activation state without stealing focus.
+function pressAssuranceBtn(btn, prefix) {
+  if (!btn || btn.classList.contains('active')) return;
+  btn.classList.add('active');
+  btn.setAttribute('aria-pressed', 'true');
+  if (btn.getAttribute('data-value') === 'Other') {
+    const f = document.getElementById(prefix + '-other-field');
+    if (f) f.classList.add('visible');
+  } else if (btn.getAttribute('data-value') === 'Contact Form' && prefix === 'bounce') {
+    const sub = document.getElementById('bounce-contact-form-suboptions');
+    if (sub) sub.classList.add('visible');
+  }
+}
+
+function restoreDraft(prefix) {
+  let data = null;
+  try { data = JSON.parse(localStorage.getItem(draftKey(prefix))); } catch { return; }
+  if (!data || typeof data !== 'object') return;
+  const panel = document.getElementById('panel-' + TAB_DATA_TAB[prefix]);
+  if (!panel) return;
+
+  Object.keys(data.fields || {}).forEach(id => {
+    const el = document.getElementById(id);
+    if (!el || el.disabled || el.type === 'password' || el.type === 'hidden') return;
+    if (el.tagName === 'SELECT' && !Array.from(el.options).some(o => o.value === data.fields[id])) return;
+    if (el.value === data.fields[id]) return;
+    el.value = data.fields[id];
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  (data.toggles?.assurance || []).forEach(val => {
+    // SMTP "Password changed" button is auto-managed by partner-panel checks
+    if (prefix === 'smtpsuspend' && val === 'Password changed') return;
+    pressAssuranceBtn(panel.querySelector('.assurance-btn[data-value="' + val + '"]'), prefix);
+  });
+  (data.toggles?.suboptions || []).forEach(val => {
+    const btn = panel.querySelector('.website-suboption-btn[data-value="' + val + '"]');
+    if (!btn || btn.classList.contains('active')) return;
+    btn.classList.add('active');
+    btn.setAttribute('aria-pressed', 'true');
+  });
+}
+
+// ── Required-fields counter (per-panel sticky-row chip) ───────────────
+function updateReqCounter(prefix) {
+  const chip = document.getElementById(prefix + '-req-counter');
+  if (!chip) return;
+  const panel = document.getElementById('panel-' + TAB_DATA_TAB[prefix]);
+  if (!panel) return;
+  const body = panel.querySelector('.panel-body');
+  const output = document.getElementById(prefix + '-output-section');
+  let fields = [];
+  if (body) fields = Array.from(body.querySelectorAll(REQ_SELECTOR))
+    .filter(el => !(output && output.contains(el)));
+  const filled = fields.filter(el => {
+    const v = (el.value || '').trim();
+    return v !== '' && v !== 'Select...';
+  }).length;
+  chip.textContent = filled + '/' + fields.length;
+  chip.hidden = fields.length === 0;
+  chip.classList.toggle('done', fields.length > 0 && filled === fields.length);
+}
+
+function initDraftPersistence() {
+  ['arf', 'bounce', 'ipspike', 'smtpsuspend'].forEach(prefix => {
+    const panel = document.getElementById('panel-' + TAB_DATA_TAB[prefix]);
+    if (!panel) return;
+    ['input', 'change', 'click'].forEach(evt => panel.addEventListener(evt, () => {
+      saveDraft(prefix);
+      updateReqCounter(prefix);
+    }));
+    restoreDraft(prefix);
+    updateReqCounter(prefix);
+  });
+}
+
+// ── Textarea auto-grow ("Other assurance" notes) ──────────────────────
+function resizeTextarea(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+}
+function initTextareaAutosize() {
+  ['arf-other-text', 'bounce-other-text', 'smtpsuspend-other-text'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const onResize = () => resizeTextarea(el);
+    el.addEventListener('input', onResize);
+    // Normalize height after draft restore / clear resets the value.
+    setTimeout(onResize, 0);
+  });
+}
+
 // ── JIRA integration ──────────────────────────────────────────────
-function createTaeJira(prefix) {
+function createTaeJira(prefix, btn) {
   const outputSection = document.getElementById(prefix + '-output-section');
   if (!outputSection || outputSection.style.display === 'none') {
     showToast('Please generate the report first.', 'warning');
@@ -1267,6 +1568,7 @@ function createTaeJira(prefix) {
     .filter(el => !el.classList?.contains('copy-btn-wrap'))
     .map(el => el.outerHTML).join('') : '';
   const region = (prefix === 'arf' ? state.arf : state.bounce).region === 'eu' ? 'eu-central-1' : 'us-east-1';
+  setBtnPending(btn, 'Creating…');
   window.postMessage({
     type: 'REPORT_GENERATOR_JIRA',
     text: reportText,
@@ -1281,7 +1583,7 @@ function createTaeJira(prefix) {
   showToast('Creating JIRA ticket...', 'info');
 }
 
-function unsuspendAccount(prefix) {
+function unsuspendAccount(prefix, btn) {
   const outputSection = document.getElementById(prefix + '-output-section');
   if (outputSection && outputSection.style.display === 'none') {
     showToast('Please generate the report first.', 'warning');
@@ -1323,6 +1625,7 @@ function unsuspendAccount(prefix) {
     .filter(el => !el.classList?.contains('copy-btn-wrap'))
     .map(el => el.outerHTML).join('') : '';
 
+  setBtnPending(btn, 'Working…');
   window.postMessage({
     type: prefix === 'ipspike' ? 'REPORT_GENERATOR_UNSUSPEND_NO_JIRA' : 'REPORT_GENERATOR_UNSUSPEND',
     accounts: accounts,
@@ -1347,6 +1650,7 @@ function logToSheet(prefix) {
     showToast('Please generate the report first.', 'warning');
     return;
   }
+  const btn = document.querySelector('[data-action="log-sheet"][data-panel="' + prefix + '"]');
 
   const account   = document.getElementById(prefix + '-account')?.value.trim() || '';
   const zdLink    = document.getElementById(prefix + '-zd-link')?.value.trim() || '';
@@ -1368,16 +1672,24 @@ function logToSheet(prefix) {
     if (e.data && e.data.type === 'REPORT_GENERATOR_LOG_SHEET_RESULT') {
       window.removeEventListener('message', listener);
       clearTimeout(timeout);
+      resetBtn(btn);
       if (e.data.success) {
-        showToast('Logged to Sheet ✓', 'success');
+        if (e.data.cellUrl) {
+          showToast('Logged to Sheet ✓ <a href="' + e.data.cellUrl + '" target="_blank" rel="noopener">View row</a>', 'success', { html: true, durationMs: 8000 });
+        } else if (e.data.unverified) {
+          showToast('Sent to Sheet (delivery unverified)', 'success');
+        } else {
+          showToast('Logged to Sheet ✓', 'success');
+        }
       } else {
-        showToast('Sheet logging failed — check console', 'error');
+        showToast('Sheet logging failed' + (e.data.error ? ' — ' + e.data.error : ''), 'error', { durationMs: 5000 });
       }
     }
   };
   window.addEventListener('message', listener);
   const timeout = setTimeout(() => window.removeEventListener('message', listener), 15000);
 
+  setBtnPending(btn, 'Logging…', 15000);
   window.postMessage({
     type: 'REPORT_GENERATOR_LOG_SHEET',
     date,
@@ -1454,6 +1766,8 @@ function setPartnerPanelResult(result) {
     resultsPanel.style.display = 'flex';
     if (suspDateEl) suspDateEl.textContent = result.suspensionDate || 'N/A';
     if (pwdDateEl) pwdDateEl.textContent = result.lastPasswordResetDate || 'N/A';
+    setValueFade(suspDateEl);
+    setValueFade(pwdDateEl);
   }
 
   const msg = result.passwordChanged
@@ -1489,8 +1803,16 @@ function setPartnerPanelResult(result) {
     if (e.target === modal) closeModal();
   });
 
-  // Close on Escape key
+  // Close on Escape key + Tab focus trap while open
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !modal.hidden) closeModal();
+    if (modal.hidden) return;
+    if (e.key === 'Escape') { closeModal(); return; }
+    if (e.key !== 'Tab') return;
+    const focusables = Array.from(modal.querySelectorAll('a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'))
+      .filter(el => el.offsetParent !== null);
+    if (!focusables.length) return;
+    const first = focusables[0], last = focusables[focusables.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   });
 })();

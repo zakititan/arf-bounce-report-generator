@@ -5,14 +5,29 @@
 
 // ── Toast ─────────────────────────────────────────────────────────────
 // role=status + aria-live=polite ensures screen readers announce toasts.
+// opts.html allows HTML content (default textContent); opts.durationMs overrides hide delay.
+const ICONS = {
+  success: '<polyline points="20 6 9 17 4 12"/>',
+  error: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+  warning: '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+};
 let _toastTimer = null;
-export function showToast(msg, type) {
+export function showToast(msg, type, { html = false, durationMs = 2500 } = {}) {
   const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.setAttribute('data-type', type || 'info');
+  const type_ = type || 'info';
+  const icSpan = document.createElement('span');
+  icSpan.className = 'toast-ic';
+  icSpan.setAttribute('aria-hidden', 'true');
+  icSpan.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">' + (ICONS[type_] || ICONS.info) + '</svg>';
+  const wrap = document.createElement('span');
+  if (html) wrap.innerHTML = msg;
+  else wrap.textContent = msg;
+  t.replaceChildren(icSpan, wrap);
+  t.setAttribute('data-type', type_);
   t.classList.add('show');
   clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+  _toastTimer = setTimeout(() => t.classList.remove('show'), durationMs);
 }
 
 // ── Theme toggle ──────────────────────────────────────────────────────
@@ -59,9 +74,27 @@ export function showValidationErrors(prefix, errors) {
     return false;
   }
   list.innerHTML = '';
+  const focusField = id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.focus({ preventScroll: true });
+  };
   errors.forEach(e => {
     const li = document.createElement('li');
     li.textContent = e.label;
+    if (e.id) {
+      li.dataset.targetId = e.id;
+      li.setAttribute('role', 'button');
+      li.tabIndex = 0;
+      li.addEventListener('click', () => focusField(e.id));
+      li.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter' || ev.key === ' ') {
+          ev.preventDefault();
+          focusField(e.id);
+        }
+      });
+    }
     list.appendChild(li);
   });
   banner.classList.add('visible');
@@ -130,19 +163,6 @@ export function updateStepper(prefix, step) {
     if (before <= effectiveStep) c.classList.add('done');
     else c.classList.remove('done');
   });
-}
-
-// ── Form progress bar ─────────────────────────────────────────────
-export function updateFormProgress(prefix) {
-  const bar = document.getElementById(prefix + '-form-progress-fill');
-  if (!bar) return;
-  const fields = bar.getAttribute('data-fields') ? bar.getAttribute('data-fields').split(',') : [];
-  const filled = fields.filter(id => {
-    const el = document.getElementById(id);
-    return el && el.value && el.value.trim() !== '' && el.value !== 'Select...';
-  }).length;
-  const pct = fields.length ? Math.round((filled / fields.length) * 100) : 0;
-  bar.style.width = pct + '%';
 }
 
 // ── Domain age color ──────────────────────────────────────────────
