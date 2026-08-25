@@ -186,21 +186,98 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Restore action buttons left in pending state when the extension reports
-  // the corresponding result (safety timeout per button also applies).
+  // Extension result routing: reset pending buttons, populate the in-panel
+  // JIRA link section, and show a single consolidated toast (the extension
+  // no longer renders its own toasts on this page, so nothing overlaps).
   const PENDING_RESULT_ACTIONS = {
     REPORT_GENERATOR_JIRA_RESULT: 'create-jira',
     REPORT_GENERATOR_UNSUSPEND_RESULT: 'unsuspend',
   };
+
+  function setPanelJiraLink(prefix, issueKey, url, extra) {
+    const wrap = document.getElementById(prefix + '-action-results');
+    const row = document.getElementById(prefix + '-jira-result');
+    if (!wrap || !row) return;
+    const link = document.getElementById(prefix + '-jira-link');
+    const err = document.getElementById(prefix + '-jira-error');
+    wrap.hidden = false;
+    row.hidden = false;
+    if (issueKey && url) {
+      link.hidden = false;
+      link.href = url;
+      link.textContent = issueKey + (extra || '');
+      link.title = url;
+      err.hidden = true;
+    } else {
+      link.hidden = true;
+      link.removeAttribute('href');
+      err.hidden = false;
+    }
+  }
+
+  function hideUnsuspendSection(prefix) {
+    const row = document.getElementById(prefix + '-unsuspend-result');
+    if (row) row.hidden = true;
+  }
+
+  function renderUnsuspendVerdicts(prefix, accounts, results, final) {
+    const wrap = document.getElementById(prefix + '-action-results');
+    const row = document.getElementById(prefix + '-unsuspend-result');
+    const list = document.getElementById(prefix + '-unsuspend-verdicts');
+    if (!wrap || !row || !list) return;
+    wrap.hidden = false;
+    row.hidden = false;
+    list.innerHTML = '';
+    (accounts || []).forEach(account => {
+      const hit = results.find(x => (x.account || '') === account);
+      const chip = document.createElement('span');
+      chip.className = 'verdict ' + (hit ? hit.outcome : 'pending');
+      chip.textContent = hit
+        ? (hit.outcome === 'confirmed' ? '\u2713 ' : hit.outcome === 'failed' ? '\u2717 ' : '? ') + account
+        : '\u2026 ' + account;
+      chip.title = hit ? hit.outcome : 'waiting for Abuse Desk';
+      list.appendChild(chip);
+    });
+    void final;
+  }
+
   window.addEventListener('message', (e) => {
-    const action = e.data && PENDING_RESULT_ACTIONS[e.data.type];
+    const d = e.data || {};
+    const action = PENDING_RESULT_ACTIONS[d.type];
     if (!action) return;
     document.querySelectorAll('[data-action="' + action + '"][data-original-html]').forEach(resetBtn);
-    const status = e.data.unsuspendStatus;
+
+    if (d.type === 'REPORT_GENERATOR_JIRA_RESULT') {
+      const prefix = _lastJiraPanel;
+      if (d.success && d.issueKey && d.url) {
+        const imgExtra = d.imagesTotal > 0 && d.imagesUploaded < d.imagesTotal
+          ? ' (' + d.imagesUploaded + '/' + d.imagesTotal + ' img)' : '';
+        if (prefix) setPanelJiraLink(prefix, d.issueKey, d.url, imgExtra);
+        showToast('JIRA ' + d.issueKey + ' created \u2713', 'success');
+      } else {
+        if (prefix) setPanelJiraLink(prefix, null, null);
+        showToast('JIRA creation failed', 'error', { durationMs: 5000 });
+      }
+      return;
+    }
+
+    // REPORT_GENERATOR_UNSUSPEND_RESULT
+    const prefix = _lastUnsuspendPanel;
+    const status = d.unsuspendStatus;
     if (status && status.done === false) {
       showToast('JIRA created but could not be marked Done: ' + (status.error || 'unknown error'), 'warning', { durationMs: 6000 });
     } else if (status && status.done && status.commented === false) {
       showToast('JIRA marked Done, but the "Unsuspended" comment failed: ' + (status.error || 'unknown error'), 'warning', { durationMs: 6000 });
+    }
+    if (d.success === false) {
+      showToast('Unsuspension could not start: ' + (d.error || 'unknown error'), 'error', { durationMs: 6000 });
+      if (prefix && _unsuspendConfirm && _unsuspendConfirm.panel === prefix) {
+        clearTimeout(_unsuspendConfirm.timer);
+        _unsuspendConfirm = null;
+        hideUnsuspendSection(prefix);
+      }
+    } else if (prefix && d.issueKey && d.url) {
+      setPanelJiraLink(prefix, d.issueKey, d.url);
     }
   });
 
@@ -212,6 +289,7 @@ document.addEventListener('DOMContentLoaded', () => {
     _unsuspendConfirm = null;
     if (!session) return;
     const r = session.results;
+    renderUnsuspendVerdicts(session.panel, session.accounts, r, true);
     // Legacy extensions never send verdicts — stay quiet instead of nagging.
     if (r.length === 0) return;
     const ok  = r.filter(x => x.outcome === 'confirmed');
@@ -230,9 +308,10 @@ document.addEventListener('DOMContentLoaded', () => {
       bad.length ? 'error' : 'warning', { durationMs: 9000 });
   }
 
-  function beginUnsuspendTracking(expected) {
+  function beginUnsuspendTracking(expected, panel, accounts) {
     clearTimeout(_unsuspendConfirm && _unsuspendConfirm.timer);
-    _unsuspendConfirm = { expected, results: [], timer: setTimeout(finishUnsuspendTracking, 45000) };
+    _unsuspendConfirm = { expected, panel, accounts, results: [], timer: setTimeout(finishUnsuspendTracking, 45000) };
+    renderUnsuspendVerdicts(panel, accounts, [], false);
   }
 
   window.addEventListener('message', (e) => {
@@ -240,9 +319,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!outcome || !_unsuspendConfirm) return;
     if (_unsuspendConfirm.results.some(x => x.account && x.account === outcome.account)) return; // dedupe
     _unsuspendConfirm.results.push(outcome);
+    renderUnsuspendVerdicts(_unsuspendConfirm.panel, _unsuspendConfirm.accounts, _unsuspendConfirm.results, false);
     if (_unsuspendConfirm.results.length >= _unsuspendConfirm.expected) finishUnsuspendTracking();
   });
 });
+
+// Panel that initiated the latest extension request — result messages are
+// anonymous, so replies are routed by remembering the initiator.
+let _lastJiraPanel = null;
+let _lastUnsuspendPanel = null;
 
 // ── Keyboard shortcuts (Ctrl/Cmd + Enter) ─────────────────────────────
 // Uses lastActivePanel (set on field focus) instead of a fragile DOM heuristic.
@@ -1281,6 +1366,20 @@ function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, af
     outputArea.appendChild(pre);
   }
 
+  // Reset the action-results section (JIRA link + unsuspension verdicts)
+  const actionResults = document.getElementById(prefix + '-action-results');
+  if (actionResults) actionResults.hidden = true;
+  const jiraRow = document.getElementById(prefix + '-jira-result');
+  if (jiraRow) jiraRow.hidden = true;
+  const jiraLink = document.getElementById(prefix + '-jira-link');
+  if (jiraLink) { jiraLink.textContent = ''; jiraLink.removeAttribute('href'); jiraLink.title = ''; }
+  const jiraErr = document.getElementById(prefix + '-jira-error');
+  if (jiraErr) jiraErr.hidden = true;
+  const unsRow = document.getElementById(prefix + '-unsuspend-result');
+  if (unsRow) unsRow.hidden = true;
+  const verdicts = document.getElementById(prefix + '-unsuspend-verdicts');
+  if (verdicts) verdicts.innerHTML = '';
+
   const banner = document.getElementById(prefix + '-validation-banner');
   if (banner) banner.classList.remove('visible');
   clearFieldErrors(clearFieldErrorIds);
@@ -1631,6 +1730,7 @@ function createTaeJira(prefix, btn) {
     .map(el => el.outerHTML).join('') : '';
   const region = (prefix === 'arf' ? state.arf : state.bounce).region === 'eu' ? 'eu-central-1' : 'us-east-1';
   setBtnPending(btn, 'Creating…');
+  _lastJiraPanel = prefix;
   window.postMessage({
     type: 'REPORT_GENERATOR_JIRA',
     text: reportText,
@@ -1688,6 +1788,7 @@ function unsuspendAccount(prefix, btn) {
     .map(el => el.outerHTML).join('') : '';
 
   setBtnPending(btn, 'Working…');
+  _lastUnsuspendPanel = prefix;
   window.postMessage({
     type: prefix === 'ipspike' ? 'REPORT_GENERATOR_UNSUSPEND_NO_JIRA' : 'REPORT_GENERATOR_UNSUSPEND',
     accounts: accounts,
@@ -1704,7 +1805,7 @@ function unsuspendAccount(prefix, btn) {
     ? 'Opening Abuse Desk for ' + accounts.length + ' accounts...'
     : 'Opening Abuse Desk to unsuspend ' + account + '...';
   showToast(msg, 'info');
-  beginUnsuspendTracking(accounts.length);
+  beginUnsuspendTracking(accounts.length, prefix, accounts);
 }
 
 function logToSheet(prefix) {

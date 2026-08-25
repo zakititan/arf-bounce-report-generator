@@ -1,24 +1,8 @@
 (function () {
-  function showToast(html) {
-    var existing = document.getElementById('rg-jira-toast');
-    if (existing) existing.remove();
-    var toast = document.createElement('div');
-    toast.id = 'rg-jira-toast';
-    toast.innerHTML = html;
-    var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    var bg = dark ? '#1a1a2e' : '#ffffff';
-    var fg = dark ? '#e0e0e0' : '#1f2328';
-    var shadow = dark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.18)';
-    toast.style.cssText =
-      'position:fixed;bottom:24px;right:24px;background:' + bg + ';color:' + fg + ';' +
-      'padding:12px 20px;border-radius:8px;font-size:13px;font-family:system-ui,sans-serif;' +
-      'z-index:999999;box-shadow:0 4px 12px ' + shadow + ';transition:opacity 300ms ease;';
-    document.body.appendChild(toast);
-    setTimeout(function () {
-      toast.style.opacity = '0';
-      setTimeout(function () { toast.remove(); }, 300);
-    }, 6000);
-  }
+  // Note: this script deliberately renders NO toasts of its own. The web app
+  // (app.js) owns all on-page notifications - extension toasts used to stack on
+  // top of the app toast in the bottom-right corner and overlap it.
+
 
   // Service worker relays per-account unsuspension verdicts here; forward
   // them into the page so app.js can aggregate and confirm to the user.
@@ -57,12 +41,7 @@
 
           if (response && response.success === true) {
             var jiraUrl = response.issueUrl;
-            window.postMessage({ type: 'REPORT_GENERATOR_JIRA_RESULT', success: true, issueKey: response.issueKey, url: jiraUrl }, '*');
-            var msg = '<span>JIRA <a href="' + jiraUrl + '" target="_blank" style="color:#5b9bd5;text-decoration:underline;">' + response.issueKey + '</a> created</span>';
-            if (response.imagesUploaded < response.imagesTotal) {
-              msg += ' — ' + response.imagesUploaded + '/' + response.imagesTotal + ' images attached';
-            }
-            showToast(msg);
+            window.postMessage({ type: 'REPORT_GENERATOR_JIRA_RESULT', success: true, issueKey: response.issueKey, url: jiraUrl, imagesUploaded: response.imagesUploaded, imagesTotal: response.imagesTotal }, '*');
 
             chrome.storage.local.set({ lastJiraUrl: jiraUrl });
           } else {
@@ -89,15 +68,12 @@
           if (chrome.runtime.lastError || !response || !response.success) {
             var err = (response && response.error) || (chrome.runtime.lastError && chrome.runtime.lastError.message) || 'JIRA creation failed';
             window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', success: false, issueKey: (response && response.issueKey) || null, url: null, unsuspendStatus: (response && response.unsuspendStatus) || null, error: err }, '*');
-            showToast('Failed to create JIRA: ' + err);
             return;
           }
 
           var jiraUrl = response.issueUrl;
           chrome.storage.local.set({ lastJiraUrl: jiraUrl });
           window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', success: true, issueKey: response.issueKey || null, url: jiraUrl || null, unsuspendStatus: response.unsuspendStatus || null }, '*');
-          var msg = '<span>JIRA <a href="' + jiraUrl + '" target="_blank" style="color:#5b9bd5;text-decoration:underline;">' + response.issueKey + '</a> created — opening ' + accounts.length + ' Abuse Desk tab(s)</span>';
-          showToast(msg);
         }
       );
     }
@@ -120,7 +96,6 @@
             return;
           }
           window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', success: true, opened: resp.opened }, '*');
-          showToast('Opening ' + accounts.length + ' Abuse Desk tab(s)…');
         });
       });
     }
@@ -194,8 +169,6 @@
       'https://jira.directi.com/secure/CreateIssueDetails!init.jspa?pid=12900&issuetype=10902&priority=10000&labels=' +
       label + '&summary=' + summary + '&description=' + desc;
     window.open(jiraUrl, '_blank');
-
-    showToast('API unavailable — opening JIRA page instead');
   }
 
   if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getManifest) {
