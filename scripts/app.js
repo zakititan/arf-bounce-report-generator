@@ -271,11 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (d.success === false) {
       showToast('Unsuspension could not start: ' + (d.error || 'unknown error'), 'error', { durationMs: 6000 });
-      if (prefix && _unsuspendConfirm && _unsuspendConfirm.panel === prefix) {
-        clearTimeout(_unsuspendConfirm.timer);
-        _unsuspendConfirm = null;
-        hideUnsuspendSection(prefix);
-      }
+      if (prefix) _cancelUnsuspendTracking(prefix);
     } else if (prefix && d.issueKey && d.url) {
       setPanelJiraLink(prefix, d.issueKey, d.url);
     }
@@ -289,9 +285,13 @@ document.addEventListener('DOMContentLoaded', () => {
     _unsuspendConfirm = null;
     if (!session) return;
     const r = session.results;
+    // Legacy extensions never send verdicts — hide the pending chips and
+    // stay quiet instead of nagging.
+    if (r.length === 0) {
+      hideUnsuspendSection(session.panel);
+      return;
+    }
     renderUnsuspendVerdicts(session.panel, session.accounts, r, true);
-    // Legacy extensions never send verdicts — stay quiet instead of nagging.
-    if (r.length === 0) return;
     const ok  = r.filter(x => x.outcome === 'confirmed');
     const bad = r.filter(x => x.outcome === 'failed');
     const unk = r.filter(x => x.outcome !== 'confirmed' && x.outcome !== 'failed');
@@ -314,6 +314,14 @@ document.addEventListener('DOMContentLoaded', () => {
     renderUnsuspendVerdicts(panel, accounts, [], false);
   }
 
+  _cancelUnsuspendTracking = function (prefix) {
+    if (_unsuspendConfirm && _unsuspendConfirm.panel === prefix) {
+      clearTimeout(_unsuspendConfirm.timer);
+      _unsuspendConfirm = null;
+      hideUnsuspendSection(prefix);
+    }
+  };
+
   window.addEventListener('message', (e) => {
     const outcome = e.data && e.data.type === 'REPORT_GENERATOR_UNSUSPEND_OUTCOME' ? e.data.outcome : null;
     if (!outcome || !_unsuspendConfirm) return;
@@ -328,6 +336,9 @@ document.addEventListener('DOMContentLoaded', () => {
 // anonymous, so replies are routed by remembering the initiator.
 let _lastJiraPanel = null;
 let _lastUnsuspendPanel = null;
+// Assigned during init; lets top-level code (e.g. Clear) cancel an in-flight
+// unsuspension tracking session for a panel.
+let _cancelUnsuspendTracking = null;
 
 // ── Keyboard shortcuts (Ctrl/Cmd + Enter) ─────────────────────────────
 // Uses lastActivePanel (set on field focus) instead of a fragile DOM heuristic.
@@ -1367,6 +1378,7 @@ function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, af
   }
 
   // Reset the action-results section (JIRA link + unsuspension verdicts)
+  if (_cancelUnsuspendTracking) _cancelUnsuspendTracking(prefix);
   const actionResults = document.getElementById(prefix + '-action-results');
   if (actionResults) actionResults.hidden = true;
   const jiraRow = document.getElementById(prefix + '-jira-result');
