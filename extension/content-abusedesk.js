@@ -24,14 +24,14 @@
 
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 
-  function waitForElement(find, timeoutMs) {
+  function waitFor(find, timeoutMs) {
     return new Promise(function (resolve) {
       var start = Date.now();
       var check = function () {
         var el = find();
         if (el) { resolve(el); return; }
         if (Date.now() - start > timeoutMs) { resolve(null); return; }
-        setTimeout(check, 200);
+        setTimeout(check, 300);
       };
       check();
     });
@@ -50,8 +50,8 @@
       chrome.runtime.sendMessage({
         action: 'ad-tab-done',
         data: {
-          failed: !!r.failed,
-          outcome: r.outcome || (r.failed ? 'failed' : 'unknown'),
+          failed: r.outcome === 'failed',
+          outcome: r.outcome || 'unknown',
           account: r.account || ''
         }
       });
@@ -74,53 +74,99 @@
     return (err && err.offsetParent !== null && (err.textContent || '').trim()) ? err : null;
   }
 
-  // Look for an on-page success indicator: success/alert elements or toast/
-  // notification containers whose text mentions unblocking. Our own overlay
-  // toast is excluded from matching.
-  function detectSuccess() {
-    var sel = '.success, .alert-success, [class*="success"], .toast, .notification, [role="status"], [role="alert"]';
-    var els = document.querySelectorAll(sel);
-    for (var i = 0; i < els.length; i++) {
-      var el = els[i];
-      if (!el.offsetParent) continue;
-      if (el.id === 'rg-unsuspend-toast' || el.closest('#rg-unsuspend-toast')) continue;
-      var t = (el.textContent || '').trim();
-      if (t && /unsuspend|unblock|success|completed/i.test(t)) return el;
-    }
-    return null;
+  // Authoritative status check: the USER STATUS badge on the Blocked Users
+  // page. The page does not live-update after unsuspension, so this is read
+  // AFTER a reload (see verification flow below).
+  function readUserStatus() {
+    try {
+      var res = document.evaluate(
+        '//*[normalize-space(text())="USER STATUS"]',
+        document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null
+      );
+      for (var i = 0; i < res.snapshotLength; i++) {
+        var node = res.snapshotItem(i);
+        var row = node.closest('tr') || node.parentElement;
+        var hay = ((row && row.textContent) || '').toUpperCase();
+        var idx = hay.indexOf('USER STATUS');
+        var seg = idx >= 0 ? hay.slice(idx + 'USER STATUS'.length) : hay;
+        if (seg.indexOf('SUSPENDED') !== -1) return 'Suspended';
+        if (seg.indexOf('ACTIVE') !== -1) return 'Active';
+      }
+    } catch (e) { /* XPath unsupported — fall through */ }
+    return '';
   }
 
-  // Wait up to 8s for a definitive signal after clicking Save:
-  //   error indicator          -> 'failed'
-  //   success indicator OR the Unblock button disappearing -> 'confirmed'
-  //   nothing definitive       -> 'unknown'
-  function awaitVerdict() {
-    return new Promise(function (resolve) {
-      var start = Date.now();
-      var tick = function () {
-        if (detectError()) return resolve('failed');
-        if (detectSuccess()) return resolve('confirmed');
-        if (!findUnblockButton() && Date.now() - start > 1500) return resolve('confirmed');
-        if (Date.now() - start > 8000) return resolve('unknown');
-        setTimeout(tick, 300);
-      };
-      tick();
+  // Per-account verify markers: after saving, the page reloads and this
+  // script runs again while the unsuspend reason is still TTL-fresh. The
+  // marker switches that load into verification mode instead of re-running
+  // the automation.
+  function getVerifyMap(cb) {
+    chrome.storage.local.get(['unsuspendVerify'], function (r) {
+      cb(r.unsuspendVerify || {});
+    });
+  }
+  function setVerifyEntry(account, cb) {
+    getVerifyMap(function (map) {
+      map[account] = Date.now();
+      chrome.storage.local.set({ unsuspendVerify: map }, function () { if (cb) cb(); });
+    });
+  }
+  function consumeVerifyEntry(account, cb) {
+    getVerifyMap(function (map) {
+      var ts = map[account];
+      if (cb) cb(typeof ts === 'number' ? ts : null);
+      if (ts) {
+        delete map[account];
+        chrome.storage.local.set({ unsuspendVerify: map }, function () {});
+      }
     });
   }
 
+  // Reload the page and read the USER STATUS badge — the only trustworthy
+  // signal that the unsuspension actually took effect.
+  async function verifyByReload(account) {
+    var status = await waitFor(readUserStatus, 15000);
+    var outcome;
+    if (status === 'Active') {
+      outcome = 'confirmed';
+      showToast('\u2705 Unsuspension verified for ' + account + ' — user status: Active');
+    } else if (status === 'Suspended') {
+      outcome = 'failed';
+      showToast('\u274C Unsuspension failed for ' + account + ' — user status still Suspended');
+    } else {
+      outcome = 'unknown';
+      showToast('\u26A0\uFE0F Could not read user status for ' + account + ' — please check manually');
+    }
+    log('Verification for ' + account + ': ' + outcome + (status ? ' (' + status + ')' : ''));
+    reportDone({ outcome: outcome, account: account });
+  }
+
   async function run() {
-    chrome.storage.local.get(['unsuspendReason'], async function (result) {
+    chrome.storage.local.get(['unsuspendReason', 'unsuspendVerify'], async function (result) {
+      var account = new URLSearchParams(window.location.search).get('entity');
+      if (!account) { log('No entity in URL — skipping automation'); return; }
+
+      // ── Verification mode: this load was triggered by our own reload ──
+      var vMap = result.unsuspendVerify || {};
+      var vTs = vMap[account];
+      if (typeof vTs === 'number' && (Date.now() - vTs) <= 90000) {
+        consumeVerifyEntry(account, function () {});
+        log('Verification mode for ' + account);
+        await sleep(500); // let the results table finish rendering
+        await verifyByReload(account);
+        return;
+      }
+
+      // ── Automation mode ──
       var rec = result.unsuspendReason;
       var fresh = rec && typeof rec === 'object' && typeof rec.reason === 'string' && rec.reason !== '' &&
                   typeof rec.ts === 'number' && (Date.now() - rec.ts) <= 90000;
       if (!fresh) { log('No fresh unsuspend reason in storage'); return; }
       var reason = rec.reason;
 
-      var account = new URLSearchParams(window.location.search).get('entity');
-      if (!account) { log('No entity in URL — skipping automation'); return; }
       log('Starting unsuspend automation for ' + account);
 
-      var unblockBtn = await waitForElement(findUnblockButton, 10000);
+      var unblockBtn = await waitFor(findUnblockButton, 10000);
       if (!unblockBtn) {
         log('Unblock button not found');
         showToast('Unblock button not found for ' + account);
@@ -130,7 +176,7 @@
       log('Clicking Unblock for ' + account);
       simulateClick(unblockBtn);
 
-      var textarea = await waitForElement(function () { return document.querySelector('textarea'); }, 5000);
+      var textarea = await waitFor(function () { return document.querySelector('textarea'); }, 5000);
       if (!textarea) {
         log('Textarea not found');
         showToast('Textarea not found for ' + account);
@@ -143,7 +189,7 @@
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
       textarea.dispatchEvent(new Event('change', { bubbles: true }));
 
-      var saveBtn = await waitForElement(function () {
+      var saveBtn = await waitFor(function () {
         var el = document.getElementById('submitBtn');
         return (el && el.offsetParent !== null) ? el : null;
       }, 5000);
@@ -156,18 +202,22 @@
       log('Clicking Save for ' + account);
       simulateClick(saveBtn);
 
-      var outcome = await awaitVerdict();
-      if (outcome === 'confirmed') {
-        showToast('\u2705 Unsuspension verified for ' + account);
-        log('Unsuspension confirmed via page signals for ' + account);
-      } else if (outcome === 'failed') {
+      // Fast-fail: a visible error right after saving means no reload needed.
+      await sleep(2500);
+      if (detectError()) {
         showToast('\u274C Unsuspension failed for ' + account + ' — see error on page');
         log('Error indicator shown after save for ' + account);
-      } else {
-        showToast('\u26A0\uFE0F Could not verify unsuspension for ' + account + ' — please check manually');
-        log('No confirmation signal within timeout for ' + account);
+        reportDone({ outcome: 'failed', account: account });
+        return;
       }
-      reportDone({ outcome: outcome, account: account });
+
+      // Mark this account for verification, then reload — USER STATUS only
+      // reflects the unsuspension after a page reload.
+      setVerifyEntry(account, function () {
+        showToast('Save accepted — reloading to verify user status\u2026');
+        log('Reloading to verify USER STATUS for ' + account);
+        setTimeout(function () { location.reload(); }, 800);
+      });
     });
   }
 
