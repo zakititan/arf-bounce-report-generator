@@ -1082,6 +1082,8 @@ function validateARF() {
   if (!v('arf-email-type'))   errors.push({ id: 'arf-email-type',   label: 'Email Content Type' });
   if (!v('arf-website'))      errors.push({ id: 'arf-website',      label: 'Valid Website' });
   if (!v('arf-dkim'))         errors.push({ id: 'arf-dkim',         label: 'DKIM Status' });
+  else if (v('arf-dkim') === 'Not Set')
+    errors.push({ id: 'arf-dkim', label: 'DKIM Status is Not Set — report cannot be generated' });
   const arfAssurances = getActiveAssurances('arf');
   if (arfAssurances.length === 0)
     errors.push({ id: null, label: 'Assurances (select at least one)' });
@@ -1101,6 +1103,8 @@ function validateBounce() {
     errors.push({ id: 'bounce-other-blocked-detail', label: 'Blocked Email Account(s) in Same Domain' });
   if (!v('bounce-website'))       errors.push({ id: 'bounce-website',       label: 'Valid Website' });
   if (!v('bounce-dkim'))          errors.push({ id: 'bounce-dkim',          label: 'DKIM Status' });
+  else if (v('bounce-dkim') === 'Not Set')
+    errors.push({ id: 'bounce-dkim', label: 'DKIM Status is Not Set — report cannot be generated' });
   const bounceAssurances = getActiveAssurances('bounce');
   if (bounceAssurances.length === 0)
     errors.push({ id: null, label: 'Assurances (select at least one)' });
@@ -1311,11 +1315,19 @@ function clearIPspike() {
 
 // ── SMTP Suspension Generate / Clear ──────────────────────────────────
 function validateSMTPSuspend() {
-  const fieldIds = ['smtpsuspend-account', 'smtpsuspend-zd-link'];
+  const fieldIds = ['smtpsuspend-account', 'smtpsuspend-zd-link', 'smtpsuspend-domain-input'];
   clearFieldErrors(fieldIds);
   const errors = [];
   if (!v('smtpsuspend-account')) errors.push({ id: 'smtpsuspend-account', label: 'Account' });
   if (!v('smtpsuspend-zd-link')) errors.push({ id: 'smtpsuspend-zd-link', label: 'Zendesk Ticket Link' });
+  const smtpDkimText = document.getElementById('smtpsuspend-result-dkim')?.textContent?.trim() || '';
+  if (smtpDkimText.startsWith('Set')) {
+    // DKIM confirmed set via Domain Lookup
+  } else if (smtpDkimText.includes('Not Set')) {
+    errors.push({ id: 'smtpsuspend-domain-input', label: 'DKIM Status is Not Set — report cannot be generated' });
+  } else {
+    errors.push({ id: 'smtpsuspend-domain-input', label: 'DKIM unverified — run Domain Lookup before generating' });
+  }
   const assurances = getActiveAssurances('smtpsuspend');
   if (assurances.length === 0)
     errors.push({ id: null, label: 'Assurances (select at least one)' });
