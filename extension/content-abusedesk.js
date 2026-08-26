@@ -77,23 +77,52 @@
   // Authoritative status check: the USER STATUS badge on the Blocked Users
   // page. The page does not live-update after unsuspension, so this is read
   // AFTER a reload (see verification flow below).
+  //
+  // Actual AD DOM (verified via DevTools):
+  //   div.bu-field
+  //     ├─ div.bu-field-label   → "User Status"  (Title Case; CSS uppercases it)
+  //     └─ div.bu-field-value
+  //          └─ span.bu-badge.bu-badge-active → "active"   (lowercase)
   function readUserStatus() {
-    try {
-      var res = document.evaluate(
-        '//*[normalize-space(text())="USER STATUS"]',
-        document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null
-      );
-      for (var i = 0; i < res.snapshotLength; i++) {
-        var node = res.snapshotItem(i);
-        var row = node.closest('tr') || node.parentElement;
-        var hay = ((row && row.textContent) || '').toUpperCase();
-        var idx = hay.indexOf('USER STATUS');
-        var seg = idx >= 0 ? hay.slice(idx + 'USER STATUS'.length) : hay;
-        if (seg.indexOf('SUSPENDED') !== -1) return 'Suspended';
-        if (seg.indexOf('ACTIVE') !== -1) return 'Active';
+    var fields = document.querySelectorAll('.bu-field');
+    for (var i = 0; i < fields.length; i++) {
+      var label = fields[i].querySelector('.bu-field-label');
+      if (!label || (label.textContent || '').trim().toLowerCase() !== 'user status') continue;
+      var value = fields[i].querySelector('.bu-field-value') || fields[i];
+      var t = (value.textContent || '').trim().toLowerCase();
+      if (t.indexOf('suspend') !== -1) return 'Suspended';
+      if (t.indexOf('active') !== -1) return 'Active';
+    }
+    // Generic fallback: any leaf element whose text is exactly "user status"
+    var all = document.querySelectorAll('div,span,th,td,label,p');
+    for (var j = 0; j < all.length; j++) {
+      var el = all[j];
+      if (el.firstElementChild) continue;
+      if ((el.textContent || '').trim().toLowerCase() !== 'user status') continue;
+      var anc = el.parentElement;
+      for (var k = 0; k < 5 && anc && anc !== document.body; k++) {
+        var hay = (anc.textContent || '').toLowerCase();
+        var idx = hay.indexOf('user status');
+        var seg = idx >= 0 ? hay.slice(idx + 'user status'.length) : '';
+        if (seg.indexOf('suspend') !== -1) return 'Suspended';
+        if (seg.indexOf('active') !== -1) return 'Active';
+        anc = anc.parentElement;
       }
-    } catch (e) { /* XPath unsupported — fall through */ }
+    }
     return '';
+  }
+
+  // Plan B: the AD page renders the badge from this API — ask the service
+  // worker (which has host permission) to fetch it directly.
+  function fetchStatusViaApi(account) {
+    return new Promise(function (resolve) {
+      try {
+        chrome.runtime.sendMessage({ action: 'ad-user-status', data: { account: account } }, function (resp) {
+          if (chrome.runtime.lastError) { void chrome.runtime.lastError; resolve(''); return; }
+          resolve(resp && resp.success ? (resp.status || '') : '');
+        });
+      } catch (e) { resolve(''); }
+    });
   }
 
   // Per-account verify markers: after saving, the page reloads and this
@@ -125,7 +154,8 @@
   // Reload the page and read the USER STATUS badge — the only trustworthy
   // signal that the unsuspension actually took effect.
   async function verifyByReload(account) {
-    var status = await waitFor(readUserStatus, 15000);
+    var status = await waitFor(readUserStatus, 10000);
+    if (!status) status = await fetchStatusViaApi(account);
     var outcome;
     if (status === 'Active') {
       outcome = 'confirmed';

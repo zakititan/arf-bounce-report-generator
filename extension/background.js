@@ -253,6 +253,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === 'ad-user-status') {
+    // Fallback verification path: the Abuse Desk page renders its status
+    // badge from this API; fetch it directly (host permission granted).
+    const account = message.data && message.data.account;
+    if (!account) { sendResponse({ success: false, error: 'No account' }); return true; }
+    fetch('https://api-abusedesk.ops.titan.email/api/v1/users/status/?email=' + encodeURIComponent(account), { credentials: 'include' })
+      .then(r => r.json())
+      .then(json => {
+        const flat = JSON.stringify(json || {});
+        const m = flat.match(/"user_?status"\s*:\s*"([^"]+)"/i);
+        const status = m ? m[1] : '';
+        sendResponse({ success: !!status, status });
+      })
+      .catch(e => sendResponse({ success: false, error: e.message }));
+    return true;
+  }
+
   if (message.action === 'ad-tab-done') {
     const tid = sender && sender.tab && sender.tab.id;
     const d = message.data || {};
