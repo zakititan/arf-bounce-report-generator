@@ -287,6 +287,7 @@ window.addEventListener('message', (e) => {
 
 // ── Unsuspension confirmation (verdicts relayed from Abuse Desk tabs) ──
 let _unsuspendConfirm = null;
+const _lastFailedAccounts = {};
 
 function finishUnsuspendTracking() {
   const session = _unsuspendConfirm;
@@ -305,9 +306,16 @@ function finishUnsuspendTracking() {
   const unk = r.filter(x => x.outcome !== 'confirmed' && x.outcome !== 'failed');
   const total = session.expected;
   if (bad.length === 0 && unk.length === 0 && ok.length > 0) {
+    _lastFailedAccounts[session.panel] = [];
+    const retryBtn = document.getElementById(session.panel + '-retry-unsuspend');
+    if (retryBtn) retryBtn.hidden = true;
     showToast('Unsuspension verified in Abuse Desk \u2713 (' + ok.length + '/' + total + ')', 'success', { durationMs: 7000 });
     return;
   }
+  const failed = [...bad, ...unk].map(x => x.account).filter(Boolean);
+  _lastFailedAccounts[session.panel] = failed;
+  const retryBtn = document.getElementById(session.panel + '-retry-unsuspend');
+  if (retryBtn) retryBtn.hidden = false;
   const parts = [];
   if (ok.length)  parts.push(ok.length + ' verified');
   if (bad.length) parts.push(bad.length + ' failed: ' + bad.map(x => x.account || '?').join(', '));
@@ -319,6 +327,9 @@ function finishUnsuspendTracking() {
 function beginUnsuspendTracking(expected, panel, accounts) {
   clearTimeout(_unsuspendConfirm && _unsuspendConfirm.timer);
   _unsuspendConfirm = { expected, panel, accounts, results: [], timer: setTimeout(finishUnsuspendTracking, 45000) };
+  _lastFailedAccounts[panel] = [];
+  const retryBtn = document.getElementById(panel + '-retry-unsuspend');
+  if (retryBtn) retryBtn.hidden = true;
   renderUnsuspendVerdicts(panel, accounts, [], false);
 }
 
@@ -1815,6 +1826,45 @@ function unsuspendAccount(prefix, btn) {
   const msg = accounts.length > 1
     ? 'Opening Abuse Desk for ' + accounts.length + ' accounts...'
     : 'Opening Abuse Desk to unsuspend ' + account + '...';
+  showToast(msg, 'info');
+  beginUnsuspendTracking(accounts.length, prefix, accounts);
+}
+
+function retryUnsuspend(prefix) {
+  const accounts = _lastFailedAccounts[prefix];
+  if (!accounts || accounts.length === 0) return;
+
+  const zdLink = document.getElementById(prefix + '-zd-link')?.value.trim() || '';
+  const region = (state[prefix] || state.arf).region === 'eu' ? 'eu-central-1' : 'us-east-1';
+
+  let reason;
+  if (prefix === 'ipspike') {
+    reason = 'Password Changed';
+  } else {
+    reason = zdLink || 'no jira created';
+  }
+
+  const outputSection = document.getElementById(prefix + '-output-section');
+  const outputArea = outputSection?.querySelector('.output-area');
+  const reportText = (outputArea?.dataset.copyText) || document.getElementById(prefix + '-output-text')?.textContent || '';
+  const reportHtml = outputArea ? Array.from(outputArea.childNodes)
+    .filter(el => !el.classList?.contains('copy-btn-wrap'))
+    .map(el => el.outerHTML).join('') : '';
+
+  _lastUnsuspendPanel = prefix;
+  window.postMessage({
+    type: prefix === 'ipspike' ? 'REPORT_GENERATOR_UNSUSPEND_NO_JIRA' : 'REPORT_GENERATOR_UNSUSPEND',
+    accounts: accounts,
+    account: accounts[0],
+    region: region,
+    reason: reason,
+    text: reportText,
+    html: reportHtml,
+    panel: prefix,
+    zdLink: zdLink,
+  }, '*');
+
+  const msg = 'Retrying unsuspension for ' + accounts.length + ' account' + (accounts.length > 1 ? 's' : '') + '...';
   showToast(msg, 'info');
   beginUnsuspendTracking(accounts.length, prefix, accounts);
 }

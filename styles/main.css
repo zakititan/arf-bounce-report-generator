@@ -617,6 +617,16 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .verdict.confirmed { background: var(--color-success-bg); color: var(--color-success); border: 1px solid var(--color-success-border); }
 .verdict.failed { background: var(--color-error-bg); color: var(--color-error); border: 1px solid var(--color-error-border); }
 .verdict.pending, .verdict.unknown { background: var(--color-neutral-bg); color: var(--color-text-muted); border: 1px solid var(--color-border); }
+.retry-unsuspend-btn {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px; border-radius: var(--radius-full);
+  font-size: var(--text-xs); font-weight: 600; font-family: var(--font-mono);
+  background: var(--color-surface); color: var(--color-text-muted);
+  border: 1px solid var(--color-border); cursor: pointer;
+  transition: background 140ms, border-color 140ms, color 140ms;
+}
+.retry-unsuspend-btn:hover { background: var(--color-surface-2); border-color: var(--color-text-faint); color: var(--color-text); }
+.retry-unsuspend-btn[hidden] { display: none; }
 .btn-jira, .btn-secondary { background: var(--color-surface); color: var(--color-text-muted); border: 1px solid var(--color-border); box-shadow: var(--shadow-xs); }
 .btn-jira:hover, .btn-secondary:hover, .btn-unsuspend:hover, .btn-log-sheet:hover { background: var(--color-surface-2); border-color: var(--color-text-faint); color: var(--color-text); }
 .btn-tool-link {
