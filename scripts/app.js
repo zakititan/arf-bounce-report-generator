@@ -350,6 +350,14 @@ window.addEventListener('message', (e) => {
   if (_unsuspendConfirm.results.length >= _unsuspendConfirm.expected) finishUnsuspendTracking();
 });
 
+// ── Delegated click handler for retry-unsuspend buttons ──
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.retry-unsuspend-btn');
+  if (!btn || btn.hidden) return;
+  const prefix = btn.id.replace('-retry-unsuspend', '');
+  retryUnsuspend(prefix);
+});
+
 // ── Keyboard shortcuts (Ctrl/Cmd + Enter) ─────────────────────────────
 // Uses lastActivePanel (set on field focus) instead of a fragile DOM heuristic.
 function initKeyboardShortcuts() {
