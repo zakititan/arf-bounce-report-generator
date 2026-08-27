@@ -1758,7 +1758,7 @@ function createTaeJira(prefix, btn) {
   const reportHtml = outputArea ? Array.from(outputArea.childNodes)
     .filter(el => !el.classList?.contains('copy-btn-wrap'))
     .map(el => el.outerHTML).join('') : '';
-  const region = (prefix === 'arf' ? state.arf : state.bounce).region === 'eu' ? 'eu-central-1' : 'us-east-1';
+  const region = (state[prefix] || state.arf).region === 'eu' ? 'eu-central-1' : 'us-east-1';
   setBtnPending(btn, 'Creating…');
   _lastJiraPanel = prefix;
   window.postMessage({
