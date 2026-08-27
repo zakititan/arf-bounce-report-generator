@@ -1861,7 +1861,7 @@ function retryUnsuspend(prefix) {
 
   _lastUnsuspendPanel = prefix;
   window.postMessage({
-    type: prefix === 'ipspike' ? 'REPORT_GENERATOR_UNSUSPEND_NO_JIRA' : 'REPORT_GENERATOR_UNSUSPEND',
+    type: 'REPORT_GENERATOR_UNSUSPEND_NO_JIRA',
     accounts: accounts,
     account: accounts[0],
     region: region,
