@@ -62,7 +62,8 @@
           html: unsuspendData.html || '',
           panel: unsuspendData.panel || '',
           account: accounts.join(', '),
-          zdLink: unsuspendData.zdLink || ''
+          zdLink: unsuspendData.zdLink || '',
+          region: unsuspendData.region || ''
         }},
         function (response) {
           if (chrome.runtime.lastError || !response || !response.success) {
