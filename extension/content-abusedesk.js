@@ -134,17 +134,18 @@
       cb(r.unsuspendVerify || {});
     });
   }
-  function setVerifyEntry(account, cb) {
+  function setVerifyEntry(account, attempt, cb) {
     getVerifyMap(function (map) {
-      map[account] = Date.now();
+      map[account] = { ts: Date.now(), attempt: attempt || 1 };
       chrome.storage.local.set({ unsuspendVerify: map }, function () { if (cb) cb(); });
     });
   }
   function consumeVerifyEntry(account, cb) {
     getVerifyMap(function (map) {
-      var ts = map[account];
-      if (cb) cb(typeof ts === 'number' ? ts : null);
-      if (ts) {
+      var entry = map[account];
+      var ts = typeof entry === 'object' ? entry.ts : typeof entry === 'number' ? entry : null;
+      if (cb) cb(ts);
+      if (entry) {
         delete map[account];
         chrome.storage.local.set({ unsuspendVerify: map }, function () {});
       }
@@ -153,7 +154,7 @@
 
   // Reload the page and read the USER STATUS badge — the only trustworthy
   // signal that the unsuspension actually took effect.
-  async function verifyByReload(account) {
+  async function verifyByReload(account, attempt) {
     var status = await waitFor(readUserStatus, 10000);
     if (!status) status = await fetchStatusViaApi(account);
     var outcome;
@@ -163,6 +164,14 @@
     } else if (status === 'Suspended') {
       outcome = 'failed';
       showToast('\u274C Unsuspension failed for ' + account + ' — user status still Suspended');
+    } else if (!attempt || attempt < 2) {
+      // Status unreadable on first try — reload once more and recheck.
+      log('Could not read status for ' + account + ' on attempt ' + (attempt || 1) + ' — retrying');
+      setVerifyEntry(account, 2, function () {
+        showToast('Retrying verification for ' + account + '…');
+        setTimeout(function () { location.reload(); }, 1500);
+      });
+      return;
     } else {
       outcome = 'unknown';
       showToast('\u26A0\uFE0F Could not read user status for ' + account + ' — please check manually');
@@ -178,12 +187,14 @@
 
       // ── Verification mode: this load was triggered by our own reload ──
       var vMap = result.unsuspendVerify || {};
-      var vTs = vMap[account];
+      var vEntry = vMap[account];
+      var vTs = typeof vEntry === 'object' ? vEntry.ts : typeof vEntry === 'number' ? vEntry : null;
+      var vAttempt = typeof vEntry === 'object' ? (vEntry.attempt || 1) : 1;
       if (typeof vTs === 'number' && (Date.now() - vTs) <= 90000) {
-        consumeVerifyEntry(account, function () {});
-        log('Verification mode for ' + account);
+        if (vAttempt >= 2) consumeVerifyEntry(account, function () {});
+        log('Verification mode for ' + account + ' (attempt ' + vAttempt + ')');
         await sleep(500); // let the results table finish rendering
-        await verifyByReload(account);
+        await verifyByReload(account, vAttempt);
         return;
       }
 
@@ -243,7 +254,7 @@
 
       // Mark this account for verification, then reload — USER STATUS only
       // reflects the unsuspension after a page reload.
-      setVerifyEntry(account, function () {
+      setVerifyEntry(account, 1, function () {
         showToast('Save accepted — reloading to verify user status\u2026');
         log('Reloading to verify USER STATUS for ' + account);
         setTimeout(function () { location.reload(); }, 800);
