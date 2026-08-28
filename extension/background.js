@@ -38,39 +38,43 @@ async function openSheetAndLog(rowData) {
     reason: rowData.reason || '',
   });
 
-  let response;
-  try {
-    console.log('[Report→Sheet] Posting to Apps Script', url);
-    response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: payload
-    });
-  } catch (e) {
-    console.warn('[Report→Sheet] Exception:', e.message);
+  // Google Apps Script never returns CORS headers for extension origins —
+  // skip the CORS attempt (which always fails) and go straight to no-cors.
+  const isGas = /script\.google\.com/i.test(url);
+  if (!isGas) {
+    let response;
     try {
-      await fetch(url, {
+      console.log('[Report→Sheet] Posting to Apps Script', url);
+      response = await fetch(url, {
         method: 'POST',
-        mode: 'no-cors',
         headers: { 'Content-Type': 'application/json' },
         body: payload
       });
-      return { success: true, unverified: true };
-    } catch (e2) {
-      return { success: false, error: e2.message };
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      let parsed = null;
+      try { parsed = await response.json(); } catch (_) { parsed = null; }
+      if (parsed && parsed.status === 'success') {
+        return { success: true, row: parsed.row, cellUrl: parsed.cellUrl };
+      }
+      return { success: false, error: (parsed && parsed.message) || 'Apps Script error' };
+    } catch (e) {
+      console.warn('[Report→Sheet] CORS fetch failed:', e.message);
     }
   }
 
-  let parsed = null;
+  // no-cors fallback — opaque response, can't read body
   try {
-    parsed = await response.json();
-  } catch (e) {
-    parsed = null;
+    console.log('[Report→Sheet] Posting (no-cors)', url);
+    await fetch(url, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload
+    });
+    return { success: true, unverified: true };
+  } catch (e2) {
+    return { success: false, error: e2.message };
   }
-  if (parsed && parsed.status === 'success') {
-    return { success: true, row: parsed.row, cellUrl: parsed.cellUrl };
-  }
-  return { success: false, error: (parsed && parsed.message) || 'Apps Script error' };
 }
 
 async function handlePartnerPanelLookup(data, sendResponse) {
