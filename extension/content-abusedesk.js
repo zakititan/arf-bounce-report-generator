@@ -74,6 +74,19 @@
     return (err && err.offsetParent !== null && (err.textContent || '').trim()) ? err : null;
   }
 
+  function readBadgeStatus(labelText) {
+    var fields = document.querySelectorAll('.bu-field');
+    for (var i = 0; i < fields.length; i++) {
+      var label = fields[i].querySelector('.bu-field-label');
+      if (!label || (label.textContent || '').trim().toLowerCase() !== labelText) continue;
+      var value = fields[i].querySelector('.bu-field-value') || fields[i];
+      var t = (value.textContent || '').trim().toLowerCase();
+      if (t.indexOf('suspend') !== -1) return 'Suspended';
+      if (t.indexOf('active') !== -1) return 'Active';
+    }
+    return '';
+  }
+
   // Authoritative status check: the USER STATUS badge on the Blocked Users
   // page. The page does not live-update after unsuspension, so this is read
   // AFTER a reload (see verification flow below).
@@ -83,34 +96,8 @@
   //     ├─ div.bu-field-label   → "User Status"  (Title Case; CSS uppercases it)
   //     └─ div.bu-field-value
   //          └─ span.bu-badge.bu-badge-active → "active"   (lowercase)
-  function readUserStatus() {
-    var fields = document.querySelectorAll('.bu-field');
-    for (var i = 0; i < fields.length; i++) {
-      var label = fields[i].querySelector('.bu-field-label');
-      if (!label || (label.textContent || '').trim().toLowerCase() !== 'user status') continue;
-      var value = fields[i].querySelector('.bu-field-value') || fields[i];
-      var t = (value.textContent || '').trim().toLowerCase();
-      if (t.indexOf('suspend') !== -1) return 'Suspended';
-      if (t.indexOf('active') !== -1) return 'Active';
-    }
-    // Generic fallback: any leaf element whose text is exactly "user status"
-    var all = document.querySelectorAll('div,span,th,td,label,p');
-    for (var j = 0; j < all.length; j++) {
-      var el = all[j];
-      if (el.firstElementChild) continue;
-      if ((el.textContent || '').trim().toLowerCase() !== 'user status') continue;
-      var anc = el.parentElement;
-      for (var k = 0; k < 5 && anc && anc !== document.body; k++) {
-        var hay = (anc.textContent || '').toLowerCase();
-        var idx = hay.indexOf('user status');
-        var seg = idx >= 0 ? hay.slice(idx + 'user status'.length) : '';
-        if (seg.indexOf('suspend') !== -1) return 'Suspended';
-        if (seg.indexOf('active') !== -1) return 'Active';
-        anc = anc.parentElement;
-      }
-    }
-    return '';
-  }
+  function readUserStatus() { return readBadgeStatus('user status'); }
+  function readDomainStatus() { return readBadgeStatus('domain status'); }
 
   // Plan B: the AD page renders the badge from this API — ask the service
   // worker (which has host permission) to fetch it directly.
@@ -154,29 +141,65 @@
 
   // Reload the page and read the USER STATUS badge — the only trustworthy
   // signal that the unsuspension actually took effect.
+  function isDomainEntity(account) {
+    return account && account.indexOf('@') === -1;
+  }
+
   async function verifyByReload(account, attempt) {
     var status = await waitFor(readUserStatus, 10000);
     if (!status) status = await fetchStatusViaApi(account);
-    var outcome;
-    if (status === 'Active') {
-      outcome = 'confirmed';
-      showToast('\u2705 Unsuspension verified for ' + account + ' — user status: Active');
-    } else if (status === 'Suspended') {
-      outcome = 'failed';
-      showToast('\u274C Unsuspension failed for ' + account + ' — user status still Suspended');
-    } else if (!attempt || attempt < 2) {
-      // Status unreadable on first try — reload once more and recheck.
-      log('Could not read status for ' + account + ' on attempt ' + (attempt || 1) + ' — retrying');
-      setVerifyEntry(account, 2, function () {
-        showToast('Retrying verification for ' + account + '…');
-        setTimeout(function () { location.reload(); }, 1500);
-      });
-      return;
-    } else {
-      outcome = 'unknown';
-      showToast('\u26A0\uFE0F Could not read user status for ' + account + ' — please check manually');
+    var domainStatus = '';
+    if (isDomainEntity(account)) {
+      domainStatus = await waitFor(readDomainStatus, 5000);
     }
-    log('Verification for ' + account + ': ' + outcome + (status ? ' (' + status + ')' : ''));
+    var outcome;
+
+    function isActive(s) { return s === 'Active'; }
+
+    if (isDomainEntity(account)) {
+      // Domain entities require BOTH customer status and domain status to be active.
+      if (isActive(status) && isActive(domainStatus)) {
+        outcome = 'confirmed';
+        showToast('\u2705 Unsuspension verified for ' + account + ' — customer: Active, domain: Active');
+      } else if (status === 'Suspended' || domainStatus === 'Suspended') {
+        outcome = 'failed';
+        var parts = [];
+        if (status) parts.push('customer: ' + status);
+        if (domainStatus) parts.push('domain: ' + domainStatus);
+        showToast('\u274C Unsuspension failed for ' + account + ' — ' + (parts.join(', ') || 'status unknown'));
+      } else if ((!status || !domainStatus) && (!attempt || attempt < 2)) {
+        log('Could not read full status for ' + account + ' on attempt ' + (attempt || 1) + ' — retrying');
+        setVerifyEntry(account, 2, function () {
+          showToast('Retrying verification for ' + account + '…');
+          setTimeout(function () { location.reload(); }, 1500);
+        });
+        return;
+      } else {
+        outcome = 'unknown';
+        showToast('\u26A0\uFE0F Could not read status for ' + account + ' — please check manually');
+      }
+    } else {
+      // User entities: only customer status matters.
+      if (isActive(status)) {
+        outcome = 'confirmed';
+        showToast('\u2705 Unsuspension verified for ' + account + ' — user status: Active');
+      } else if (status === 'Suspended') {
+        outcome = 'failed';
+        showToast('\u274C Unsuspension failed for ' + account + ' — user status still Suspended');
+      } else if (!status && (!attempt || attempt < 2)) {
+        log('Could not read status for ' + account + ' on attempt ' + (attempt || 1) + ' — retrying');
+        setVerifyEntry(account, 2, function () {
+          showToast('Retrying verification for ' + account + '…');
+          setTimeout(function () { location.reload(); }, 1500);
+        });
+        return;
+      } else {
+        outcome = 'unknown';
+        showToast('\u26A0\uFE0F Could not read user status for ' + account + ' — please check manually');
+      }
+    }
+
+    log('Verification for ' + account + ': ' + outcome + (status ? ' (customer:' + status + ')' : '') + (domainStatus ? ' (domain:' + domainStatus + ')' : ''));
     reportDone({ outcome: outcome, account: account });
   }
 
