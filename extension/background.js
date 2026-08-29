@@ -38,39 +38,43 @@ async function openSheetAndLog(rowData) {
     reason: rowData.reason || '',
   });
 
-  let response;
-  try {
-    console.log('[Report→Sheet] Posting to Apps Script', url);
-    response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: payload
-    });
-  } catch (e) {
-    console.warn('[Report→Sheet] Exception:', e.message);
+  // Google Apps Script never returns CORS headers for extension origins —
+  // skip the CORS attempt (which always fails) and go straight to no-cors.
+  const isGas = /script\.google\.com/i.test(url);
+  if (!isGas) {
+    let response;
     try {
-      await fetch(url, {
+      console.log('[Report→Sheet] Posting to Apps Script', url);
+      response = await fetch(url, {
         method: 'POST',
-        mode: 'no-cors',
         headers: { 'Content-Type': 'application/json' },
         body: payload
       });
-      return { success: true, unverified: true };
-    } catch (e2) {
-      return { success: false, error: e2.message };
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      let parsed = null;
+      try { parsed = await response.json(); } catch (_) { parsed = null; }
+      if (parsed && parsed.status === 'success') {
+        return { success: true, row: parsed.row, cellUrl: parsed.cellUrl };
+      }
+      return { success: false, error: (parsed && parsed.message) || 'Apps Script error' };
+    } catch (e) {
+      console.warn('[Report→Sheet] CORS fetch failed:', e.message);
     }
   }
 
-  let parsed = null;
+  // no-cors fallback — opaque response, can't read body
   try {
-    parsed = await response.json();
-  } catch (e) {
-    parsed = null;
+    console.log('[Report→Sheet] Posting (no-cors)', url);
+    await fetch(url, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload
+    });
+    return { success: true, unverified: true };
+  } catch (e2) {
+    return { success: false, error: e2.message };
   }
-  if (parsed && parsed.status === 'success') {
-    return { success: true, row: parsed.row, cellUrl: parsed.cellUrl };
-  }
-  return { success: false, error: (parsed && parsed.message) || 'Apps Script error' };
 }
 
 async function handlePartnerPanelLookup(data, sendResponse) {
@@ -144,6 +148,23 @@ async function openAbuseDeskTabs(accounts, region) {
     opened++;
   }
   return opened;
+}
+
+const WEBAPP_TAB_MATCHES = [
+  'https://arf-bounce-report-generator.vercel.app/*',
+  'https://*.vercel.app/*',
+  'http://localhost:3000/*'
+];
+
+function forwardUnsuspendOutcome(data) {
+  chrome.tabs.query({ url: WEBAPP_TAB_MATCHES }, tabs => {
+    if (chrome.runtime.lastError || !tabs || !tabs.length) return;
+    for (const tab of tabs) {
+      chrome.tabs.sendMessage(tab.id, { action: 'unsuspend-outcome', data }, () => {
+        void chrome.runtime.lastError; // tab may have navigated — ignore
+      });
+    }
+  });
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -236,12 +257,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === 'ad-user-status') {
+    // Fallback verification path: the Abuse Desk page renders its status
+    // badge from this API; fetch it directly (host permission granted).
+    const account = message.data && message.data.account;
+    if (!account) { sendResponse({ success: false, error: 'No account' }); return true; }
+    fetch('https://api-abusedesk.ops.titan.email/api/v1/users/status/?email=' + encodeURIComponent(account), { credentials: 'include' })
+      .then(r => r.json())
+      .then(json => {
+        const flat = JSON.stringify(json || {});
+        const m = flat.match(/"user_?status"\s*:\s*"([^"]+)"/i);
+        const status = m ? m[1] : '';
+        sendResponse({ success: !!status, status });
+      })
+      .catch(e => sendResponse({ success: false, error: e.message }));
+    return true;
+  }
+
   if (message.action === 'ad-tab-done') {
     const tid = sender && sender.tab && sender.tab.id;
+    const d = message.data || {};
+    const outcome = d.outcome || (d.failed ? 'failed' : 'unknown');
+    // Relay the verdict back to the report page so the user gets an explicit
+    // confirmation there, not just the transient on-page toast.
+    forwardUnsuspendOutcome({ outcome, account: d.account || '' });
     if (typeof tid === 'number' && _openAdTabIds.has(tid)) {
       _openAdTabIds.delete(tid);
-      // Give the user time to read the on-page toast: short on success, longer on failure.
-      const delay = message.data && message.data.failed ? 8000 : 3000;
+      // Let the user read the on-page toast: short on verified, longer otherwise.
+      const delay = outcome === 'confirmed' ? 3000 : outcome === 'failed' ? 12000 : 10000;
       setTimeout(() => { chrome.tabs.remove(tid).catch(() => {}); }, delay);
     }
     return;

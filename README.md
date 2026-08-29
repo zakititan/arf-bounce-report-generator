@@ -122,15 +122,17 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ### Unsuspend (Abuse Desk Integration)
 - **"Create TAE JIRA and Unsuspend" button** — creates JIRA → transitions to Done → adds "Unsuspended" comment → opens Abuse Desk
 - **Multi-account unsuspend** — if "Other Blocked Email in Domain?" is set to Yes, the blocked accounts from the "Blocked Email Account(s)" field are also unsuspended; one JIRA is created listing all accounts, and one Abuse Desk tab is opened per account; tabs are opened by the background service worker via `chrome.tabs.create` so popup blockers can't swallow them
-- **Auto-closing tabs** — Abuse Desk tabs opened by the unsuspension flow clean up after themselves: each tab reports completion to the service worker, which closes it ~3s later (8s on failure so error toasts stay readable); manually opened Abuse Desk tabs are never touched
+- **Auto-closing tabs** — Abuse Desk tabs opened by the unsuspension flow clean up after themselves: each tab reports completion to the service worker, which closes it ~3s later (10–12s on failure/unverified so toasts stay readable); manually opened Abuse Desk tabs are never touched
+- **Unsuspension confirmation** — the USER STATUS badge on the Blocked Users page is the only authoritative signal, and it only updates after a reload. So after a clean Save the content script records a per-account verify marker, reloads the page, reads the badge, and reports the verdict: **Active** → confirmed, **Suspended** → failed, unreadable → unknown (a visible error right after Save fails fast without reloading). The marker switches the post-reload load into verification mode so the automation never re-runs. Verdicts are relayed (AD tab → service worker → report page) and aggregated per unsuspend run: the report page shows "Unsuspension verified in Abuse Desk ✓ (N/N)", a failure list, or an unverified warning. Runs with a legacy extension stay silent instead of nagging
+- **In-panel action results** — every panel has a persistent results section under the report output: a **JIRA** row (ticket key linking to the issue, image-attachment counts, or a creation-failed state) on ARF/Bounce/SMTP, and an **Unsuspension** row on all four panels showing per-account verdict chips that update live (`… account` → ✓ verified / ✗ failed / ? unverified). A **Retry Failed** button appears inline next to the verdict chips when any accounts are failed or unverified; clicking it re-runs the unsuspend flow for only those accounts without creating a new JIRA. The Clear button resets the section. The extension renders no toasts on the report page — the web app owns all notifications, so nothing overlaps
 - **One-shot unsuspend reason** — the stored reason is timestamped `{reason, ts}` and only valid for 90 seconds, then ignored — stale reasons can never auto-trigger unsuspension on later manual visits to Abuse Desk pages
 - **Abuse Desk automation** — the extension's content script on `abusedesk.ops.titan.email` automatically:
   1. Waits for the **Unblock** button (element polling, no fixed delays)
-  2. Pastes the JIRA URL as the reason into the textarea
+  2. Pastes the stored reason (JIRA URL for ARF/Bounce/SMTP, "Password Changed" for IP Spike) into the textarea
   3. Clicks **Save reason and proceed**
   4. Watches for visible error elements after saving before reporting success (a failure toast appears instead if errors are detected)
 - **Account from URL parameter** — each Abuse Desk tab reads its account from the `?entity=` URL parameter, eliminating storage race conditions when multiple tabs open simultaneously
-- **Region-aware URL** — Abuse Desk URL includes the correct `region` parameter (`us-east-1` for NA, `eu-central-1` for EU) based on MX-based region detection
+- **Region-aware URL** — Abuse Desk URL includes the correct `region` parameter (`us-east-1` for NA, `eu-central-1` for EU) based on MX-based region detection; region is passed through all unsuspend flows (JIRA-and-unsuspend, no-JIRA, and retry)
 - **Fallback toast** — shows success/failure toast notifications at each step for user feedback
 
 ### IP Spike & SMTP Suspension Panels
@@ -276,7 +278,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ├── styles/
 │   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, extension modal, responsive)
 ├── extension/                      # Chrome extension (Manifest V3) for JIRA integration, Abuse Desk automation, and Google Sheets logging
-│   ├── manifest.json               # Extension config: v4.4, permissions, ES-module service worker, content scripts for webapp, JIRA, Abuse Desk, and Partner Panel
+│   ├── manifest.json               # Extension config: v4.4.5, permissions, ES-module service worker, content scripts for webapp, JIRA, Abuse Desk, and Partner Panel
 │   ├── rg-lib.js                   # Shared pure logic (ESM): history analysis, JIRA body builder, image extraction, fallback URL builder, reason-TTL check — imported by the service worker and unit-tested
 │   ├── background.js               # Module service worker: create-jira (+optional markDone), log-to-sheet with verified response, partner-panel-lookup (closes its tab, analyzes raw events), open-abusedesk-tabs
 │   ├── content-webapp.js           # Content script on Report Generator: handles JIRA creation, Unsuspend (create + markDone + AD via background), partner panel lookup, sheet logging with cellUrl result
@@ -454,7 +456,7 @@ APPS_SCRIPT_URL=https://script.google.com/macros/s/.../exec  # optional — for 
 - **Middleware URL matching** uses exact path or subpath prefix to prevent `/api/login-staging` from bypassing auth
 - **`AUTH_SECRET`** and **`APP_PASSWORD`** are never committed to the repo — always set via environment variables
 - **Hostname validation** rejects IPv4/IPv6 addresses, localhost names, `.localhost`/`.local`/`.internal` TLDs (SSRF prevention), consecutive dots, hyphen-leading labels, and email local-parts
-- **Extension host permissions** — declares `host_permissions` for `https://jira.directi.com/*` and `https://admin.titan.email/*` to enable authenticated REST API calls and Partner Panel automation using browser session cookies
+- **Extension host permissions** — declares `host_permissions` for `https://jira.directi.com/*`, `https://admin.titan.email/*`, and `https://api-abusedesk.ops.titan.email/*` to enable authenticated REST API calls, Partner Panel automation, and Abuse Desk status verification using browser session cookies
 - **Content-script injection scope** — the webapp content script matches the production domain, Vercel preview deployments, and `localhost:3000` (for `vercel dev`) so the version check works everywhere the tool actually runs
 - **One-shot unsuspend reason** — the Abuse Desk automation reason is timestamped and expires after 90 seconds, preventing stale stored state from triggering unintended unsuspensions on manual page visits
 - **Session expiry handling** — frontend API calls redirect to `login.html` on HTTP 401
