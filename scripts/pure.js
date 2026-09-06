@@ -46,3 +46,11 @@ export function parseCsvRow(row) {
   cols.push(cur.trim());
   return cols;
 }
+
+export function shouldFinishUnsuspendTracking({ resultCount, expected, now, deadline }) {
+  return resultCount >= expected || now >= deadline;
+}
+
+export function createUnsuspendRequestId(now = Date.now(), entropy = Math.random()) {
+  return 'unsuspend-' + now.toString(36) + '-' + Math.floor(entropy * 1e9).toString(36);
+}

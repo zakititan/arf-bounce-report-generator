@@ -1,10 +1,15 @@
-import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh } from './rg-lib.js';
+import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse } from './rg-lib.js';
 
 const EXPIRY_MS = 10 * 60 * 1000;
+const REQUEST_TIMEOUT_MS = 30 * 1000;
 let _partnerPanelPending = null;
 const _openAdTabIds = new Set();
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function fetchWithTimeout(url, options = {}) {
+  return fetch(url, { ...options, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+}
 
 function waitForTabLoad(tabId, maxMs) {
   return new Promise(resolve => {
@@ -45,7 +50,7 @@ async function openSheetAndLog(rowData) {
     let response;
     try {
       console.log('[Report→Sheet] Posting to Apps Script', url);
-      response = await fetch(url, {
+      response = await fetchWithTimeout(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: payload
@@ -65,7 +70,7 @@ async function openSheetAndLog(rowData) {
   // no-cors fallback — opaque response, can't read body
   try {
     console.log('[Report→Sheet] Posting (no-cors)', url);
-    await fetch(url, {
+    await fetchWithTimeout(url, {
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
@@ -138,11 +143,11 @@ async function handlePartnerPanelLookup(data, sendResponse) {
   }
 }
 
-async function openAbuseDeskTabs(accounts, region) {
+async function openAbuseDeskTabs(accounts, region, requestId) {
   let opened = 0;
   for (const account of accounts) {
     const url = 'https://abusedesk.ops.titan.email/blocked_users.html?entity=' +
-      encodeURIComponent(account) + '&region=' + region;
+      encodeURIComponent(account) + '&region=' + region + (requestId ? '&rgRequestId=' + encodeURIComponent(requestId) : '');
     const tab = await new Promise(resolve => chrome.tabs.create({ url, active: false }, resolve));
     _openAdTabIds.add(tab.id);
     opened++;
@@ -228,9 +233,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             .map(s => s.trim())
             .filter(Boolean);
           try {
-            result.opened = await openAbuseDeskTabs(accounts, message.data.region);
+            result.opened = await openAbuseDeskTabs(accounts, message.data.region, message.data.requestId);
           } catch (e) {
-            console.warn('[Report→JIRA] opening Abuse Desk tabs failed:', e.message);
+            console.warn('[Report→JIRA][' + (message.data.requestId || 'legacy') + '] opening Abuse Desk tabs failed:', e.message);
           }
         }
         sendResponse(result);
@@ -246,7 +251,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ success: false, error: 'Invalid accounts array' });
       return true;
     }
-    openAbuseDeskTabs(d.accounts, typeof d.region === 'string' ? d.region : '')
+    openAbuseDeskTabs(d.accounts, typeof d.region === 'string' ? d.region : '', d.requestId)
       .then(opened => sendResponse({ success: true, opened }))
       .catch(e => sendResponse({ success: false, error: e.message }));
     return true;
@@ -262,7 +267,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // badge from this API; fetch it directly (host permission granted).
     const account = message.data && message.data.account;
     if (!account) { sendResponse({ success: false, error: 'No account' }); return true; }
-    fetch('https://api-abusedesk.ops.titan.email/api/v1/users/status/?email=' + encodeURIComponent(account), { credentials: 'include' })
+    fetchWithTimeout('https://api-abusedesk.ops.titan.email/api/v1/users/status/?email=' + encodeURIComponent(account), { credentials: 'include' })
       .then(r => r.json())
       .then(json => {
         const flat = JSON.stringify(json || {});
@@ -278,9 +283,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const tid = sender && sender.tab && sender.tab.id;
     const d = message.data || {};
     const outcome = d.outcome || (d.failed ? 'failed' : 'unknown');
+    const requestId = d.requestId || 'legacy';
+    console.log('[Report→AbuseDesk][' + requestId + '] tab done for ' + (d.account || 'unknown') + ': ' + outcome);
     // Relay the verdict back to the report page so the user gets an explicit
     // confirmation there, not just the transient on-page toast.
-    forwardUnsuspendOutcome({ outcome, account: d.account || '' });
+    forwardUnsuspendOutcome({ outcome, account: d.account || '', requestId: d.requestId });
     if (typeof tid === 'number' && _openAdTabIds.has(tid)) {
       _openAdTabIds.delete(tid);
       // Let the user read the on-page toast: short on verified, longer otherwise.
@@ -305,11 +312,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 async function handleCreateJira(data, andDone) {
   try {
     const { text, html, panel, account, zdLink } = data;
+    const requestId = data.requestId || 'legacy';
+    console.log('[Report→JIRA][' + requestId + '] creating issue for ' + account);
 
     const issueBody = buildJiraIssueBody({ text, panel, account, zdLink });
     const images = extractImagesRegex(html);
 
-    const issueResponse = await fetch('https://jira.directi.com/rest/api/2/issue', {
+    const issueResponse = await fetchWithTimeout('https://jira.directi.com/rest/api/2/issue', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -326,6 +335,7 @@ async function handleCreateJira(data, andDone) {
     const issueUrl = `https://jira.directi.com/browse/${issueKey}`;
 
     let imagesUploaded = 0;
+    const attachmentFailures = [];
     for (const image of images) {
       try {
         const binary = atob(image.base64);
@@ -337,15 +347,23 @@ async function handleCreateJira(data, andDone) {
         const formData = new FormData();
         formData.append('file', blob, image.filename);
 
-        await fetch(`https://jira.directi.com/rest/api/2/issue/${issueKey}/attachments`, {
+        const attachmentResponse = await fetchWithTimeout(`https://jira.directi.com/rest/api/2/issue/${issueKey}/attachments`, {
           method: 'POST',
           credentials: 'include',
           headers: { 'X-Atlassian-Token': 'no-check' },
           body: formData
         });
-        imagesUploaded++;
+        if (isSuccessfulResponse(attachmentResponse)) {
+          imagesUploaded++;
+        } else {
+          const errorText = await attachmentResponse.text().catch(() => '');
+          const failure = { filename: image.filename, status: attachmentResponse.status, error: errorText };
+          attachmentFailures.push(failure);
+          console.warn('[Report→JIRA][' + requestId + '] attachment failed:', failure);
+        }
       } catch (e) {
-        // Continue with other images
+        attachmentFailures.push({ filename: image.filename, status: 0, error: e.message });
+        console.warn('[Report→JIRA][' + requestId + '] attachment failed:', image.filename, e.message);
       }
     }
 
@@ -354,11 +372,13 @@ async function handleCreateJira(data, andDone) {
       issueKey,
       issueUrl,
       imagesUploaded,
-      imagesTotal: images.length
+      imagesTotal: images.length,
+      imagesFailed: attachmentFailures.length,
+      attachmentFailures
     };
 
     if (andDone) {
-      result.unsuspendStatus = await markDone(issueKey);
+      result.unsuspendStatus = await markDone(issueKey, requestId);
     }
 
     return result;
@@ -367,9 +387,9 @@ async function handleCreateJira(data, andDone) {
   }
 }
 
-async function markDone(issueKey) {
+async function markDone(issueKey, requestId = 'legacy') {
   try {
-    const transPostResp = await fetch(
+    const transPostResp = await fetchWithTimeout(
       `https://jira.directi.com/rest/api/2/issue/${issueKey}/transitions`,
       {
         method: 'POST',
@@ -381,11 +401,11 @@ async function markDone(issueKey) {
 
     if (!transPostResp.ok) {
       const errText = await transPostResp.text();
-      console.warn('[Report→JIRA] transition failed:', transPostResp.status, errText);
+      console.warn('[Report→JIRA][' + requestId + '] transition failed:', transPostResp.status, errText);
       return { done: false, commented: false, error: `Transition failed (${transPostResp.status}): ${errText}` };
     }
 
-    const commentResp = await fetch(
+    const commentResp = await fetchWithTimeout(
       `https://jira.directi.com/rest/api/2/issue/${issueKey}/comment`,
       {
         method: 'POST',
@@ -397,13 +417,13 @@ async function markDone(issueKey) {
 
     if (!commentResp.ok) {
       const errText = await commentResp.text();
-      console.warn('[Report→JIRA] comment failed:', commentResp.status, errText);
+      console.warn('[Report→JIRA][' + requestId + '] comment failed:', commentResp.status, errText);
       return { done: true, commented: false, error: `Comment failed (${commentResp.status}): ${errText}` };
     }
 
     return { done: true, commented: true };
   } catch (e) {
-    console.warn('[Report→JIRA] markDone failed:', e.message);
+    console.warn('[Report→JIRA][' + requestId + '] markDone failed:', e.message);
     return { done: false, commented: false, error: e.message };
   }
 }

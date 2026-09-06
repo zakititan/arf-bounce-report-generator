@@ -8,6 +8,7 @@ import {
   extractImagesRegex,
   buildFallbackJiraUrl,
   isReasonFresh,
+  isSuccessfulResponse,
 } from '../extension/rg-lib.js';
 
 // ── constants ─────────────────────────────────────────────────────────
@@ -18,6 +19,17 @@ describe('constants', () => {
 
   it('exports JIRA_DONE_TRANSITION_ID of "71"', () => {
     assert.equal(JIRA_DONE_TRANSITION_ID, '71');
+  });
+});
+
+describe('isSuccessfulResponse', () => {
+  it('counts only an ok HTTP response as successful', () => {
+    assert.equal(isSuccessfulResponse({ ok: true, status: 200 }), true);
+    assert.equal(isSuccessfulResponse({ ok: false, status: 500 }), false);
+  });
+
+  it('does not treat a missing response as successful', () => {
+    assert.equal(isSuccessfulResponse(null), false);
   });
 });
 

@@ -15,7 +15,7 @@
 
 import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx,
          fetchLaravelCheck, fetchXmlrpcCheck, fetchWordPressCheck } from './api.js';
-import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow } from './pure.js';
+import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, createUnsuspendRequestId } from './pure.js';
 import {
   showToast, initThemeToggle,
   clearFieldErrors, showValidationErrors,
@@ -192,6 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // anonymous, so replies are routed by remembering the initiator.
 let _lastJiraPanel = null;
 let _lastUnsuspendPanel = null;
+let _activeUnsuspendRequestId = null;
 // Assigned during init; lets top-level code (e.g. Clear) cancel an in-flight
 // unsuspension tracking session for a panel.
 let _cancelUnsuspendTracking = null;
@@ -270,6 +271,8 @@ window.addEventListener('message', (e) => {
   }
 
   // REPORT_GENERATOR_UNSUSPEND_RESULT
+  if (d.requestId && _activeUnsuspendRequestId && d.requestId !== _activeUnsuspendRequestId) return;
+  console.log('[Report→Unsuspend][' + (d.requestId || 'legacy') + '] JIRA result received');
   const prefix = _lastUnsuspendPanel;
   const status = d.unsuspendStatus;
   if (status && status.done === false) {
@@ -287,12 +290,15 @@ window.addEventListener('message', (e) => {
 
 // ── Unsuspension confirmation (verdicts relayed from Abuse Desk tabs) ──
 let _unsuspendConfirm = null;
+const UNSUSPEND_HARD_TIMEOUT_MS = 90_000;
 const _lastFailedAccounts = {};
 
 function finishUnsuspendTracking() {
   const session = _unsuspendConfirm;
   _unsuspendConfirm = null;
+  _activeUnsuspendRequestId = null;
   if (!session) return;
+  clearTimeout(session.timer);
   const r = session.results;
   // Legacy extensions never send verdicts — hide the pending chips and
   // stay quiet instead of nagging.
@@ -324,9 +330,13 @@ function finishUnsuspendTracking() {
     bad.length ? 'error' : 'warning', { durationMs: 9000 });
 }
 
-function beginUnsuspendTracking(expected, panel, accounts) {
+function beginUnsuspendTracking(expected, panel, accounts, requestId) {
   clearTimeout(_unsuspendConfirm && _unsuspendConfirm.timer);
-  _unsuspendConfirm = { expected, panel, accounts, results: [], timer: setTimeout(finishUnsuspendTracking, 45000) };
+  requestId = requestId || createUnsuspendRequestId();
+  const deadline = Date.now() + UNSUSPEND_HARD_TIMEOUT_MS;
+  _activeUnsuspendRequestId = requestId;
+  _unsuspendConfirm = { expected, panel, accounts, requestId, deadline, results: [], timer: setTimeout(finishUnsuspendTracking, UNSUSPEND_HARD_TIMEOUT_MS) };
+  console.log('[Report→Unsuspend][' + requestId + '] tracking ' + expected + ' account(s)');
   _lastFailedAccounts[panel] = [];
   const retryBtn = document.getElementById(panel + '-retry-unsuspend');
   if (retryBtn) retryBtn.hidden = true;
@@ -336,6 +346,7 @@ function beginUnsuspendTracking(expected, panel, accounts) {
 _cancelUnsuspendTracking = function (prefix) {
   if (_unsuspendConfirm && _unsuspendConfirm.panel === prefix) {
     clearTimeout(_unsuspendConfirm.timer);
+    _activeUnsuspendRequestId = null;
     _unsuspendConfirm = null;
     hideUnsuspendSection(prefix);
   }
@@ -344,10 +355,12 @@ _cancelUnsuspendTracking = function (prefix) {
 window.addEventListener('message', (e) => {
   const outcome = e.data && e.data.type === 'REPORT_GENERATOR_UNSUSPEND_OUTCOME' ? e.data.outcome : null;
   if (!outcome || !_unsuspendConfirm) return;
+  if (outcome.requestId && outcome.requestId !== _unsuspendConfirm.requestId) return;
   if (_unsuspendConfirm.results.some(x => x.account && x.account === outcome.account)) return; // dedupe
   _unsuspendConfirm.results.push(outcome);
+  console.log('[Report→Unsuspend][' + _unsuspendConfirm.requestId + '] outcome for ' + (outcome.account || 'unknown') + ': ' + outcome.outcome);
   renderUnsuspendVerdicts(_unsuspendConfirm.panel, _unsuspendConfirm.accounts, _unsuspendConfirm.results, false);
-  if (_unsuspendConfirm.results.length >= _unsuspendConfirm.expected) finishUnsuspendTracking();
+  if (shouldFinishUnsuspendTracking({ resultCount: _unsuspendConfirm.results.length, expected: _unsuspendConfirm.expected, now: Date.now(), deadline: _unsuspendConfirm.deadline })) finishUnsuspendTracking();
 });
 
 // ── Delegated click handler for retry-unsuspend buttons ──
@@ -1803,6 +1816,7 @@ function unsuspendAccount(prefix, btn) {
 
   const zdLink = document.getElementById(prefix + '-zd-link')?.value.trim() || '';
   const region = (state[prefix] || state.arf).region === 'eu' ? 'eu-central-1' : 'us-east-1';
+  const requestId = createUnsuspendRequestId();
 
   let reason;
   if (prefix === 'ipspike') {
@@ -1829,13 +1843,14 @@ function unsuspendAccount(prefix, btn) {
     html: reportHtml,
     panel: prefix,
     zdLink: zdLink,
+    requestId: requestId,
   }, '*');
 
   const msg = accounts.length > 1
     ? 'Opening Abuse Desk for ' + accounts.length + ' accounts...'
     : 'Opening Abuse Desk to unsuspend ' + account + '...';
   showToast(msg, 'info');
-  beginUnsuspendTracking(accounts.length, prefix, accounts);
+  beginUnsuspendTracking(accounts.length, prefix, accounts, requestId);
 }
 
 function retryUnsuspend(prefix) {
@@ -1860,6 +1875,7 @@ function retryUnsuspend(prefix) {
     .map(el => el.outerHTML).join('') : '';
 
   _lastUnsuspendPanel = prefix;
+  const requestId = createUnsuspendRequestId();
   window.postMessage({
     type: 'REPORT_GENERATOR_UNSUSPEND_NO_JIRA',
     accounts: accounts,
@@ -1870,11 +1886,13 @@ function retryUnsuspend(prefix) {
     html: reportHtml,
     panel: prefix,
     zdLink: zdLink,
+    requestId: requestId,
   }, '*');
+
+  beginUnsuspendTracking(accounts.length, prefix, accounts, requestId);
 
   const msg = 'Retrying unsuspension for ' + accounts.length + ' account' + (accounts.length > 1 ? 's' : '') + '...';
   showToast(msg, 'info');
-  beginUnsuspendTracking(accounts.length, prefix, accounts);
 }
 
 function logToSheet(prefix) {

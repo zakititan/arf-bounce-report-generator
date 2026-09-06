@@ -63,18 +63,19 @@
           panel: unsuspendData.panel || '',
           account: accounts.join(', '),
           zdLink: unsuspendData.zdLink || '',
-          region: unsuspendData.region || ''
+          region: unsuspendData.region || '',
+          requestId: unsuspendData.requestId || ''
         }},
         function (response) {
           if (chrome.runtime.lastError || !response || !response.success) {
             var err = (response && response.error) || (chrome.runtime.lastError && chrome.runtime.lastError.message) || 'JIRA creation failed';
-            window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', success: false, issueKey: (response && response.issueKey) || null, url: null, unsuspendStatus: (response && response.unsuspendStatus) || null, error: err }, '*');
+            window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', requestId: unsuspendData.requestId, success: false, issueKey: (response && response.issueKey) || null, url: null, unsuspendStatus: (response && response.unsuspendStatus) || null, error: err }, '*');
             return;
           }
 
           var jiraUrl = response.issueUrl;
           chrome.storage.local.set({ lastJiraUrl: jiraUrl });
-          window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', success: true, issueKey: response.issueKey || null, url: jiraUrl || null, unsuspendStatus: response.unsuspendStatus || null }, '*');
+          window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', requestId: unsuspendData.requestId, success: true, issueKey: response.issueKey || null, url: jiraUrl || null, unsuspendStatus: response.unsuspendStatus || null }, '*');
         }
       );
     }
@@ -86,17 +87,17 @@
       var reasonPayload = noJiraData.reason || 'Password Changed';
       chrome.storage.local.set({ unsuspendReason: { reason: reasonPayload, ts: Date.now() } }, function () {
         if (chrome.runtime.lastError) {
-          window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', success: false, error: chrome.runtime.lastError.message }, '*');
+          window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', requestId: noJiraData.requestId, success: false, error: chrome.runtime.lastError.message }, '*');
           return;
         }
         var region = noJiraData.region;
         var accounts = noJiraAccounts;
-        chrome.runtime.sendMessage({ action: 'open-abusedesk-tabs', data: { accounts: accounts, region: region } }, function (resp) {
+          chrome.runtime.sendMessage({ action: 'open-abusedesk-tabs', data: { accounts: accounts, region: region, requestId: noJiraData.requestId } }, function (resp) {
           if (chrome.runtime.lastError || !resp || !resp.success) {
-            window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', success: false, error: (resp && resp.error) || chrome.runtime.lastError?.message || 'Failed opening Abuse Desk tabs' }, '*');
+            window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', requestId: noJiraData.requestId, success: false, error: (resp && resp.error) || chrome.runtime.lastError?.message || 'Failed opening Abuse Desk tabs' }, '*');
             return;
           }
-          window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', success: true, opened: resp.opened }, '*');
+          window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', requestId: noJiraData.requestId, success: true, opened: resp.opened }, '*');
         });
       });
     }

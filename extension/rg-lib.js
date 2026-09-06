@@ -103,3 +103,7 @@ export function isReasonFresh(record, now = Date.now()) {
   if (typeof record.ts !== 'number' || !Number.isFinite(record.ts)) return false;
   return now - record.ts <= REASON_TTL_MS;
 }
+
+export function isSuccessfulResponse(response) {
+  return Boolean(response && response.ok === true);
+}

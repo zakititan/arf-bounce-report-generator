@@ -1,6 +1,13 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { escapeHtml, parseCsvRow, sanitiseDomainInput, sanitiseAccountInput } from '../scripts/pure.js';
+import {
+  escapeHtml,
+  parseCsvRow,
+  sanitiseDomainInput,
+  sanitiseAccountInput,
+  shouldFinishUnsuspendTracking,
+  createUnsuspendRequestId,
+} from '../scripts/pure.js';
 import { describeReason, getCached, setCache } from '../scripts/api.js';
 import { parseAgeToDays } from '../scripts/ui.js';
 
@@ -251,5 +258,25 @@ describe('sanitiseAccountInput', () => {
 
   it('does not lowercase domain (unlike sanitiseDomainInput)', () => {
     assert.equal(sanitiseAccountInput('Example.COM'), 'Example.COM');
+  });
+});
+
+describe('shouldFinishUnsuspendTracking', () => {
+  it('finishes as soon as every expected account reports', () => {
+    assert.equal(shouldFinishUnsuspendTracking({ resultCount: 2, expected: 2, now: 10, deadline: 100 }), true);
+  });
+
+  it('does not finish incomplete tracking at the soft 45-second point', () => {
+    assert.equal(shouldFinishUnsuspendTracking({ resultCount: 1, expected: 2, now: 45_000, deadline: 90_000 }), false);
+  });
+
+  it('finishes incomplete tracking at the hard deadline', () => {
+    assert.equal(shouldFinishUnsuspendTracking({ resultCount: 1, expected: 2, now: 90_000, deadline: 90_000 }), true);
+  });
+});
+
+describe('createUnsuspendRequestId', () => {
+  it('creates a stable, traceable ID from supplied time and entropy', () => {
+    assert.equal(createUnsuspendRequestId(1234, 0.5), 'unsuspend-ya-89oqgw');
   });
 });

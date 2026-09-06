@@ -1,4 +1,5 @@
 (function () {
+  var requestId = new URLSearchParams(window.location.search).get('rgRequestId') || '';
   function log(msg) { console.log('[Report→AbuseDesk] ' + msg); }
 
   function showToast(message) {
@@ -52,7 +53,8 @@
         data: {
           failed: r.outcome === 'failed',
           outcome: r.outcome || 'unknown',
-          account: r.account || ''
+          account: r.account || '',
+          requestId: requestId
         }
       });
     } catch (e) { /* extension context gone — nothing to do */ }
