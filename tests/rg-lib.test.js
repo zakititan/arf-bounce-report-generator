@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import * as rgLib from '../extension/rg-lib.js';
 import {
   REASON_TTL_MS,
   JIRA_DONE_TRANSITION_ID,
@@ -30,6 +31,53 @@ describe('isSuccessfulResponse', () => {
 
   it('does not treat a missing response as successful', () => {
     assert.equal(isSuccessfulResponse(null), false);
+  });
+});
+
+describe('web app message security helpers', () => {
+  it('accepts the production, Vercel, and localhost application origins only', () => {
+    assert.equal(rgLib.isAllowedWebAppOrigin('https://arf-bounce-report-generator.vercel.app'), true);
+    assert.equal(rgLib.isAllowedWebAppOrigin('https://preview-123.vercel.app'), true);
+    assert.equal(rgLib.isAllowedWebAppOrigin('http://localhost:3000'), true);
+    assert.equal(rgLib.isAllowedWebAppOrigin('https://evil.example'), false);
+    assert.equal(rgLib.isAllowedWebAppOrigin('null'), false);
+  });
+
+  it('requires typed JIRA payload fields before forwarding', () => {
+    assert.equal(rgLib.validateWebAppMessage({
+      type: 'REPORT_GENERATOR_JIRA', text: 'report', html: '', panel: 'arf',
+      account: 'user@example.com', requestId: 'jira_123'
+    }), true);
+    assert.equal(rgLib.validateWebAppMessage({
+      type: 'REPORT_GENERATOR_JIRA', text: '', html: '', panel: 'arf',
+      account: 'user@example.com', requestId: 'jira_123'
+    }), false);
+    assert.equal(rgLib.validateWebAppMessage({
+      type: 'REPORT_GENERATOR_JIRA', text: 'report', html: '', panel: 'arf',
+      account: 'not an account', requestId: 'jira_123'
+    }), false);
+  });
+
+  it('accepts comma-separated valid accounts with or without spaces', () => {
+    assert.deepEqual(rgLib.normalizeAccountList('one@example.com,two.example.com, three@example.net'), [
+      'one@example.com', 'two.example.com', 'three@example.net'
+    ]);
+    assert.equal(rgLib.validateWebAppMessage({
+      type: 'REPORT_GENERATOR_UNSUSPEND', accounts: ['one@example.com', 'two.example.com'],
+      text: 'report', html: '', panel: 'bounce', requestId: 'unsuspend_123'
+    }), true);
+    assert.equal(rgLib.validateWebAppMessage({
+      type: 'REPORT_GENERATOR_UNSUSPEND', accounts: ['one@example.com', 'bad account'],
+      text: 'report', html: '', panel: 'bounce', requestId: 'unsuspend_123'
+    }), false);
+  });
+
+  it('returns a stored JIRA URL only for the current report context', () => {
+    const current = { url: 'https://jira.directi.com/browse/NEW-1', reportId: 'report_2', panel: 'bounce' };
+    assert.equal(rgLib.getScopedJiraUrl(current, 'report_2', 'bounce'), current.url);
+    assert.equal(rgLib.getScopedJiraUrl(current, 'report_1', 'bounce'), '');
+    assert.equal(rgLib.getScopedJiraUrl(current, 'report_2', 'arf'), '');
+    assert.equal(rgLib.getScopedJiraUrl('https://jira.directi.com/browse/OLD-1', 'report_2', 'bounce'), '');
   });
 });
 

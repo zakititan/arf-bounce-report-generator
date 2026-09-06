@@ -3,6 +3,58 @@
   // (app.js) owns all on-page notifications - extension toasts used to stack on
   // top of the app toast in the bottom-right corner and overlap it.
 
+  var ACCOUNT_EMAIL_RE = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
+  var ACCOUNT_DOMAIN_RE = /^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
+  var REQUEST_ID_RE = /^[A-Za-z][A-Za-z0-9_-]{0,99}$/;
+
+  function isAllowedOrigin(origin) {
+    return origin === 'http://localhost:3000' ||
+      origin === 'https://arf-bounce-report-generator.vercel.app' ||
+      /^https:\/\/[^./]+(?:[.-][^./]+)*\.vercel\.app$/.test(origin);
+  }
+
+  function accounts(value) {
+    var values = Array.isArray(value) ? value : typeof value === 'string' ? [value] : [];
+    return values.reduce(function (all, item) {
+      return all.concat(typeof item === 'string' ? item.split(',') : []);
+    }, []).map(function (item) { return item.trim(); }).filter(Boolean);
+  }
+
+  function validAccount(value) {
+    return typeof value === 'string' && value.length <= 254 &&
+      (ACCOUNT_EMAIL_RE.test(value) || ACCOUNT_DOMAIN_RE.test(value));
+  }
+
+  function validMessage(data) {
+    if (!data || typeof data.type !== 'string') return false;
+    var requestId = typeof data.requestId === 'string' && REQUEST_ID_RE.test(data.requestId);
+    if (data.type === 'REPORT_GENERATOR_PING') return true;
+    if (data.type === 'REPORT_GENERATOR_JIRA') {
+      return requestId && typeof data.panel === 'string' && typeof data.account === 'string' &&
+        (typeof data.text === 'string' || typeof data.html === 'string') && Boolean(data.text || data.html) &&
+        accounts(data.account).length === 1 && validAccount(data.account.trim());
+    }
+    if (data.type === 'REPORT_GENERATOR_UNSUSPEND' || data.type === 'REPORT_GENERATOR_UNSUSPEND_NO_JIRA') {
+      var list = accounts(data.accounts || data.account);
+      return requestId && typeof data.panel === 'string' && typeof data.text === 'string' &&
+        typeof data.html === 'string' && list.length > 0 && list.every(validAccount);
+    }
+    if (data.type === 'REPORT_GENERATOR_LOG_SHEET') {
+      return requestId && ['date', 'zdLink', 'domainEmail', 'reportType', 'reason', 'appsScriptUrl', 'panel']
+        .every(function (key) { return typeof data[key] === 'string'; });
+    }
+    if (data.type === 'REPORT_GENERATOR_PARTNER_PANEL_LOOKUP') {
+      return requestId && validAccount(typeof data.account === 'string' ? data.account.trim() : '');
+    }
+    return false;
+  }
+
+  function scopedJiraUrl(stored, reportId, panel) {
+    if (!stored || typeof stored !== 'object' || stored.reportId !== reportId || stored.panel !== panel ||
+        typeof stored.url !== 'string' || !/^https:\/\/jira\.directi\.com\/browse\/[A-Z][A-Z0-9]+-\d+$/.test(stored.url)) return '';
+    return stored.url;
+  }
+
 
   // Service worker relays per-account unsuspension verdicts here; forward
   // them into the page so app.js can aggregate and confirm to the user.
@@ -14,12 +66,14 @@
 
   window.addEventListener('message', function (event) {
     if (event.source !== window) return;
+    if (!isAllowedOrigin(event.origin)) return;
     if (!event.data) return;
     if (typeof chrome === 'undefined' || !chrome.storage) {
       console.warn('[Report→JIRA] chrome.storage not available — is the extension installed?');
       return;
     }
 
+    if (!validMessage(event.data)) return;
     if (event.data.type === 'REPORT_GENERATOR_JIRA') {
       var data = event.data;
       var text = data.text;
@@ -31,7 +85,7 @@
       if (!text && !html) return;
 
       chrome.runtime.sendMessage(
-        { action: 'create-jira', data: { text: text, html: html, panel: panel, account: account, zdLink: zdLink } },
+        { action: 'create-jira', data: { text: text, html: html, panel: panel, account: account, zdLink: zdLink, requestId: data.requestId, reportId: data.reportId } },
         function (response) {
           if (chrome.runtime.lastError) {
             window.postMessage({ type: 'REPORT_GENERATOR_JIRA_RESULT', success: false }, '*');
@@ -41,11 +95,11 @@
 
           if (response && response.success === true) {
             var jiraUrl = response.issueUrl;
-            window.postMessage({ type: 'REPORT_GENERATOR_JIRA_RESULT', success: true, issueKey: response.issueKey, url: jiraUrl, imagesUploaded: response.imagesUploaded, imagesTotal: response.imagesTotal }, '*');
+            window.postMessage({ type: 'REPORT_GENERATOR_JIRA_RESULT', requestId: data.requestId, success: true, issueKey: response.issueKey, url: jiraUrl, imagesUploaded: response.imagesUploaded, imagesTotal: response.imagesTotal }, '*');
 
-            chrome.storage.local.set({ lastJiraUrl: jiraUrl });
+            chrome.storage.local.set({ lastJiraUrl: { url: jiraUrl, reportId: data.reportId, panel: panel } });
           } else {
-            window.postMessage({ type: 'REPORT_GENERATOR_JIRA_RESULT', success: false }, '*');
+            window.postMessage({ type: 'REPORT_GENERATOR_JIRA_RESULT', requestId: data.requestId, success: false }, '*');
             fallbackToStorage(text, html, panel, account);
           }
         }
@@ -64,7 +118,8 @@
           account: accounts.join(', '),
           zdLink: unsuspendData.zdLink || '',
           region: unsuspendData.region || '',
-          requestId: unsuspendData.requestId || ''
+          requestId: unsuspendData.requestId || '',
+          reportId: unsuspendData.reportId || ''
         }},
         function (response) {
           if (chrome.runtime.lastError || !response || !response.success) {
@@ -74,7 +129,7 @@
           }
 
           var jiraUrl = response.issueUrl;
-          chrome.storage.local.set({ lastJiraUrl: jiraUrl });
+          chrome.storage.local.set({ lastJiraUrl: { url: jiraUrl, reportId: unsuspendData.reportId, panel: unsuspendData.panel } });
           window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', requestId: unsuspendData.requestId, success: true, issueKey: response.issueKey || null, url: jiraUrl || null, unsuspendStatus: response.unsuspendStatus || null }, '*');
         }
       );
@@ -106,7 +161,7 @@
       var logData = event.data;
 
       chrome.storage.local.get('lastJiraUrl', function(result) {
-        var jiraLink = result.lastJiraUrl || '';
+        var jiraLink = scopedJiraUrl(result.lastJiraUrl, logData.reportId, logData.panel);
 
         chrome.runtime.sendMessage({
           action: 'log-to-sheet',
@@ -118,10 +173,11 @@
             type:        logData.reportType,
             reason:      logData.reason,
             appsScriptUrl: logData.appsScriptUrl || '',
+            requestId: logData.requestId,
           }
         }, function(response) {
           var ok = !!(response && response.success);
-          window.postMessage({ type: 'REPORT_GENERATOR_LOG_SHEET_RESULT', success: !!(response && response.success), cellUrl: (response && response.cellUrl) || null, unverified: !!(response && response.unverified), error: (response && response.error) || null }, '*');
+          window.postMessage({ type: 'REPORT_GENERATOR_LOG_SHEET_RESULT', requestId: logData.requestId, success: !!(response && response.success), cellUrl: (response && response.cellUrl) || null, unverified: !!(response && response.unverified), error: (response && response.error) || null }, '*');
           if (chrome.runtime.lastError || !ok) {
             console.warn('[Report→Sheet] Failed:', chrome.runtime.lastError?.message);
           }
@@ -139,17 +195,17 @@
 
     if (event.data.type === 'REPORT_GENERATOR_PARTNER_PANEL_LOOKUP') {
       var lookupAccount = event.data.account;
-      var requestId = 'pp_' + Date.now();
+      var requestId = event.data.requestId;
 
       chrome.runtime.sendMessage({
         action: 'partner-panel-lookup',
         data: { account: lookupAccount, requestId: requestId }
       }, function(response) {
         if (chrome.runtime.lastError || !response) {
-          window.postMessage({ type: 'PARTNER_PANEL_RESULT', data: { success: false, error: chrome.runtime.lastError?.message || 'No response' } }, '*');
+          window.postMessage({ type: 'PARTNER_PANEL_RESULT', requestId: requestId, data: { success: false, error: chrome.runtime.lastError?.message || 'No response' } }, '*');
           return;
         }
-        window.postMessage({ type: 'PARTNER_PANEL_RESULT', data: response }, '*');
+        window.postMessage({ type: 'PARTNER_PANEL_RESULT', requestId: requestId, data: response }, '*');
       });
     }
   });

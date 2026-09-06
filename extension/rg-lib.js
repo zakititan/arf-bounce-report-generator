@@ -3,6 +3,66 @@
 export const REASON_TTL_MS = 90000;
 export const JIRA_DONE_TRANSITION_ID = '71';
 
+const ACCOUNT_EMAIL_RE = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
+const ACCOUNT_DOMAIN_RE = /^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
+const REQUEST_ID_RE = /^[A-Za-z][A-Za-z0-9_-]{0,99}$/;
+
+export function isAllowedWebAppOrigin(origin) {
+  if (typeof origin !== 'string') return false;
+  return origin === 'http://localhost:3000' ||
+    origin === 'https://arf-bounce-report-generator.vercel.app' ||
+    /^https:\/\/[^./]+(?:[.-][^./]+)*\.vercel\.app$/.test(origin);
+}
+
+export function isValidAccountIdentifier(value) {
+  return typeof value === 'string' && value.length <= 254 &&
+    (ACCOUNT_EMAIL_RE.test(value) || ACCOUNT_DOMAIN_RE.test(value));
+}
+
+export function normalizeAccountList(value) {
+  const values = Array.isArray(value) ? value : typeof value === 'string' ? [value] : [];
+  return values.flatMap(item => typeof item === 'string' ? item.split(',') : [])
+    .map(item => item.trim()).filter(Boolean);
+}
+
+export function areValidAccountList(value) {
+  const accounts = normalizeAccountList(value);
+  return accounts.length > 0 && accounts.every(isValidAccountIdentifier);
+}
+
+export function validateWebAppMessage(message) {
+  if (!message || typeof message !== 'object' || typeof message.type !== 'string') return false;
+  const hasStrings = (keys) => keys.every(key => typeof message[key] === 'string');
+  const hasRequestId = typeof message.requestId === 'string' && REQUEST_ID_RE.test(message.requestId);
+
+  if (message.type === 'REPORT_GENERATOR_PING') return true;
+  if (message.type === 'REPORT_GENERATOR_JIRA') {
+    return hasRequestId && hasStrings(['panel', 'account']) &&
+      (typeof message.text === 'string' || typeof message.html === 'string') &&
+      Boolean(message.text || message.html) && normalizeAccountList(message.account).length === 1 &&
+      isValidAccountIdentifier(message.account.trim());
+  }
+  if (message.type === 'REPORT_GENERATOR_UNSUSPEND' || message.type === 'REPORT_GENERATOR_UNSUSPEND_NO_JIRA') {
+    const accounts = message.accounts || message.account;
+    return hasRequestId && hasStrings(['panel']) && typeof message.text === 'string' &&
+      typeof message.html === 'string' && areValidAccountList(accounts);
+  }
+  if (message.type === 'REPORT_GENERATOR_LOG_SHEET') {
+    return hasRequestId && hasStrings(['date', 'zdLink', 'domainEmail', 'reportType', 'reason', 'appsScriptUrl', 'panel']);
+  }
+  if (message.type === 'REPORT_GENERATOR_PARTNER_PANEL_LOOKUP') {
+    return hasRequestId && isValidAccountIdentifier(typeof message.account === 'string' ? message.account.trim() : '');
+  }
+  return false;
+}
+
+export function getScopedJiraUrl(stored, reportId, panel) {
+  if (!stored || typeof stored !== 'object' ||
+      typeof stored.url !== 'string' || !/^https:\/\/jira\.directi\.com\/browse\/[A-Z][A-Z0-9]+-\d+$/.test(stored.url) ||
+      stored.reportId !== reportId || stored.panel !== panel) return '';
+  return stored.url;
+}
+
 export function analyzeHistory(events) {
   var suspensionIdx = -1;
   var passwordResetAfterSuspension = false;

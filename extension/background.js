@@ -1,4 +1,4 @@
-import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse } from './rg-lib.js';
+import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList } from './rg-lib.js';
 import { fetchWithTimeout } from './timeout.js';
 
 const EXPIRY_MS = 10 * 60 * 1000;
@@ -82,7 +82,7 @@ async function handlePartnerPanelLookup(data, sendResponse) {
   let tab = null;
   try {
     const account = data.account;
-    if (!account) {
+    if (!areValidAccountList(account)) {
       sendResponse({ success: false, error: 'No account provided' });
       return;
     }
@@ -140,6 +140,7 @@ async function handlePartnerPanelLookup(data, sendResponse) {
 }
 
 async function openAbuseDeskTabs(accounts, region, requestId) {
+  if (!areValidAccountList(accounts)) throw new Error('Invalid account or email domain');
   let opened = 0;
   for (const account of accounts) {
     const url = 'https://abusedesk.ops.titan.email/blocked_users.html?entity=' +
@@ -218,16 +219,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === 'create-jira-and-done') {
+    if (!message.data || !areValidAccountList(message.data.account)) {
+      sendResponse({ success: false, error: 'Invalid account or email domain' });
+      return true;
+    }
     handleCreateJira(message.data, true)
       .then(async result => {
         if (result.success === true) {
           chrome.storage.local.set({
             unsuspendReason: { reason: result.issueUrl, ts: Date.now() }
           });
-          const accounts = String(message.data.account || '')
-            .split(', ')
-            .map(s => s.trim())
-            .filter(Boolean);
+          const accounts = normalizeAccountList(message.data.account);
           try {
             result.opened = await openAbuseDeskTabs(accounts, message.data.region, message.data.requestId);
           } catch (e) {
@@ -242,12 +244,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === 'open-abusedesk-tabs') {
     const d = message.data || {};
-    if (!Array.isArray(d.accounts) || d.accounts.length === 0 ||
-        !d.accounts.every(a => typeof a === 'string' && a.trim())) {
+    const accounts = normalizeAccountList(d.accounts);
+    if (!areValidAccountList(accounts)) {
       sendResponse({ success: false, error: 'Invalid accounts array' });
       return true;
     }
-    openAbuseDeskTabs(d.accounts, typeof d.region === 'string' ? d.region : '', d.requestId)
+    openAbuseDeskTabs(accounts, typeof d.region === 'string' ? d.region : '', d.requestId)
       .then(opened => sendResponse({ success: true, opened }))
       .catch(e => sendResponse({ success: false, error: e.message }));
     return true;
@@ -262,7 +264,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Fallback verification path: the Abuse Desk page renders its status
     // badge from this API; fetch it directly (host permission granted).
     const account = message.data && message.data.account;
-    if (!account) { sendResponse({ success: false, error: 'No account' }); return true; }
+    if (!areValidAccountList(account)) { sendResponse({ success: false, error: 'Invalid account or email domain' }); return true; }
     fetchWithTimeout('https://api-abusedesk.ops.titan.email/api/v1/users/status/?email=' + encodeURIComponent(account), { credentials: 'include' })
       .then(r => r.json())
       .then(json => {
@@ -308,6 +310,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 async function handleCreateJira(data, andDone) {
   try {
     const { text, html, panel, account, zdLink } = data;
+    if (!areValidAccountList(account)) return { success: false, error: 'Invalid account or email domain', status: 400 };
     const requestId = data.requestId || 'legacy';
     console.log('[Report→JIRA][' + requestId + '] creating issue for ' + account);
 

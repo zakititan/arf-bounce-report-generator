@@ -191,6 +191,8 @@ document.addEventListener('DOMContentLoaded', () => {
 // Panel that initiated the latest extension request — result messages are
 // anonymous, so replies are routed by remembering the initiator.
 let _lastJiraPanel = null;
+let _lastJiraRequestId = null;
+const _reportContextIds = {};
 let _lastUnsuspendPanel = null;
 let _activeUnsuspendRequestId = null;
 // Assigned during init; lets top-level code (e.g. Clear) cancel an in-flight
@@ -257,6 +259,7 @@ window.addEventListener('message', (e) => {
   document.querySelectorAll('[data-action="' + action + '"][data-original-html]').forEach(resetBtn);
 
   if (d.type === 'REPORT_GENERATOR_JIRA_RESULT') {
+    if (d.requestId && d.requestId !== _lastJiraRequestId) return;
     const prefix = _lastJiraPanel;
     if (d.success && d.issueKey && d.url) {
       const imgExtra = d.imagesTotal > 0 && d.imagesUploaded < d.imagesTotal
@@ -1284,6 +1287,7 @@ function validateBounce() {
 
 // ── ARF Generate / Clear ──────────────────────────────────────────────
 function renderReportOutput(prefix, lines, fullCopyText, inlineScreenshots) {
+  _reportContextIds[prefix] = createUnsuspendRequestId();
   const outputSection = document.getElementById(prefix + '-output-section');
   const outputArea = outputSection.querySelector('.output-area');
   const copyBtn = outputArea.querySelector('.copy-btn-wrap');
@@ -1774,6 +1778,7 @@ function createTaeJira(prefix, btn) {
   const region = (state[prefix] || state.arf).region === 'eu' ? 'eu-central-1' : 'us-east-1';
   setBtnPending(btn, 'Creating…');
   _lastJiraPanel = prefix;
+  _lastJiraRequestId = _reportContextIds[prefix] || createUnsuspendRequestId();
   window.postMessage({
     type: 'REPORT_GENERATOR_JIRA',
     text: reportText,
@@ -1783,6 +1788,8 @@ function createTaeJira(prefix, btn) {
     zdLink: zdLink,
     region: region,
     timestamp: Date.now(),
+    requestId: _lastJiraRequestId,
+    reportId: _reportContextIds[prefix],
   }, '*');
 
   showToast('Creating JIRA ticket...', 'info');
@@ -1817,6 +1824,7 @@ function unsuspendAccount(prefix, btn) {
   const zdLink = document.getElementById(prefix + '-zd-link')?.value.trim() || '';
   const region = (state[prefix] || state.arf).region === 'eu' ? 'eu-central-1' : 'us-east-1';
   const requestId = createUnsuspendRequestId();
+  const reportId = _reportContextIds[prefix] || createUnsuspendRequestId();
 
   let reason;
   if (prefix === 'ipspike') {
@@ -1844,6 +1852,7 @@ function unsuspendAccount(prefix, btn) {
     panel: prefix,
     zdLink: zdLink,
     requestId: requestId,
+    reportId: reportId,
   }, '*');
 
   const msg = accounts.length > 1
@@ -1876,6 +1885,7 @@ function retryUnsuspend(prefix) {
 
   _lastUnsuspendPanel = prefix;
   const requestId = createUnsuspendRequestId();
+  const reportId = _reportContextIds[prefix] || createUnsuspendRequestId();
   window.postMessage({
     type: 'REPORT_GENERATOR_UNSUSPEND_NO_JIRA',
     accounts: accounts,
@@ -1887,6 +1897,7 @@ function retryUnsuspend(prefix) {
     panel: prefix,
     zdLink: zdLink,
     requestId: requestId,
+    reportId: reportId,
   }, '*');
 
   beginUnsuspendTracking(accounts.length, prefix, accounts, requestId);
@@ -1910,6 +1921,8 @@ function logToSheet(prefix) {
                      document.getElementById(prefix + '-output-text')?.textContent || '';
   const type = prefix === 'arf' ? 'ARF' : prefix === 'smtpsuspend' ? 'SMTP' : 'BOUNCE';
   const date = new Date().toLocaleDateString('en-US');
+  const reportId = _reportContextIds[prefix] || createUnsuspendRequestId();
+  const requestId = 'sheet-' + reportId;
 
   const cleanedReason = reportText
     .split('\n')
@@ -1950,6 +1963,9 @@ function logToSheet(prefix) {
     reason: cleanedReason,
     sheetId: sheetConfig.sheetId,
     appsScriptUrl: sheetConfig.appsScriptUrl,
+    panel: prefix,
+    reportId,
+    requestId,
   }, '*');
 
   showToast('Logging to Sheet…');
@@ -1963,6 +1979,7 @@ function checkPasswordChange(prefix) {
   }
 
   const btn = document.querySelector('[data-action="check-password"][data-panel="' + prefix + '"]');
+  const requestId = createUnsuspendRequestId();
   if (btn) {
     btn.disabled = true;
     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 0.8s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Checking…';
@@ -1973,6 +1990,7 @@ function checkPasswordChange(prefix) {
   window.postMessage({
     type: 'REPORT_GENERATOR_PARTNER_PANEL_LOOKUP',
     account: account,
+    requestId: requestId,
   }, '*');
 
   showToast('Opening Partner Panel to check password change…', 'info');
