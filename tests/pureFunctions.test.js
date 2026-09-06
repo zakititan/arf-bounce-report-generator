@@ -11,6 +11,9 @@ import {
   createUnsuspendRequestId,
   consumePendingRequest,
   createRequestContextKey,
+  svgMarkup,
+  validateAccountIdentifier,
+  parseAccountList,
 } from '../scripts/pure.js';
 import { describeReason, getCached, setCache } from '../scripts/api.js';
 import { parseAgeToDays } from '../scripts/ui.js';
@@ -270,6 +273,40 @@ describe('sanitiseAccountInput', () => {
   });
 });
 
+describe('svgMarkup', () => {
+  it('builds an escaped attribute wrapper around trusted icon content', () => {
+    assert.equal(
+      svgMarkup('<path/>', { width: '16', 'aria-hidden': 'true' }),
+      '<svg width="16" aria-hidden="true"><path/></svg>',
+    );
+  });
+});
+
+describe('account validation', () => {
+  it('accepts email and domain account identifiers', () => {
+    assert.equal(validateAccountIdentifier('user+tag@example.com'), true);
+    assert.equal(validateAccountIdentifier('sub.example.co.uk'), true);
+  });
+
+  it('rejects malformed account identifiers', () => {
+    assert.equal(validateAccountIdentifier('user@@example.com'), false);
+    assert.equal(validateAccountIdentifier('bad domain.example'), false);
+    assert.equal(validateAccountIdentifier('javascript:alert(1)'), false);
+  });
+
+  it('parses valid comma-separated account lists', () => {
+    assert.deepEqual(
+      parseAccountList('one@example.com, sub.example.com, two@example.com'),
+      ['one@example.com', 'sub.example.com', 'two@example.com'],
+    );
+  });
+
+  it('rejects malformed comma-separated account lists', () => {
+    assert.equal(parseAccountList('one@example.com, not an account'), null);
+    assert.equal(parseAccountList('one@example.com,,two@example.com'), null);
+  });
+});
+
 describe('concurrent request state', () => {
   it('consumes only the matching request and ignores completed or unknown responses', () => {
     const pending = new Map([
@@ -366,6 +403,11 @@ describe('buildUnsuspendAccounts', () => {
       buildUnsuspendAccounts('main@example.com', 'arf', 'Yes', 'other@example.com'),
       ['main@example.com'],
     );
+  });
+
+  it('rejects malformed main or comma-separated accounts', () => {
+    assert.equal(buildUnsuspendAccounts('not an account', 'bounce', 'No', ''), null);
+    assert.equal(buildUnsuspendAccounts('main@example.com', 'bounce', 'Yes', 'bad account'), null);
   });
 });
 

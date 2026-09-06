@@ -1,4 +1,5 @@
 // Edge Runtime — uses Web Crypto API (available in Vercel Edge)
+import { getSafeRedirect } from './scripts/auth.js';
 const COOKIE_NAME = '__Host-auth_session';
 const PUBLIC_PATHS = ['/login', '/api/login'];
 
@@ -67,7 +68,7 @@ export default async function middleware(request) {
   if (token && await verifyToken(token)) return;
 
   const loginUrl = new URL('/login', request.url);
-  loginUrl.searchParams.set('redirect', pathname);
+  loginUrl.searchParams.set('redirect', getSafeRedirect(pathname + url.search) || '/');
   return Response.redirect(loginUrl, 302);
 }
 

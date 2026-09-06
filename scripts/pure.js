@@ -7,6 +7,13 @@ export function escapeHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
 }
 
+export function svgMarkup(inner, attributes = {}) {
+  const attrs = Object.entries(attributes)
+    .map(([name, value]) => ` ${name}="${String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]))}"`)
+    .join('');
+  return `<svg${attrs}>${inner}</svg>`;
+}
+
 export function sanitiseDomainInput(value) {
   let v = value.trim();
   v = v.replace(/^https?:\/\//i, '');
@@ -30,6 +37,27 @@ export function sanitiseAccountInput(value) {
   v = v.split('/')[0].split('?')[0].split('#')[0].split(':')[0]; // 4. strip paths/query/fragment/port
   v = v.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ''); // 5. strip control chars
   return v;
+}
+
+const DOMAIN_IDENTIFIER_RE = /^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,}$/;
+const EMAIL_LOCAL_RE = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+$/;
+
+export function validateAccountIdentifier(value) {
+  if (typeof value !== 'string') return false;
+  const account = value.trim();
+  if (!account || account.length > MAX_ACCOUNT_LEN || /[\s,]/.test(account)) return false;
+  const atIndex = account.indexOf('@');
+  if (atIndex === -1) return DOMAIN_IDENTIFIER_RE.test(account);
+  if (atIndex !== account.lastIndexOf('@')) return false;
+  const local = account.slice(0, atIndex);
+  const domain = account.slice(atIndex + 1);
+  return local.length <= 64 && EMAIL_LOCAL_RE.test(local) && DOMAIN_IDENTIFIER_RE.test(domain);
+}
+
+export function parseAccountList(value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const accounts = value.split(',').map(account => account.trim());
+  return accounts.every(validateAccountIdentifier) ? accounts : null;
 }
 
 export function parseCsvRow(row) {

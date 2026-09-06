@@ -15,7 +15,7 @@
 
 import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx,
          fetchLaravelCheck, fetchXmlrpcCheck, fetchWordPressCheck } from './api.js';
-import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, matchesRequest, consumePendingRequest, createUnsuspendRequestId, createRequestId, createRequestContextKey, isAllowedWebAppOrigin, validateExtensionResult, validateUnsuspendOutcome } from './pure.js';
+import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, matchesRequest, consumePendingRequest, createUnsuspendRequestId, createRequestId, createRequestContextKey, isAllowedWebAppOrigin, validateExtensionResult, validateUnsuspendOutcome, validateAccountIdentifier } from './pure.js';
 import { buildUnsuspendAccounts, cleanSheetReason, getSheetReportType } from './report-actions.js';
 import {
   showToast, initThemeToggle,
@@ -1774,6 +1774,10 @@ function createTaeJira(prefix, btn) {
   copyOutputWithFeedback(prefix + '-output-text');
 
   const account = document.getElementById(prefix + '-account')?.value.trim() || '';
+  if (!validateAccountIdentifier(account)) {
+    showToast('Please enter a valid email address or domain.', 'warning');
+    return;
+  }
   const zdLink = document.getElementById(prefix + '-zd-link')?.value.trim() || '';
   const typeLabel = prefix === 'arf' ? 'ARF' : prefix === 'smtpsuspend' ? 'SMTP Compromised' : 'Bounce';
   const summary = encodeURIComponent(typeLabel + ' unsuspension request: ' + account);
@@ -1816,8 +1820,8 @@ function unsuspendAccount(prefix, btn) {
   }
 
   const account = document.getElementById(prefix + '-account')?.value.trim() || '';
-  if (!account) {
-    showToast('Please enter an account name.', 'warning');
+  if (!validateAccountIdentifier(account)) {
+    showToast('Please enter a valid email address or domain.', 'warning');
     return;
   }
 
@@ -1825,6 +1829,10 @@ function unsuspendAccount(prefix, btn) {
   const otherBlocked = prefix === 'bounce' ? document.getElementById('bounce-other-blocked')?.value : undefined;
   const blockedDetail = prefix === 'bounce' ? document.getElementById('bounce-other-blocked-detail')?.value : undefined;
   const accounts = buildUnsuspendAccounts(account, prefix, otherBlocked, blockedDetail);
+  if (!accounts) {
+    showToast('Please enter valid comma-separated email addresses or domains.', 'warning');
+    return;
+  }
 
   const zdLink = document.getElementById(prefix + '-zd-link')?.value.trim() || '';
   const region = (state[prefix] || state.arf).region === 'eu' ? 'eu-central-1' : 'us-east-1';

@@ -2,14 +2,18 @@
  * Pure data preparation for report actions.
  * Keeps sheet and unsuspension payload shaping independent from the DOM.
  */
+import { parseAccountList, validateAccountIdentifier } from './pure.js';
 
 export function buildUnsuspendAccounts(account, prefix, otherBlocked, blockedDetail) {
+  if (!validateAccountIdentifier(account)) return null;
   const accounts = [account];
   if (prefix === 'bounce' && otherBlocked === 'Yes') {
     const blockedRaw = (blockedDetail || '').trim();
     if (blockedRaw) {
-      const blocked = blockedRaw.split(',').map(value => value.trim()).filter(value => value && value !== account);
-      accounts.push(...blocked);
+      const blocked = parseAccountList(blockedRaw);
+      if (!blocked) return null;
+      const uniqueBlocked = blocked.filter(value => value !== account);
+      accounts.push(...uniqueBlocked);
     }
   }
   return accounts;
