@@ -5,6 +5,8 @@ import {
   parseCsvRow,
   sanitiseDomainInput,
   sanitiseAccountInput,
+  completeUnsuspendResults,
+  matchesUnsuspendRequest,
   shouldFinishUnsuspendTracking,
   createUnsuspendRequestId,
 } from '../scripts/pure.js';
@@ -272,6 +274,33 @@ describe('shouldFinishUnsuspendTracking', () => {
 
   it('finishes incomplete tracking at the hard deadline', () => {
     assert.equal(shouldFinishUnsuspendTracking({ resultCount: 1, expected: 2, now: 90_000, deadline: 90_000 }), true);
+  });
+});
+
+describe('completeUnsuspendResults', () => {
+  it('adds unverified results for accounts that did not report', () => {
+    assert.deepEqual(
+      completeUnsuspendResults(['one@example.com', 'two@example.com'], [
+        { account: 'one@example.com', outcome: 'confirmed' },
+      ]),
+      [
+        { account: 'one@example.com', outcome: 'confirmed' },
+        { account: 'two@example.com', outcome: 'unverified' },
+      ],
+    );
+  });
+});
+
+describe('matchesUnsuspendRequest', () => {
+  it('requires a request ID when an active request has one', () => {
+    assert.equal(matchesUnsuspendRequest('current', undefined), false);
+    assert.equal(matchesUnsuspendRequest('current', 'old'), false);
+    assert.equal(matchesUnsuspendRequest('current', 'current'), true);
+  });
+
+  it('accepts legacy responses when no correlated request is active', () => {
+    assert.equal(matchesUnsuspendRequest(null, undefined), true);
+    assert.equal(matchesUnsuspendRequest(null, 'legacy-compatible'), true);
   });
 });
 

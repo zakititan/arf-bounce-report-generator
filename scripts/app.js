@@ -15,7 +15,7 @@
 
 import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx,
          fetchLaravelCheck, fetchXmlrpcCheck, fetchWordPressCheck } from './api.js';
-import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, createUnsuspendRequestId } from './pure.js';
+import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, createUnsuspendRequestId } from './pure.js';
 import {
   showToast, initThemeToggle,
   clearFieldErrors, showValidationErrors,
@@ -271,7 +271,7 @@ window.addEventListener('message', (e) => {
   }
 
   // REPORT_GENERATOR_UNSUSPEND_RESULT
-  if (d.requestId && _activeUnsuspendRequestId && d.requestId !== _activeUnsuspendRequestId) return;
+  if (!matchesUnsuspendRequest(_activeUnsuspendRequestId, d.requestId)) return;
   console.log('[Report→Unsuspend][' + (d.requestId || 'legacy') + '] JIRA result received');
   const prefix = _lastUnsuspendPanel;
   const status = d.unsuspendStatus;
@@ -299,9 +299,9 @@ function finishUnsuspendTracking() {
   _activeUnsuspendRequestId = null;
   if (!session) return;
   clearTimeout(session.timer);
-  const r = session.results;
-  // Legacy extensions never send verdicts — hide the pending chips and
-  // stay quiet instead of nagging.
+  const r = completeUnsuspendResults(session.accounts, session.results);
+  // Legacy extensions never send verdicts; current runs mark those accounts
+  // unverified so they remain visible and retryable.
   if (r.length === 0) {
     hideUnsuspendSection(session.panel);
     return;
@@ -355,7 +355,7 @@ _cancelUnsuspendTracking = function (prefix) {
 window.addEventListener('message', (e) => {
   const outcome = e.data && e.data.type === 'REPORT_GENERATOR_UNSUSPEND_OUTCOME' ? e.data.outcome : null;
   if (!outcome || !_unsuspendConfirm) return;
-  if (outcome.requestId && outcome.requestId !== _unsuspendConfirm.requestId) return;
+  if (!matchesUnsuspendRequest(_unsuspendConfirm.requestId, outcome.requestId)) return;
   if (_unsuspendConfirm.results.some(x => x.account && x.account === outcome.account)) return; // dedupe
   _unsuspendConfirm.results.push(outcome);
   console.log('[Report→Unsuspend][' + _unsuspendConfirm.requestId + '] outcome for ' + (outcome.account || 'unknown') + ': ' + outcome.outcome);

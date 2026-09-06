@@ -1,15 +1,11 @@
 import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse } from './rg-lib.js';
+import { fetchWithTimeout } from './timeout.js';
 
 const EXPIRY_MS = 10 * 60 * 1000;
-const REQUEST_TIMEOUT_MS = 30 * 1000;
 let _partnerPanelPending = null;
 const _openAdTabIds = new Set();
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-function fetchWithTimeout(url, options = {}) {
-  return fetch(url, { ...options, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
-}
 
 function waitForTabLoad(tabId, maxMs) {
   return new Promise(resolve => {

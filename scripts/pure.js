@@ -51,6 +51,19 @@ export function shouldFinishUnsuspendTracking({ resultCount, expected, now, dead
   return resultCount >= expected || now >= deadline;
 }
 
+export function completeUnsuspendResults(accounts, results) {
+  const reported = new Set(results.map(result => result.account));
+  return results.concat(
+    accounts
+      .filter(account => !reported.has(account))
+      .map(account => ({ account, outcome: 'unverified' })),
+  );
+}
+
+export function matchesUnsuspendRequest(activeRequestId, responseRequestId) {
+  return !activeRequestId || responseRequestId === activeRequestId;
+}
+
 export function createUnsuspendRequestId(now = Date.now(), entropy = Math.random()) {
   return 'unsuspend-' + now.toString(36) + '-' + Math.floor(entropy * 1e9).toString(36);
 }
