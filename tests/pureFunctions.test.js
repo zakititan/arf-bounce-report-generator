@@ -14,6 +14,11 @@ import {
 } from '../scripts/pure.js';
 import { describeReason, getCached, setCache } from '../scripts/api.js';
 import { parseAgeToDays } from '../scripts/ui.js';
+import {
+  buildUnsuspendAccounts,
+  cleanSheetReason,
+  getSheetReportType,
+} from '../scripts/report-actions.js';
 
 // ── escapeHtml ────────────────────────────────────────────────────────
 describe('escapeHtml', () => {
@@ -345,5 +350,38 @@ describe('matchesRequest', () => {
 describe('createUnsuspendRequestId', () => {
   it('creates a stable, traceable ID from supplied time and entropy', () => {
     assert.equal(createUnsuspendRequestId(1234, 0.5), 'unsuspend-ya-89oqgw');
+  });
+});
+
+describe('buildUnsuspendAccounts', () => {
+  it('includes blocked accounts while filtering the main account', () => {
+    assert.deepEqual(
+      buildUnsuspendAccounts('main@example.com', 'bounce', 'Yes', 'other@example.com, main@example.com, third@example.com'),
+      ['main@example.com', 'other@example.com', 'third@example.com'],
+    );
+  });
+
+  it('does not add blocked accounts for non-bounce panels', () => {
+    assert.deepEqual(
+      buildUnsuspendAccounts('main@example.com', 'arf', 'Yes', 'other@example.com'),
+      ['main@example.com'],
+    );
+  });
+});
+
+describe('getSheetReportType', () => {
+  it('maps panel prefixes to sheet report types', () => {
+    assert.equal(getSheetReportType('arf'), 'ARF');
+    assert.equal(getSheetReportType('smtpsuspend'), 'SMTP');
+    assert.equal(getSheetReportType('bounce'), 'BOUNCE');
+  });
+});
+
+describe('cleanSheetReason', () => {
+  it('removes report markers and screenshot labels while preserving report content', () => {
+    assert.equal(
+      cleanSheetReason('#ARF\nReason line\n── Screenshots ──\n1. proof.PNG\n#Bounce'),
+      'Reason line',
+    );
   });
 });

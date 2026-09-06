@@ -16,6 +16,7 @@
 import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx,
          fetchLaravelCheck, fetchXmlrpcCheck, fetchWordPressCheck } from './api.js';
 import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, matchesRequest, consumePendingRequest, createUnsuspendRequestId, createRequestId, createRequestContextKey, isAllowedWebAppOrigin, validateExtensionResult, validateUnsuspendOutcome } from './pure.js';
+import { buildUnsuspendAccounts, cleanSheetReason, getSheetReportType } from './report-actions.js';
 import {
   showToast, initThemeToggle,
   clearFieldErrors, showValidationErrors,
@@ -1821,17 +1822,9 @@ function unsuspendAccount(prefix, btn) {
   }
 
   // Build accounts array: main account + blocked accounts (if any)
-  const accounts = [account];
-  if (prefix === 'bounce') {
-    const otherBlocked = document.getElementById('bounce-other-blocked')?.value;
-    if (otherBlocked === 'Yes') {
-      const blockedRaw = document.getElementById('bounce-other-blocked-detail')?.value.trim() || '';
-      if (blockedRaw) {
-        const blocked = blockedRaw.split(',').map(s => s.trim()).filter(s => s && s !== account);
-        accounts.push(...blocked);
-      }
-    }
-  }
+  const otherBlocked = prefix === 'bounce' ? document.getElementById('bounce-other-blocked')?.value : undefined;
+  const blockedDetail = prefix === 'bounce' ? document.getElementById('bounce-other-blocked-detail')?.value : undefined;
+  const accounts = buildUnsuspendAccounts(account, prefix, otherBlocked, blockedDetail);
 
   const zdLink = document.getElementById(prefix + '-zd-link')?.value.trim() || '';
   const region = (state[prefix] || state.arf).region === 'eu' ? 'eu-central-1' : 'us-east-1';
@@ -1931,19 +1924,13 @@ function logToSheet(prefix) {
   const outputArea = outputSection.querySelector('.output-area');
   const reportText = (outputArea?.dataset.copyText) ||
                      document.getElementById(prefix + '-output-text')?.textContent || '';
-  const type = prefix === 'arf' ? 'ARF' : prefix === 'smtpsuspend' ? 'SMTP' : 'BOUNCE';
+  const type = getSheetReportType(prefix);
   const date = new Date().toLocaleDateString('en-US');
   const reportId = _reportContextIds[prefix] || createUnsuspendRequestId();
   const requestId = createRequestId('sheet');
   const jiraRequestId = _jiraRequestByReport[createRequestContextKey(reportId, prefix, '')] || '';
 
-  const cleanedReason = reportText
-    .split('\n')
-    .filter(l => !l.startsWith('#ARF') && !l.startsWith('#Bounce') && !l.startsWith('#SMTP Suspension'))
-    .filter(l => !/^── (Screenshots|Assurance Screenshots) ──$/.test(l.trim()))
-    .filter(l => !/^\d+\.\s+\S+\.(png|jpg|jpeg|gif|webp)$/i.test(l.trim()))
-    .join('\n')
-    .trim();
+  const cleanedReason = cleanSheetReason(reportText);
 
   const listener = (e) => {
     if (e.source !== window || !isAllowedWebAppOrigin(e.origin) ||
