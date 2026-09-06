@@ -75,6 +75,10 @@
     return typeof value === 'string' && /^https:\/\/jira\.directi\.com\/browse\/[A-Z][A-Z0-9]+-\d+$/.test(value);
   }
 
+  function selectJiraUrl(displayed, stored) {
+    return safeJiraUrl(displayed) ? displayed : (safeJiraUrl(stored) ? stored : '');
+  }
+
   function safeSheetsUrl(value) {
     return typeof value === 'string' && /^https:\/\/docs\.google\.com\/spreadsheets\/d\/[A-Za-z0-9_-]+\/edit(?:$|[?#])/.test(value);
   }
@@ -190,7 +194,8 @@
 
       var jiraKey = jiraStorageKey(logData.reportId, logData.panel, logData.jiraRequestId);
       chrome.storage.local.get(jiraKey, function(result) {
-        var jiraLink = scopedJiraUrl({ [requestContextKey(logData.reportId, logData.panel, logData.jiraRequestId)]: result[jiraKey] }, logData.reportId, logData.panel, logData.jiraRequestId);
+        var storedJiraLink = scopedJiraUrl({ [requestContextKey(logData.reportId, logData.panel, logData.jiraRequestId)]: result[jiraKey] }, logData.reportId, logData.panel, logData.jiraRequestId);
+        var jiraLink = selectJiraUrl(logData.jiraLink, storedJiraLink);
 
         chrome.runtime.sendMessage({
           action: 'log-to-sheet',

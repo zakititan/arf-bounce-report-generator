@@ -46,6 +46,11 @@ export function isSafeJiraUrl(value) {
   return isHttpsUrl(value, 'jira.directi.com', /^\/browse\/[A-Z][A-Z0-9]+-\d+$/);
 }
 
+export function selectJiraUrl(displayed, stored) {
+  if (isSafeJiraUrl(displayed)) return displayed;
+  return isSafeJiraUrl(stored) ? stored : '';
+}
+
 export function isSafeGoogleSheetsUrl(value) {
   return isHttpsUrl(value, 'docs.google.com', /^\/spreadsheets\/d\/[A-Za-z0-9_-]+\/edit$/);
 }

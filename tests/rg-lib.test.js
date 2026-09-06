@@ -12,6 +12,7 @@ import {
   isSuccessfulResponse,
   createRequestContextKey,
   getScopedJiraUrl,
+  selectJiraUrl,
   createUnsuspendReasonKey,
   createUnsuspendVerifyKey,
   isSafeJiraUrl,
@@ -154,6 +155,13 @@ describe('web app message security helpers', () => {
     assert.equal(getScopedJiraUrl(stored, 'report_2', 'arf', 'jira_2'), '');
     assert.equal(getScopedJiraUrl(stored, 'report_2', 'bounce', 'jira_1'), '');
     assert.equal(getScopedJiraUrl({ lastJiraUrl: stored }, 'report_2', 'bounce', 'jira_2'), '');
+  });
+
+  it('prefers the current panel JIRA link and falls back to scoped storage', () => {
+    const stored = 'https://jira.directi.com/browse/NEW-3';
+    assert.equal(selectJiraUrl('https://jira.directi.com/browse/NEW-4', stored), 'https://jira.directi.com/browse/NEW-4');
+    assert.equal(selectJiraUrl('', stored), stored);
+    assert.equal(selectJiraUrl('javascript:alert(1)', stored), stored);
   });
 });
 

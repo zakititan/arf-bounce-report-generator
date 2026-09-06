@@ -1972,6 +1972,7 @@ function logToSheet(prefix) {
     domainEmail: account,
     reportType: type,
     reason: cleanedReason,
+    jiraLink: document.getElementById(prefix + '-jira-link')?.href || '',
     sheetId: sheetConfig.sheetId,
     appsScriptUrl: sheetConfig.appsScriptUrl,
     panel: prefix,
