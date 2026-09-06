@@ -48,10 +48,18 @@
     return false;
   }
 
-  function scopedJiraUrl(stored, reportId, panel) {
-    if (!stored || typeof stored !== 'object' || stored.reportId !== reportId || stored.panel !== panel ||
-        typeof stored.url !== 'string' || !/^https:\/\/jira\.directi\.com\/browse\/[A-Z][A-Z0-9]+-\d+$/.test(stored.url)) return '';
-    return stored.url;
+  function requestContextKey(reportId, panel, requestId) {
+    return JSON.stringify([reportId || '', panel || '', requestId || '']);
+  }
+
+  function scopedJiraUrl(stored, reportId, panel, requestId) {
+    var entry = stored && stored[requestContextKey(reportId, panel, requestId)];
+    return entry && typeof entry.url === 'string' &&
+      /^https:\/\/jira\.directi\.com\/browse\/[A-Z][A-Z0-9]+-\d+$/.test(entry.url) ? entry.url : '';
+  }
+
+  function jiraStorageKey(reportId, panel, requestId) {
+    return 'jiraUrl:' + requestContextKey(reportId, panel, requestId);
   }
 
 
@@ -88,7 +96,7 @@
         function (response) {
           if (chrome.runtime.lastError) {
             window.postMessage({ type: 'REPORT_GENERATOR_JIRA_RESULT', requestId: data.requestId, success: false, error: chrome.runtime.lastError.message }, '*');
-            fallbackToStorage(text, html, panel, account);
+            fallbackToStorage(text, html, panel, account, data.reportId, data.requestId);
             return;
           }
 
@@ -96,10 +104,10 @@
             var jiraUrl = response.issueUrl;
             window.postMessage({ type: 'REPORT_GENERATOR_JIRA_RESULT', requestId: data.requestId, success: true, issueKey: response.issueKey, url: jiraUrl, imagesUploaded: response.imagesUploaded, imagesTotal: response.imagesTotal }, '*');
 
-            chrome.storage.local.set({ lastJiraUrl: { url: jiraUrl, reportId: data.reportId, panel: panel } });
+            chrome.storage.local.set({ [jiraStorageKey(data.reportId, panel, data.requestId)]: { url: jiraUrl } });
           } else {
             window.postMessage({ type: 'REPORT_GENERATOR_JIRA_RESULT', requestId: data.requestId, success: false }, '*');
-            fallbackToStorage(text, html, panel, account);
+            fallbackToStorage(text, html, panel, account, data.reportId, data.requestId);
           }
         }
       );
@@ -128,7 +136,7 @@
           }
 
           var jiraUrl = response.issueUrl;
-          chrome.storage.local.set({ lastJiraUrl: { url: jiraUrl, reportId: unsuspendData.reportId, panel: unsuspendData.panel } });
+          chrome.storage.local.set({ [jiraStorageKey(unsuspendData.reportId, unsuspendData.panel, unsuspendData.requestId)]: { url: jiraUrl } });
           window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', requestId: unsuspendData.requestId, success: true, issueKey: response.issueKey || null, url: jiraUrl || null, unsuspendStatus: response.unsuspendStatus || null }, '*');
         }
       );
@@ -159,8 +167,9 @@
     if (event.data.type === 'REPORT_GENERATOR_LOG_SHEET') {
       var logData = event.data;
 
-      chrome.storage.local.get('lastJiraUrl', function(result) {
-        var jiraLink = scopedJiraUrl(result.lastJiraUrl, logData.reportId, logData.panel);
+      var jiraKey = jiraStorageKey(logData.reportId, logData.panel, logData.jiraRequestId);
+      chrome.storage.local.get(jiraKey, function(result) {
+        var jiraLink = scopedJiraUrl({ [requestContextKey(logData.reportId, logData.panel, logData.jiraRequestId)]: result[jiraKey] }, logData.reportId, logData.panel, logData.jiraRequestId);
 
         chrome.runtime.sendMessage({
           action: 'log-to-sheet',
@@ -209,10 +218,10 @@
     }
   });
 
-  function fallbackToStorage(text, html, panel, account) {
-    var reportData = { text: text, html: html, panel: panel, account: account, timestamp: Date.now() };
+  function fallbackToStorage(text, html, panel, account, reportId, requestId) {
+    var reportData = { text: text, html: html, panel: panel, account: account, reportId: reportId, requestId: requestId, timestamp: Date.now() };
 
-    chrome.storage.local.set({ reportData: reportData }, function () {
+    chrome.storage.local.set({ ['reportData:' + requestContextKey(reportId, panel, requestId)]: reportData }, function () {
       if (chrome.runtime.lastError) {
         console.warn('[Report→JIRA] Storage write failed:', chrome.runtime.lastError.message);
       }
@@ -224,7 +233,8 @@
     var desc = encodeURIComponent((text || '').substring(0, 2000));
     var jiraUrl =
       'https://jira.directi.com/secure/CreateIssueDetails!init.jspa?pid=12900&issuetype=10902&priority=10000&labels=' +
-      label + '&summary=' + summary + '&description=' + desc;
+      label + '&summary=' + summary + '&description=' + desc + '&rgReportId=' + encodeURIComponent(reportId || '') +
+      '&rgRequestId=' + encodeURIComponent(requestId || '') + '&rgPanel=' + encodeURIComponent(panel || '');
     window.open(jiraUrl, '_blank');
   }
 

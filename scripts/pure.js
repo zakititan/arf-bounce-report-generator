@@ -110,6 +110,17 @@ export function matchesRequest(activeRequestId, responseRequestId) {
   return !activeRequestId || responseRequestId === activeRequestId;
 }
 
+export function consumePendingRequest(pending, requestId) {
+  if (!requestId || !pending.has(requestId)) return null;
+  const request = pending.get(requestId);
+  pending.delete(requestId);
+  return request;
+}
+
+export function createRequestContextKey(reportId, panel, requestId) {
+  return JSON.stringify([reportId || '', panel || '', requestId || '']);
+}
+
 export function createUnsuspendRequestId(now = Date.now(), entropy = Math.random()) {
   return 'unsuspend-' + now.toString(36) + '-' + Math.floor(entropy * 1e9).toString(36);
 }

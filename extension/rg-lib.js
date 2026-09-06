@@ -88,11 +88,15 @@ export function createRequestId(prefix, now = Date.now(), entropy = Math.random(
   return prefix + '-' + now.toString(36) + '-' + Math.floor(entropy * 1e9).toString(36) + '-' + requestSequence.toString(36);
 }
 
-export function getScopedJiraUrl(stored, reportId, panel) {
-  if (!stored || typeof stored !== 'object' ||
-      typeof stored.url !== 'string' || !/^https:\/\/jira\.directi\.com\/browse\/[A-Z][A-Z0-9]+-\d+$/.test(stored.url) ||
-      stored.reportId !== reportId || stored.panel !== panel) return '';
-  return stored.url;
+export function createRequestContextKey(reportId, panel, requestId) {
+  return JSON.stringify([reportId || '', panel || '', requestId || '']);
+}
+
+export function getScopedJiraUrl(stored, reportId, panel, requestId) {
+  if (!stored || typeof stored !== 'object') return '';
+  const entry = stored[createRequestContextKey(reportId, panel, requestId)];
+  return entry && typeof entry.url === 'string' &&
+    /^https:\/\/jira\.directi\.com\/browse\/[A-Z][A-Z0-9]+-\d+$/.test(entry.url) ? entry.url : '';
 }
 
 export function analyzeHistory(events) {

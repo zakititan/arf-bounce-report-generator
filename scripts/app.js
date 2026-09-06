@@ -15,7 +15,7 @@
 
 import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx,
          fetchLaravelCheck, fetchXmlrpcCheck, fetchWordPressCheck } from './api.js';
-import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, matchesRequest, createUnsuspendRequestId, createRequestId, isAllowedWebAppOrigin, validateExtensionResult, validateUnsuspendOutcome } from './pure.js';
+import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, matchesRequest, consumePendingRequest, createUnsuspendRequestId, createRequestId, createRequestContextKey, isAllowedWebAppOrigin, validateExtensionResult, validateUnsuspendOutcome } from './pure.js';
 import {
   showToast, initThemeToggle,
   clearFieldErrors, showValidationErrors,
@@ -192,10 +192,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
 });
 
-// Panel that initiated the latest extension request — result messages are
-// anonymous, so replies are routed by remembering the initiator.
-let _lastJiraPanel = null;
-let _lastJiraRequestId = null;
+// Each extension request owns its panel, report, and button state. Responses
+// can therefore arrive in any order without stealing another request's UI.
+const _pendingJiraRequests = new Map();
+const _jiraRequestByReport = {};
 const _reportContextIds = {};
 let _lastUnsuspendPanel = null;
 let _activeUnsuspendRequestId = null;
@@ -264,11 +264,12 @@ window.addEventListener('message', (e) => {
   if (!action) return;
 
   if (d.type === 'REPORT_GENERATOR_JIRA_RESULT') {
-    if (!matchesRequest(_lastJiraRequestId, d.requestId)) return;
-    _lastJiraRequestId = null;
-    document.querySelectorAll('[data-action="' + action + '"][data-original-html]').forEach(resetBtn);
-    const prefix = _lastJiraPanel;
+    const request = consumePendingRequest(_pendingJiraRequests, d.requestId);
+    if (!request) return;
+    resetBtn(request.button);
+    const prefix = request.panel;
     if (d.success && d.issueKey && d.url) {
+      _jiraRequestByReport[createRequestContextKey(request.reportId, prefix, '')] = d.requestId;
       const imgExtra = d.imagesTotal > 0 && d.imagesUploaded < d.imagesTotal
         ? ' (' + d.imagesUploaded + '/' + d.imagesTotal + ' img)' : '';
       if (prefix) setPanelJiraLink(prefix, d.issueKey, d.url, imgExtra);
@@ -1787,9 +1788,9 @@ function createTaeJira(prefix, btn) {
     .map(el => el.outerHTML).join('') : '';
   const region = (state[prefix] || state.arf).region === 'eu' ? 'eu-central-1' : 'us-east-1';
   setBtnPending(btn, 'Creating…');
-  _lastJiraPanel = prefix;
-  // Report IDs scope stored data; each submission gets a unique result ID.
-  _lastJiraRequestId = createRequestId('jira');
+  const reportId = _reportContextIds[prefix] || (_reportContextIds[prefix] = createUnsuspendRequestId());
+  const requestId = createRequestId('jira');
+  _pendingJiraRequests.set(requestId, { panel: prefix, reportId, button: btn });
   window.postMessage({
     type: 'REPORT_GENERATOR_JIRA',
     text: reportText,
@@ -1799,8 +1800,8 @@ function createTaeJira(prefix, btn) {
     zdLink: zdLink,
     region: region,
     timestamp: Date.now(),
-    requestId: _lastJiraRequestId,
-    reportId: _reportContextIds[prefix],
+    requestId,
+    reportId,
   }, '*');
 
   showToast('Creating JIRA ticket...', 'info');
@@ -1933,7 +1934,8 @@ function logToSheet(prefix) {
   const type = prefix === 'arf' ? 'ARF' : prefix === 'smtpsuspend' ? 'SMTP' : 'BOUNCE';
   const date = new Date().toLocaleDateString('en-US');
   const reportId = _reportContextIds[prefix] || createUnsuspendRequestId();
-  const requestId = 'sheet-' + reportId;
+  const requestId = createRequestId('sheet');
+  const jiraRequestId = _jiraRequestByReport[createRequestContextKey(reportId, prefix, '')] || '';
 
   const cleanedReason = reportText
     .split('\n')
@@ -1979,6 +1981,7 @@ function logToSheet(prefix) {
     appsScriptUrl: sheetConfig.appsScriptUrl,
     panel: prefix,
     reportId,
+    jiraRequestId,
     requestId,
   }, '*');
 

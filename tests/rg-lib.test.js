@@ -10,6 +10,8 @@ import {
   buildFallbackJiraUrl,
   isReasonFresh,
   isSuccessfulResponse,
+  createRequestContextKey,
+  getScopedJiraUrl,
 } from '../extension/rg-lib.js';
 
 // ── constants ─────────────────────────────────────────────────────────
@@ -108,11 +110,17 @@ describe('web app message security helpers', () => {
   });
 
   it('returns a stored JIRA URL only for the current report context', () => {
-    const current = { url: 'https://jira.directi.com/browse/NEW-1', reportId: 'report_2', panel: 'bounce' };
-    assert.equal(rgLib.getScopedJiraUrl(current, 'report_2', 'bounce'), current.url);
-    assert.equal(rgLib.getScopedJiraUrl(current, 'report_1', 'bounce'), '');
-    assert.equal(rgLib.getScopedJiraUrl(current, 'report_2', 'arf'), '');
-    assert.equal(rgLib.getScopedJiraUrl('https://jira.directi.com/browse/OLD-1', 'report_2', 'bounce'), '');
+    const key = createRequestContextKey('report_2', 'bounce', 'jira_2');
+    const stored = {
+      [key]: { url: 'https://jira.directi.com/browse/NEW-1' },
+      [createRequestContextKey('report_2', 'bounce', 'jira_3')]: { url: 'https://jira.directi.com/browse/NEW-3' },
+    };
+    assert.equal(getScopedJiraUrl(stored, 'report_2', 'bounce', 'jira_2'), stored[key].url);
+    assert.equal(getScopedJiraUrl(stored, 'report_2', 'bounce', 'jira_3'), 'https://jira.directi.com/browse/NEW-3');
+    assert.equal(getScopedJiraUrl(stored, 'report_1', 'bounce', 'jira_2'), '');
+    assert.equal(getScopedJiraUrl(stored, 'report_2', 'arf', 'jira_2'), '');
+    assert.equal(getScopedJiraUrl(stored, 'report_2', 'bounce', 'jira_1'), '');
+    assert.equal(getScopedJiraUrl({ lastJiraUrl: stored }, 'report_2', 'bounce', 'jira_2'), '');
   });
 });
 

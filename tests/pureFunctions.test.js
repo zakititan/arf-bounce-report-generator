@@ -9,6 +9,8 @@ import {
   matchesUnsuspendRequest,
   shouldFinishUnsuspendTracking,
   createUnsuspendRequestId,
+  consumePendingRequest,
+  createRequestContextKey,
 } from '../scripts/pure.js';
 import { describeReason, getCached, setCache } from '../scripts/api.js';
 import { parseAgeToDays } from '../scripts/ui.js';
@@ -260,6 +262,32 @@ describe('sanitiseAccountInput', () => {
 
   it('does not lowercase domain (unlike sanitiseDomainInput)', () => {
     assert.equal(sanitiseAccountInput('Example.COM'), 'Example.COM');
+  });
+});
+
+describe('concurrent request state', () => {
+  it('consumes only the matching request and ignores completed or unknown responses', () => {
+    const pending = new Map([
+      ['jira-one', { panel: 'arf' }],
+      ['jira-two', { panel: 'bounce' }],
+    ]);
+
+    assert.deepEqual(consumePendingRequest(pending, 'jira-two'), { panel: 'bounce' });
+    assert.deepEqual(consumePendingRequest(pending, 'jira-one'), { panel: 'arf' });
+    assert.equal(consumePendingRequest(pending, 'jira-two'), null);
+    assert.equal(consumePendingRequest(pending, 'unknown'), null);
+    assert.equal(pending.size, 0);
+  });
+
+  it('creates distinct storage keys for each report and request context', () => {
+    assert.notEqual(
+      createRequestContextKey('report-1', 'arf', 'jira-one'),
+      createRequestContextKey('report-1', 'arf', 'jira-two'),
+    );
+    assert.notEqual(
+      createRequestContextKey('report-1', 'arf', 'jira-one'),
+      createRequestContextKey('report-2', 'arf', 'jira-one'),
+    );
   });
 });
 
