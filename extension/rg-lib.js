@@ -3,9 +3,35 @@
 export const REASON_TTL_MS = 90000;
 export const JIRA_DONE_TRANSITION_ID = '71';
 
-const ACCOUNT_EMAIL_RE = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
-const ACCOUNT_DOMAIN_RE = /^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
+const ACCOUNT_EMAIL_LOCAL_RE = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+$/;
+const ACCOUNT_DOMAIN_RE = /^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z](?:[A-Za-z0-9-]{0,60}[A-Za-z0-9])$/;
 const REQUEST_ID_RE = /^[A-Za-z][A-Za-z0-9_-]{0,99}$/;
+
+export function createUnsuspendReasonKey(requestId) {
+  return 'unsuspendReason:' + (requestId || 'legacy');
+}
+
+export function createUnsuspendVerifyKey(requestId, account) {
+  return 'unsuspendVerify:' + (requestId || 'legacy') + ':' + encodeURIComponent(account || '');
+}
+
+function isHttpsUrl(value, hostname, pathPattern) {
+  if (typeof value !== 'string') return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.hostname === hostname && pathPattern.test(url.pathname);
+  } catch (_) {
+    return false;
+  }
+}
+
+export function isSafeJiraUrl(value) {
+  return isHttpsUrl(value, 'jira.directi.com', /^\/browse\/[A-Z][A-Z0-9]+-\d+$/);
+}
+
+export function isSafeGoogleSheetsUrl(value) {
+  return isHttpsUrl(value, 'docs.google.com', /^\/spreadsheets\/d\/[A-Za-z0-9_-]+\/edit$/);
+}
 
 export function isAllowedWebAppOrigin(origin) {
   if (typeof origin !== 'string') return false;
@@ -14,8 +40,13 @@ export function isAllowedWebAppOrigin(origin) {
 }
 
 export function isValidAccountIdentifier(value) {
-  return typeof value === 'string' && value.length <= 254 &&
-    (ACCOUNT_EMAIL_RE.test(value) || ACCOUNT_DOMAIN_RE.test(value));
+  if (typeof value !== 'string' || value.length > 254) return false;
+  const atIndex = value.indexOf('@');
+  if (atIndex === -1) return ACCOUNT_DOMAIN_RE.test(value);
+  return atIndex === value.lastIndexOf('@') &&
+    atIndex > 0 && atIndex <= 64 &&
+    ACCOUNT_EMAIL_LOCAL_RE.test(value.slice(0, atIndex)) &&
+    ACCOUNT_DOMAIN_RE.test(value.slice(atIndex + 1));
 }
 
 export function normalizeAccountList(value) {
@@ -63,15 +94,15 @@ export function validateExtensionResult(message) {
 
   if (message.type === 'REPORT_GENERATOR_JIRA_RESULT') {
     return (!message.error || typeof message.error === 'string') &&
-      (!message.success || (typeof message.issueKey === 'string' && typeof message.url === 'string'));
+      (!message.success || (typeof message.issueKey === 'string' && isSafeJiraUrl(message.url)));
   }
   if (message.type === 'REPORT_GENERATOR_UNSUSPEND_RESULT') {
     return (!message.issueKey || typeof message.issueKey === 'string') &&
-      (!message.url || typeof message.url === 'string') &&
+      (!message.url || isSafeJiraUrl(message.url)) &&
       (!message.error || typeof message.error === 'string');
   }
   if (message.type === 'REPORT_GENERATOR_LOG_SHEET_RESULT') {
-    return (!message.cellUrl || typeof message.cellUrl === 'string') &&
+    return (!message.cellUrl || isSafeGoogleSheetsUrl(message.cellUrl)) &&
       (!message.unverified || typeof message.unverified === 'boolean') &&
       (!message.error || typeof message.error === 'string');
   }

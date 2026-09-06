@@ -1,4 +1,4 @@
-import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList } from './rg-lib.js';
+import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList, createUnsuspendReasonKey, isSafeJiraUrl, isSafeGoogleSheetsUrl } from './rg-lib.js';
 import { fetchWithTimeout } from './timeout.js';
 
 const EXPIRY_MS = 10 * 60 * 1000;
@@ -55,7 +55,9 @@ async function openSheetAndLog(rowData) {
       let parsed = null;
       try { parsed = await response.json(); } catch (_) { parsed = null; }
       if (parsed && parsed.status === 'success') {
-        return { success: true, row: parsed.row, cellUrl: parsed.cellUrl };
+        return isSafeGoogleSheetsUrl(parsed.cellUrl)
+          ? { success: true, row: parsed.row, cellUrl: parsed.cellUrl }
+          : { success: false, error: 'Invalid Sheets cell URL' };
       }
       return { success: false, error: (parsed && parsed.message) || 'Apps Script error' };
     } catch (e) {
@@ -226,7 +228,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .then(async result => {
         if (result.success === true) {
           chrome.storage.local.set({
-            unsuspendReason: { reason: result.issueUrl, ts: Date.now() }
+            [createUnsuspendReasonKey(message.data.requestId)]: { reason: result.issueUrl, ts: Date.now() }
           });
           const accounts = normalizeAccountList(message.data.account);
           try {
@@ -331,6 +333,7 @@ async function handleCreateJira(data, andDone) {
     const issueData = await issueResponse.json();
     const issueKey = issueData.key;
     const issueUrl = `https://jira.directi.com/browse/${issueKey}`;
+    if (!isSafeJiraUrl(issueUrl)) return { success: false, error: 'Invalid JIRA result URL', status: 502 };
 
     let imagesUploaded = 0;
     const attachmentFailures = [];

@@ -15,10 +15,10 @@
 
 import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx,
          fetchLaravelCheck, fetchXmlrpcCheck, fetchWordPressCheck } from './api.js';
-import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, matchesRequest, consumePendingRequest, createUnsuspendRequestId, createRequestId, createRequestContextKey, isAllowedWebAppOrigin, validateExtensionResult, validateUnsuspendOutcome, validateAccountIdentifier } from './pure.js';
+import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, matchesRequest, consumePendingRequest, createUnsuspendRequestId, createRequestId, createRequestContextKey, isAllowedWebAppOrigin, validateExtensionResult, validateUnsuspendOutcome, validateAccountIdentifier, isSafeJiraUrl } from './pure.js';
 import { buildUnsuspendAccounts, cleanSheetReason, getSheetReportType } from './report-actions.js';
 import {
-  showToast, initThemeToggle,
+  showToast, showToastLink, initThemeToggle,
   clearFieldErrors, showValidationErrors,
   handleDragOver, handleDragLeave,
   handleCsvDragOver, handleCsvDragLeave,
@@ -219,7 +219,7 @@ function setPanelJiraLink(prefix, issueKey, url, extra) {
   const err = document.getElementById(prefix + '-jira-error');
   wrap.hidden = false;
   row.hidden = false;
-  if (issueKey && url) {
+  if (issueKey && isSafeJiraUrl(url)) {
     link.hidden = false;
     link.href = url;
     link.textContent = issueKey + (extra || '');
@@ -1950,7 +1950,7 @@ function logToSheet(prefix) {
       resetBtn(btn);
       if (e.data.success) {
         if (e.data.cellUrl) {
-          showToast('Logged to Sheet ✓ <a href="' + e.data.cellUrl + '" target="_blank" rel="noopener">View row</a>', 'success', { html: true, durationMs: 8000 });
+          showToastLink('Logged to Sheet ✓ ', 'View row', e.data.cellUrl, 'success', 8000);
         } else if (e.data.unverified) {
           showToast('Sent to Sheet (delivery unverified)', 'success');
         } else {

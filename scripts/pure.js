@@ -44,7 +44,7 @@ export function sanitiseAccountInput(value) {
   return v;
 }
 
-const DOMAIN_IDENTIFIER_RE = /^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])$/;
+const DOMAIN_IDENTIFIER_RE = /^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z](?:[A-Za-z0-9-]{0,60}[A-Za-z0-9])$/;
 const EMAIL_LOCAL_RE = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+$/;
 
 export function validateAccountIdentifier(value) {
@@ -98,19 +98,37 @@ export function validateExtensionResult(message) {
   if (typeof message.success !== 'boolean') return false;
   if (message.type === 'REPORT_GENERATOR_JIRA_RESULT') {
     return (!message.error || typeof message.error === 'string') &&
-      (!message.success || (typeof message.issueKey === 'string' && typeof message.url === 'string'));
+      (!message.success || (typeof message.issueKey === 'string' && isSafeJiraUrl(message.url)));
   }
   if (message.type === 'REPORT_GENERATOR_UNSUSPEND_RESULT') {
     return (!message.issueKey || typeof message.issueKey === 'string') &&
-      (!message.url || typeof message.url === 'string') &&
+      (!message.url || isSafeJiraUrl(message.url)) &&
       (!message.error || typeof message.error === 'string');
   }
   if (message.type === 'REPORT_GENERATOR_LOG_SHEET_RESULT') {
-    return (!message.cellUrl || typeof message.cellUrl === 'string') &&
+    return (!message.cellUrl || isSafeGoogleSheetsUrl(message.cellUrl)) &&
       (!message.unverified || typeof message.unverified === 'boolean') &&
       (!message.error || typeof message.error === 'string');
   }
   return false;
+}
+
+function isHttpsUrl(value, hostname, pathPattern) {
+  if (typeof value !== 'string') return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.hostname === hostname && pathPattern.test(url.pathname);
+  } catch (_) {
+    return false;
+  }
+}
+
+export function isSafeJiraUrl(value) {
+  return isHttpsUrl(value, 'jira.directi.com', /^\/browse\/[A-Z][A-Z0-9]+-\d+$/);
+}
+
+export function isSafeGoogleSheetsUrl(value) {
+  return isHttpsUrl(value, 'docs.google.com', /^\/spreadsheets\/d\/[A-Za-z0-9_-]+\/edit$/);
 }
 
 export function validateUnsuspendOutcome(outcome) {

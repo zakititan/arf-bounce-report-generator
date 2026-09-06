@@ -12,6 +12,11 @@ import {
   isSuccessfulResponse,
   createRequestContextKey,
   getScopedJiraUrl,
+  createUnsuspendReasonKey,
+  createUnsuspendVerifyKey,
+  isSafeJiraUrl,
+  isSafeGoogleSheetsUrl,
+  isValidAccountIdentifier,
 } from '../extension/rg-lib.js';
 
 // ── constants ─────────────────────────────────────────────────────────
@@ -37,6 +42,33 @@ describe('isSuccessfulResponse', () => {
 });
 
 describe('web app message security helpers', () => {
+  it('uses distinct request-scoped keys for unsuspension state', () => {
+    assert.notEqual(createUnsuspendReasonKey('run-1'), createUnsuspendReasonKey('run-2'));
+    assert.notEqual(createUnsuspendVerifyKey('run-1', 'a@example.com'), createUnsuspendVerifyKey('run-2', 'a@example.com'));
+    assert.notEqual(createUnsuspendVerifyKey('run-1', 'a@example.com'), createUnsuspendVerifyKey('run-1', 'b@example.com'));
+  });
+
+  it('accepts only expected JIRA and Google Sheets HTTPS result URLs', () => {
+    assert.equal(isSafeJiraUrl('https://jira.directi.com/browse/NEW-1'), true);
+    assert.equal(isSafeGoogleSheetsUrl('https://docs.google.com/spreadsheets/d/abc123/edit#gid=1&range=A1'), true);
+    for (const url of [
+      'javascript:alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'https://evil.example/browse/NEW-1',
+      'http://jira.directi.com/browse/NEW-1',
+      'https://docs.google.com/document/d/abc123',
+    ]) {
+      assert.equal(isSafeJiraUrl(url) || isSafeGoogleSheetsUrl(url), false, url);
+    }
+  });
+
+  it('rejects one-character TLDs but accepts valid punycode accounts', () => {
+    assert.equal(isValidAccountIdentifier('example.x'), false);
+    assert.equal(isValidAccountIdentifier('user@example.x'), false);
+    assert.equal(isValidAccountIdentifier('example.xn--p1ai'), true);
+    assert.equal(isValidAccountIdentifier('user@example.xn--p1ai'), true);
+  });
+
   it('accepts the production, Vercel, and localhost application origins only', () => {
     assert.equal(rgLib.isAllowedWebAppOrigin('https://arf-bounce-report-generator.vercel.app'), true);
     assert.equal(rgLib.isAllowedWebAppOrigin('https://preview-123.vercel.app'), false);

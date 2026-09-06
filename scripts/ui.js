@@ -32,6 +32,28 @@ export function showToast(msg, type, { html = false, durationMs = 2500 } = {}) {
   _toastTimer = setTimeout(() => t.classList.remove('show'), durationMs);
 }
 
+export function showToastLink(message, linkText, url, type, durationMs = 2500) {
+  const t = document.getElementById('toast');
+  const type_ = type || 'info';
+  const icSpan = document.createElement('span');
+  icSpan.className = 'toast-ic';
+  icSpan.setAttribute('aria-hidden', 'true');
+  icSpan.innerHTML = svgMarkup(ICONS[type_] || ICONS.info, { width: 15, height: 15, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+  const wrap = document.createElement('span');
+  wrap.append(document.createTextNode(message));
+  const link = document.createElement('a');
+  link.href = url;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.textContent = linkText;
+  wrap.append(link);
+  t.replaceChildren(icSpan, wrap);
+  t.setAttribute('data-type', type_);
+  t.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => t.classList.remove('show'), durationMs);
+}
+
 // ── Theme toggle ──────────────────────────────────────────────────────
 export function initThemeToggle() {
   const btn = document.querySelector('[data-theme-toggle]');

@@ -14,6 +14,7 @@ import {
   svgMarkup,
   validateAccountIdentifier,
   parseAccountList,
+  validateExtensionResult,
 } from '../scripts/pure.js';
 import { describeReason, getCached, setCache } from '../scripts/api.js';
 import { parseAgeToDays } from '../scripts/ui.js';
@@ -273,6 +274,30 @@ describe('sanitiseAccountInput', () => {
   });
 });
 
+describe('validateExtensionResult URL security', () => {
+  it('rejects unsafe JIRA and Sheets URLs, including HTML payloads', () => {
+    assert.equal(validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_RESULT', requestId: 'jira_1', success: true,
+      issueKey: 'NEW-1', url: 'javascript:alert(1)',
+    }), false);
+    assert.equal(validateExtensionResult({
+      type: 'REPORT_GENERATOR_LOG_SHEET_RESULT', requestId: 'sheet_1', success: true,
+      cellUrl: 'data:text/html,<img src=x onerror=alert(1)>',
+    }), false);
+  });
+
+  it('accepts expected HTTPS result URLs', () => {
+    assert.equal(validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_RESULT', requestId: 'jira_1', success: true,
+      issueKey: 'NEW-1', url: 'https://jira.directi.com/browse/NEW-1',
+    }), true);
+    assert.equal(validateExtensionResult({
+      type: 'REPORT_GENERATOR_LOG_SHEET_RESULT', requestId: 'sheet_1', success: true,
+      cellUrl: 'https://docs.google.com/spreadsheets/d/abc/edit#gid=1&range=A1',
+    }), true);
+  });
+});
+
 describe('svgMarkup', () => {
   it('builds an escaped attribute wrapper around trusted icon content', () => {
     assert.equal(
@@ -297,6 +322,8 @@ describe('account validation', () => {
   });
 
   it('rejects malformed account identifiers', () => {
+    assert.equal(validateAccountIdentifier('example.x'), false);
+    assert.equal(validateAccountIdentifier('user@example.x'), false);
     assert.equal(validateAccountIdentifier('user@@example.com'), false);
     assert.equal(validateAccountIdentifier('bad domain.example'), false);
     assert.equal(validateAccountIdentifier('javascript:alert(1)'), false);

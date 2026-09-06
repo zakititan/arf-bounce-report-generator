@@ -3,8 +3,8 @@
   // (app.js) owns all on-page notifications - extension toasts used to stack on
   // top of the app toast in the bottom-right corner and overlap it.
 
-  var ACCOUNT_EMAIL_RE = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
-  var ACCOUNT_DOMAIN_RE = /^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
+  var ACCOUNT_EMAIL_LOCAL_RE = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+$/;
+  var ACCOUNT_DOMAIN_RE = /^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z](?:[A-Za-z0-9-]{0,60}[A-Za-z0-9])$/;
   var REQUEST_ID_RE = /^[A-Za-z][A-Za-z0-9_-]{0,99}$/;
 
   function isAllowedOrigin(origin) {
@@ -20,8 +20,12 @@
   }
 
   function validAccount(value) {
-    return typeof value === 'string' && value.length <= 254 &&
-      (ACCOUNT_EMAIL_RE.test(value) || ACCOUNT_DOMAIN_RE.test(value));
+    if (typeof value !== 'string' || value.length > 254) return false;
+    var atIndex = value.indexOf('@');
+    if (atIndex === -1) return ACCOUNT_DOMAIN_RE.test(value);
+    return atIndex === value.lastIndexOf('@') && atIndex > 0 && atIndex <= 64 &&
+      ACCOUNT_EMAIL_LOCAL_RE.test(value.slice(0, atIndex)) &&
+      ACCOUNT_DOMAIN_RE.test(value.slice(atIndex + 1));
   }
 
   function validMessage(data) {
@@ -62,6 +66,18 @@
     return 'jiraUrl:' + requestContextKey(reportId, panel, requestId);
   }
 
+  function unsuspendReasonKey(requestId) {
+    return 'unsuspendReason:' + (requestId || 'legacy');
+  }
+
+  function safeJiraUrl(value) {
+    return typeof value === 'string' && /^https:\/\/jira\.directi\.com\/browse\/[A-Z][A-Z0-9]+-\d+$/.test(value);
+  }
+
+  function safeSheetsUrl(value) {
+    return typeof value === 'string' && /^https:\/\/docs\.google\.com\/spreadsheets\/d\/[A-Za-z0-9_-]+\/edit(?:$|[?#])/.test(value);
+  }
+
 
   // Service worker relays per-account unsuspension verdicts here; forward
   // them into the page so app.js can aggregate and confirm to the user.
@@ -100,7 +116,7 @@
             return;
           }
 
-          if (response && response.success === true) {
+          if (response && response.success === true && safeJiraUrl(response.issueUrl)) {
             var jiraUrl = response.issueUrl;
             window.postMessage({ type: 'REPORT_GENERATOR_JIRA_RESULT', requestId: data.requestId, success: true, issueKey: response.issueKey, url: jiraUrl, imagesUploaded: response.imagesUploaded, imagesTotal: response.imagesTotal }, '*');
 
@@ -136,6 +152,10 @@
           }
 
           var jiraUrl = response.issueUrl;
+          if (!safeJiraUrl(jiraUrl)) {
+            window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', requestId: unsuspendData.requestId, success: false, error: 'Invalid JIRA result URL' }, '*');
+            return;
+          }
           chrome.storage.local.set({ [jiraStorageKey(unsuspendData.reportId, unsuspendData.panel, unsuspendData.requestId)]: { url: jiraUrl } });
           window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', requestId: unsuspendData.requestId, success: true, issueKey: response.issueKey || null, url: jiraUrl || null, unsuspendStatus: response.unsuspendStatus || null }, '*');
         }
@@ -147,14 +167,14 @@
       var noJiraAccounts = noJiraData.accounts || [noJiraData.account];
 
       var reasonPayload = noJiraData.reason || 'Password Changed';
-      chrome.storage.local.set({ unsuspendReason: { reason: reasonPayload, ts: Date.now() } }, function () {
+      chrome.storage.local.set({ [unsuspendReasonKey(noJiraData.requestId)]: { reason: reasonPayload, ts: Date.now() } }, function () {
         if (chrome.runtime.lastError) {
           window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', requestId: noJiraData.requestId, success: false, error: chrome.runtime.lastError.message }, '*');
           return;
         }
         var region = noJiraData.region;
         var accounts = noJiraAccounts;
-          chrome.runtime.sendMessage({ action: 'open-abusedesk-tabs', data: { accounts: accounts, region: region, requestId: noJiraData.requestId } }, function (resp) {
+        chrome.runtime.sendMessage({ action: 'open-abusedesk-tabs', data: { accounts: accounts, region: region, requestId: noJiraData.requestId } }, function (resp) {
           if (chrome.runtime.lastError || !resp || !resp.success) {
             window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', requestId: noJiraData.requestId, success: false, error: (resp && resp.error) || chrome.runtime.lastError?.message || 'Failed opening Abuse Desk tabs' }, '*');
             return;
@@ -185,7 +205,8 @@
           }
         }, function(response) {
           var ok = !!(response && response.success);
-          window.postMessage({ type: 'REPORT_GENERATOR_LOG_SHEET_RESULT', requestId: logData.requestId, success: !!(response && response.success), cellUrl: (response && response.cellUrl) || null, unverified: !!(response && response.unverified), error: (response && response.error) || null }, '*');
+          var cellUrl = response && safeSheetsUrl(response.cellUrl) ? response.cellUrl : null;
+          window.postMessage({ type: 'REPORT_GENERATOR_LOG_SHEET_RESULT', requestId: logData.requestId, success: !!(response && response.success) && (!response.cellUrl || !!cellUrl), cellUrl: cellUrl, unverified: !!(response && response.unverified), error: (response && response.error) || null }, '*');
           if (chrome.runtime.lastError || !ok) {
             console.warn('[Report→Sheet] Failed:', chrome.runtime.lastError?.message);
           }
