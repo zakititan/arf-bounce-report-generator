@@ -304,6 +304,16 @@ describe('matchesUnsuspendRequest', () => {
   });
 });
 
+describe('matchesRequest', () => {
+  it('uses legacy compatibility only when no request is active', async () => {
+    const { matchesRequest } = await import('../scripts/pure.js');
+    assert.equal(matchesRequest(null, undefined), true);
+    assert.equal(matchesRequest('current', undefined), false);
+    assert.equal(matchesRequest('current', 'old'), false);
+    assert.equal(matchesRequest('current', 'current'), true);
+  });
+});
+
 describe('createUnsuspendRequestId', () => {
   it('creates a stable, traceable ID from supplied time and entropy', () => {
     assert.equal(createUnsuspendRequestId(1234, 0.5), 'unsuspend-ya-89oqgw');

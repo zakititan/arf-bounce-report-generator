@@ -9,8 +9,7 @@
 
   function isAllowedOrigin(origin) {
     return origin === 'http://localhost:3000' ||
-      origin === 'https://arf-bounce-report-generator.vercel.app' ||
-      /^https:\/\/[^./]+(?:[.-][^./]+)*\.vercel\.app$/.test(origin);
+      origin === 'https://arf-bounce-report-generator.vercel.app';
   }
 
   function accounts(value) {
@@ -88,7 +87,7 @@
         { action: 'create-jira', data: { text: text, html: html, panel: panel, account: account, zdLink: zdLink, requestId: data.requestId, reportId: data.reportId } },
         function (response) {
           if (chrome.runtime.lastError) {
-            window.postMessage({ type: 'REPORT_GENERATOR_JIRA_RESULT', success: false }, '*');
+            window.postMessage({ type: 'REPORT_GENERATOR_JIRA_RESULT', requestId: data.requestId, success: false, error: chrome.runtime.lastError.message }, '*');
             fallbackToStorage(text, html, panel, account);
             return;
           }

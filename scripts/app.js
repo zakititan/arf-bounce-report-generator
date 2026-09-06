@@ -15,7 +15,7 @@
 
 import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx,
          fetchLaravelCheck, fetchXmlrpcCheck, fetchWordPressCheck } from './api.js';
-import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, createUnsuspendRequestId } from './pure.js';
+import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, matchesRequest, createUnsuspendRequestId, createRequestId, isAllowedWebAppOrigin, validateExtensionResult, validateUnsuspendOutcome } from './pure.js';
 import {
   showToast, initThemeToggle,
   clearFieldErrors, showValidationErrors,
@@ -181,8 +181,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }).catch(() => {});
 
   window.addEventListener('message', (e) => {
+    if (e.source !== window || !isAllowedWebAppOrigin(e.origin) ||
+        !validateExtensionResult(e.data) || e.data.type !== 'PARTNER_PANEL_RESULT' ||
+        !matchesRequest(_activePartnerRequestId, e.data.requestId)) return;
     if (e.data && e.data.type === 'PARTNER_PANEL_RESULT') {
       setPartnerPanelResult(e.data.data);
+      _activePartnerRequestId = null;
     }
   });
 
@@ -195,6 +199,7 @@ let _lastJiraRequestId = null;
 const _reportContextIds = {};
 let _lastUnsuspendPanel = null;
 let _activeUnsuspendRequestId = null;
+let _activePartnerRequestId = null;
 // Assigned during init; lets top-level code (e.g. Clear) cancel an in-flight
 // unsuspension tracking session for a panel.
 let _cancelUnsuspendTracking = null;
@@ -253,13 +258,15 @@ function renderUnsuspendVerdicts(prefix, accounts, results, final) {
 }
 
 window.addEventListener('message', (e) => {
+  if (e.source !== window || !isAllowedWebAppOrigin(e.origin) || !validateExtensionResult(e.data)) return;
   const d = e.data || {};
   const action = PENDING_RESULT_ACTIONS[d.type];
   if (!action) return;
-  document.querySelectorAll('[data-action="' + action + '"][data-original-html]').forEach(resetBtn);
 
   if (d.type === 'REPORT_GENERATOR_JIRA_RESULT') {
-    if (d.requestId && d.requestId !== _lastJiraRequestId) return;
+    if (!matchesRequest(_lastJiraRequestId, d.requestId)) return;
+    _lastJiraRequestId = null;
+    document.querySelectorAll('[data-action="' + action + '"][data-original-html]').forEach(resetBtn);
     const prefix = _lastJiraPanel;
     if (d.success && d.issueKey && d.url) {
       const imgExtra = d.imagesTotal > 0 && d.imagesUploaded < d.imagesTotal
@@ -275,6 +282,7 @@ window.addEventListener('message', (e) => {
 
   // REPORT_GENERATOR_UNSUSPEND_RESULT
   if (!matchesUnsuspendRequest(_activeUnsuspendRequestId, d.requestId)) return;
+  document.querySelectorAll('[data-action="' + action + '"][data-original-html]').forEach(resetBtn);
   console.log('[Report→Unsuspend][' + (d.requestId || 'legacy') + '] JIRA result received');
   const prefix = _lastUnsuspendPanel;
   const status = d.unsuspendStatus;
@@ -356,7 +364,9 @@ _cancelUnsuspendTracking = function (prefix) {
 };
 
 window.addEventListener('message', (e) => {
+  if (e.source !== window || !isAllowedWebAppOrigin(e.origin)) return;
   const outcome = e.data && e.data.type === 'REPORT_GENERATOR_UNSUSPEND_OUTCOME' ? e.data.outcome : null;
+  if (!validateUnsuspendOutcome(outcome)) return;
   if (!outcome || !_unsuspendConfirm) return;
   if (!matchesUnsuspendRequest(_unsuspendConfirm.requestId, outcome.requestId)) return;
   if (_unsuspendConfirm.results.some(x => x.account && x.account === outcome.account)) return; // dedupe
@@ -1778,7 +1788,8 @@ function createTaeJira(prefix, btn) {
   const region = (state[prefix] || state.arf).region === 'eu' ? 'eu-central-1' : 'us-east-1';
   setBtnPending(btn, 'Creating…');
   _lastJiraPanel = prefix;
-  _lastJiraRequestId = _reportContextIds[prefix] || createUnsuspendRequestId();
+  // Report IDs scope stored data; each submission gets a unique result ID.
+  _lastJiraRequestId = createRequestId('jira');
   window.postMessage({
     type: 'REPORT_GENERATOR_JIRA',
     text: reportText,
@@ -1933,6 +1944,9 @@ function logToSheet(prefix) {
     .trim();
 
   const listener = (e) => {
+    if (e.source !== window || !isAllowedWebAppOrigin(e.origin) ||
+        !validateExtensionResult(e.data) || e.data.type !== 'REPORT_GENERATOR_LOG_SHEET_RESULT' ||
+        !matchesRequest(requestId, e.data.requestId)) return;
     if (e.data && e.data.type === 'REPORT_GENERATOR_LOG_SHEET_RESULT') {
       window.removeEventListener('message', listener);
       clearTimeout(timeout);
@@ -1980,6 +1994,7 @@ function checkPasswordChange(prefix) {
 
   const btn = document.querySelector('[data-action="check-password"][data-panel="' + prefix + '"]');
   const requestId = createUnsuspendRequestId();
+  _activePartnerRequestId = requestId;
   if (btn) {
     btn.disabled = true;
     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 0.8s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Checking…';

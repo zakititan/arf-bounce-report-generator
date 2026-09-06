@@ -10,8 +10,7 @@ const REQUEST_ID_RE = /^[A-Za-z][A-Za-z0-9_-]{0,99}$/;
 export function isAllowedWebAppOrigin(origin) {
   if (typeof origin !== 'string') return false;
   return origin === 'http://localhost:3000' ||
-    origin === 'https://arf-bounce-report-generator.vercel.app' ||
-    /^https:\/\/[^./]+(?:[.-][^./]+)*\.vercel\.app$/.test(origin);
+    origin === 'https://arf-bounce-report-generator.vercel.app';
 }
 
 export function isValidAccountIdentifier(value) {
@@ -54,6 +53,39 @@ export function validateWebAppMessage(message) {
     return hasRequestId && isValidAccountIdentifier(typeof message.account === 'string' ? message.account.trim() : '');
   }
   return false;
+}
+
+export function validateExtensionResult(message) {
+  if (!message || typeof message !== 'object' || typeof message.type !== 'string') return false;
+  if (message.requestId !== undefined &&
+      (typeof message.requestId !== 'string' || !REQUEST_ID_RE.test(message.requestId))) return false;
+  if (typeof message.success !== 'boolean' && message.type !== 'PARTNER_PANEL_RESULT') return false;
+
+  if (message.type === 'REPORT_GENERATOR_JIRA_RESULT') {
+    return (!message.error || typeof message.error === 'string') &&
+      (!message.success || (typeof message.issueKey === 'string' && typeof message.url === 'string'));
+  }
+  if (message.type === 'REPORT_GENERATOR_UNSUSPEND_RESULT') {
+    return (!message.issueKey || typeof message.issueKey === 'string') &&
+      (!message.url || typeof message.url === 'string') &&
+      (!message.error || typeof message.error === 'string');
+  }
+  if (message.type === 'REPORT_GENERATOR_LOG_SHEET_RESULT') {
+    return (!message.cellUrl || typeof message.cellUrl === 'string') &&
+      (!message.unverified || typeof message.unverified === 'boolean') &&
+      (!message.error || typeof message.error === 'string');
+  }
+  if (message.type === 'PARTNER_PANEL_RESULT') {
+    return Boolean(message.data) && typeof message.data === 'object' &&
+      typeof message.data.success === 'boolean';
+  }
+  return false;
+}
+
+let requestSequence = 0;
+export function createRequestId(prefix, now = Date.now(), entropy = Math.random()) {
+  requestSequence = (requestSequence + 1) % 1000000;
+  return prefix + '-' + now.toString(36) + '-' + Math.floor(entropy * 1e9).toString(36) + '-' + requestSequence.toString(36);
 }
 
 export function getScopedJiraUrl(stored, reportId, panel) {

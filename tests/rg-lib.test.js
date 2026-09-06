@@ -37,10 +37,45 @@ describe('isSuccessfulResponse', () => {
 describe('web app message security helpers', () => {
   it('accepts the production, Vercel, and localhost application origins only', () => {
     assert.equal(rgLib.isAllowedWebAppOrigin('https://arf-bounce-report-generator.vercel.app'), true);
-    assert.equal(rgLib.isAllowedWebAppOrigin('https://preview-123.vercel.app'), true);
+    assert.equal(rgLib.isAllowedWebAppOrigin('https://preview-123.vercel.app'), false);
     assert.equal(rgLib.isAllowedWebAppOrigin('http://localhost:3000'), true);
     assert.equal(rgLib.isAllowedWebAppOrigin('https://evil.example'), false);
     assert.equal(rgLib.isAllowedWebAppOrigin('null'), false);
+  });
+
+  it('validates result payload shapes before the app consumes them', () => {
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_RESULT', requestId: 'jira_123', success: true,
+      issueKey: 'NEW-1', url: 'https://jira.directi.com/browse/NEW-1'
+    }), true);
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_RESULT', requestId: 'jira_123', success: true,
+      issueKey: 'NEW-1'
+    }), false);
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'REPORT_GENERATOR_LOG_SHEET_RESULT', requestId: 'sheet_123', success: false, error: 'failed'
+    }), true);
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'PARTNER_PANEL_RESULT', requestId: 'partner_123', data: { success: true }
+    }), true);
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'PARTNER_PANEL_RESULT', requestId: 'partner_123', data: 'forged'
+    }), false);
+  });
+
+  it('rejects malformed or invalid result request IDs', () => {
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', requestId: 'bad id', success: false
+    }), false);
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', success: false
+    }), true);
+  });
+
+  it('generates distinct IDs for distinct submissions even with identical inputs', () => {
+    const first = rgLib.createRequestId('jira', 1234, 0.5);
+    const second = rgLib.createRequestId('jira', 1234, 0.5);
+    assert.notEqual(first, second);
   });
 
   it('requires typed JIRA payload fields before forwarding', () => {

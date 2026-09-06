@@ -154,7 +154,6 @@ async function openAbuseDeskTabs(accounts, region, requestId) {
 
 const WEBAPP_TAB_MATCHES = [
   'https://arf-bounce-report-generator.vercel.app/*',
-  'https://*.vercel.app/*',
   'http://localhost:3000/*'
 ];
 
