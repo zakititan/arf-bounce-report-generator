@@ -1,4 +1,4 @@
-import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList, createUnsuspendReasonKey, isSafeJiraUrl, isSafeGoogleSheetsUrl } from './rg-lib.js';
+import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList, createUnsuspendReasonKey, persistUnsuspendReason, isSafeJiraUrl, isSafeGoogleSheetsUrl } from './rg-lib.js';
 import { fetchWithTimeout } from './timeout.js';
 
 const EXPIRY_MS = 10 * 60 * 1000;
@@ -227,9 +227,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleCreateJira(message.data, true)
       .then(async result => {
         if (result.success === true) {
-          chrome.storage.local.set({
-            [createUnsuspendReasonKey(message.data.requestId)]: { reason: result.issueUrl, ts: Date.now() }
-          });
+          await persistUnsuspendReason(
+            (value, callback) => chrome.storage.local.set(value, callback),
+            () => chrome.runtime.lastError,
+            { [createUnsuspendReasonKey(message.data.requestId)]: { reason: result.issueUrl, ts: Date.now() } }
+          );
           const accounts = normalizeAccountList(message.data.account);
           try {
             result.opened = await openAbuseDeskTabs(accounts, message.data.region, message.data.requestId);

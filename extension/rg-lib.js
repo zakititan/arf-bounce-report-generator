@@ -11,6 +11,23 @@ export function createUnsuspendReasonKey(requestId) {
   return 'unsuspendReason:' + (requestId || 'legacy');
 }
 
+export function persistUnsuspendReason(storageSet, getLastError, value) {
+  return new Promise((resolve, reject) => {
+    try {
+      storageSet(value, () => {
+        const error = getLastError();
+        if (error) {
+          reject(new Error(error.message || String(error)));
+          return;
+        }
+        resolve();
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
 export function createUnsuspendVerifyKey(requestId, account) {
   return 'unsuspendVerify:' + (requestId || 'legacy') + ':' + encodeURIComponent(account || '');
 }
