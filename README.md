@@ -106,7 +106,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
   - **Version check** — the web app auto-detects the extension via a ping/pong handshake (`REPORT_GENERATOR_PING` / `REPORT_GENERATOR_PONG`, deduped so duplicate PONGs can't stack banners); a sticky banner appears at the top of the page:
     - **Green banner** — extension detected and up to date (`Extension vX.X.X detected.`); auto-dismisses after 3 seconds and stays dismissed for that minimum version
     - **Yellow banner** — extension outdated, with direct download link for the latest version
-    - **Red banner** — extension not installed or is outdated (pre-v4.4), with direct zip install link
+    - **Red banner** — extension not installed or is outdated (pre-v4.5), with direct zip install link
     - Dismiss persists per `MIN_VERSION` in `localStorage`; reappears when min version is bumped
 
 ### Log to Sheet (Google Sheets Integration)
@@ -279,7 +279,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ├── styles/
 │   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, extension modal, responsive)
 ├── extension/                      # Chrome extension (Manifest V3) for JIRA integration, Abuse Desk automation, and Google Sheets logging
-│   ├── manifest.json               # Extension config: v4.4.8, permissions, ES-module service worker, content scripts for webapp, JIRA, Abuse Desk, and Partner Panel
+│   ├── manifest.json               # Extension config: v4.5, permissions, ES-module service worker, content scripts for webapp, JIRA, Abuse Desk, and Partner Panel
 │   ├── rg-lib.js                   # Shared pure logic (ESM): history analysis, JIRA body builder, image extraction, fallback URL builder, reason-TTL check — imported by the service worker and unit-tested
 │   ├── background.js               # Module service worker: create-jira (+optional markDone), log-to-sheet with verified response, partner-panel-lookup (closes its tab, analyzes raw events), open-abusedesk-tabs
 │   ├── content-webapp.js           # Content script on Report Generator: handles JIRA creation, Unsuspend (create + markDone + AD via background), partner panel lookup, sheet logging with cellUrl result
