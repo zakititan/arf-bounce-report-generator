@@ -69,8 +69,9 @@ describe('web app message security helpers', () => {
     assert.equal(isValidAccountIdentifier('user@example.xn--p1ai'), true);
   });
 
-  it('accepts the production, Vercel, and localhost application origins only', () => {
+  it('accepts the production and project-scoped Vercel preview origins only', () => {
     assert.equal(rgLib.isAllowedWebAppOrigin('https://arf-bounce-report-generator.vercel.app'), true);
+    assert.equal(rgLib.isAllowedWebAppOrigin('https://arf-bounce-report-generator-git-test-project-improvements-zaki-titans-projects.vercel.app'), true);
     assert.equal(rgLib.isAllowedWebAppOrigin('https://preview-123.vercel.app'), false);
     assert.equal(rgLib.isAllowedWebAppOrigin('http://localhost:3000'), true);
     assert.equal(rgLib.isAllowedWebAppOrigin('https://evil.example'), false);

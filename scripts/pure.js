@@ -82,7 +82,8 @@ export function parseCsvRow(row) {
 
 export function isAllowedWebAppOrigin(origin) {
   return origin === 'http://localhost:3000' ||
-    origin === 'https://arf-bounce-report-generator.vercel.app';
+    origin === 'https://arf-bounce-report-generator.vercel.app' ||
+    /^https:\/\/arf-bounce-report-generator-[a-z0-9-]+\.vercel\.app$/.test(origin);
 }
 
 const REQUEST_ID_RE = /^[A-Za-z][A-Za-z0-9_-]{0,99}$/;

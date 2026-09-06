@@ -53,7 +53,8 @@ export function isSafeGoogleSheetsUrl(value) {
 export function isAllowedWebAppOrigin(origin) {
   if (typeof origin !== 'string') return false;
   return origin === 'http://localhost:3000' ||
-    origin === 'https://arf-bounce-report-generator.vercel.app';
+    origin === 'https://arf-bounce-report-generator.vercel.app' ||
+    /^https:\/\/arf-bounce-report-generator-[a-z0-9-]+\.vercel\.app$/.test(origin);
 }
 
 export function isValidAccountIdentifier(value) {
