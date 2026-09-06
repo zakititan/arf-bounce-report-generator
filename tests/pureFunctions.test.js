@@ -280,18 +280,27 @@ describe('svgMarkup', () => {
       '<svg width="16" aria-hidden="true"><path/></svg>',
     );
   });
+
+  it('omits attributes whose names are not allowed', () => {
+    assert.equal(
+      svgMarkup('<path/>', { width: '16', onload: 'alert(1)' }),
+      '<svg width="16"><path/></svg>',
+    );
+  });
 });
 
 describe('account validation', () => {
   it('accepts email and domain account identifiers', () => {
     assert.equal(validateAccountIdentifier('user+tag@example.com'), true);
     assert.equal(validateAccountIdentifier('sub.example.co.uk'), true);
+    assert.equal(validateAccountIdentifier('example.xn--p1ai'), true);
   });
 
   it('rejects malformed account identifiers', () => {
     assert.equal(validateAccountIdentifier('user@@example.com'), false);
     assert.equal(validateAccountIdentifier('bad domain.example'), false);
     assert.equal(validateAccountIdentifier('javascript:alert(1)'), false);
+    assert.equal(validateAccountIdentifier('example.xn--'), false);
   });
 
   it('parses valid comma-separated account lists', () => {

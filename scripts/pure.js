@@ -8,7 +8,12 @@ export function escapeHtml(str) {
 }
 
 export function svgMarkup(inner, attributes = {}) {
+  const allowedAttributes = new Set([
+    'width', 'height', 'viewBox', 'fill', 'stroke',
+    'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'aria-hidden',
+  ]);
   const attrs = Object.entries(attributes)
+    .filter(([name]) => allowedAttributes.has(name))
     .map(([name, value]) => ` ${name}="${String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]))}"`)
     .join('');
   return `<svg${attrs}>${inner}</svg>`;
@@ -39,7 +44,7 @@ export function sanitiseAccountInput(value) {
   return v;
 }
 
-const DOMAIN_IDENTIFIER_RE = /^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,}$/;
+const DOMAIN_IDENTIFIER_RE = /^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])$/;
 const EMAIL_LOCAL_RE = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+$/;
 
 export function validateAccountIdentifier(value) {

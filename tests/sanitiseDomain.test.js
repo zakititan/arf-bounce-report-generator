@@ -43,6 +43,8 @@ describe('sanitiseDomain — punycode (ASCII-compatible encoding)', () => {
     ok('xn--p1ai.ru', 'xn--p1ai.ru', 'Russian xn-- TLD'));
   it('mixed punycode subdomain', () =>
     ok('mail.xn--mnchen-3ya.de', 'mail.xn--mnchen-3ya.de', 'punycode with subdomain'));
+  it('punycode TLD', () =>
+    ok('example.xn--p1ai', 'example.xn--p1ai', 'punycode TLD'));
 });
 
 describe('sanitiseDomain — raw unicode IDN (must be rejected)', () => {
@@ -84,6 +86,7 @@ describe('sanitiseDomain — null and invalid inputs', () => {
     reject(long, 'domain > 253 chars');
   });
   it('rejects single-char TLD', () => reject('example.x', 'single-char TLD'));
+  it('rejects an incomplete punycode TLD', () => reject('example.xn--', 'incomplete punycode TLD'));
   it('rejects numeric TLD', () => reject('example.123', 'numeric TLD'));
   it('rejects ftp:// protocol', () => reject('ftp://example.com', 'ftp protocol'));
   it('rejects file:// protocol', () => reject('file:///etc/passwd', 'file protocol'));
