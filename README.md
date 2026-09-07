@@ -101,11 +101,12 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
   - Fallback chain: paste → execCommand → textarea
   - Supports JIRA Server v7.13+ (Atlassian JEP editor); falls back gracefully if the visual editor isn't found
   - Install by [downloading the extension zip](https://github.com/zakititan/arf-bounce-report-generator/raw/refs/heads/main/extension/releases/extension.zip), unzipping, and loading the folder as an unpacked extension in `chrome://extensions` (Developer mode)
-  - To repackage after changes: `npm run pack-extension`
+   - To repackage after changes: `npm run pack-extension`
+   - Before release, run `npm run verify-extension-package`; it fails if `extension/releases/extension.zip` is missing, stale, incomplete, or contains unexpected files. This check is opt-in and is not part of `npm test`.
   - **Version check** — the web app auto-detects the extension via a ping/pong handshake (`REPORT_GENERATOR_PING` / `REPORT_GENERATOR_PONG`, deduped so duplicate PONGs can't stack banners); a sticky banner appears at the top of the page:
     - **Green banner** — extension detected and up to date (`Extension vX.X.X detected.`); auto-dismisses after 3 seconds and stays dismissed for that minimum version
     - **Yellow banner** — extension outdated, with direct download link for the latest version
-    - **Red banner** — extension not installed or is outdated (pre-v4.4), with direct zip install link
+    - **Red banner** — extension not installed or is outdated (pre-v4.5), with direct zip install link
     - Dismiss persists per `MIN_VERSION` in `localStorage`; reappears when min version is bumped
 
 ### Log to Sheet (Google Sheets Integration)
@@ -218,7 +219,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **HSTS** — `Strict-Transport-Security` header enforces HTTPS with `max-age=31536000; includeSubDomains; preload`
 - **Middleware URL matching** — public path check uses exact match or subpath prefix (`pathname === p || pathname.startsWith(p + '/')`) to prevent `/api/login-staging` from bypassing auth
 - **XSS prevention** — API response values (verdict, DKIM selectors) and validation error labels are set via `textContent` instead of `innerHTML` to prevent HTML injection
-- **Login redirect removed** — successful login always redirects to `/`; the `redirect` query parameter is no longer accepted, preventing open redirect and `javascript:` injection
+- **Safe login redirect** — middleware retains only internal paths (including query strings), and login rejects external/open redirects before navigating after authentication
 - **API error resilience** — all fetch calls are wrapped in a centralized `apiFetch()` helper that safely handles network errors and non-JSON responses instead of crashing
 - **Extension host permissions** — Chrome extension declares `host_permissions` for `https://jira.directi.com/*`, `https://admin.titan.email/*`, and `https://api-abusedesk.ops.titan.email/*` to enable authenticated REST API calls, Partner Panel automation, and Abuse Desk USER STATUS verification using browser session cookies; sheet logging detects Google Apps Script URLs and goes straight to `no-cors` (CORS always fails against GAS); content-script injection is limited to the production deployment domain
 - **Session expiry handling** — the frontend API wrapper redirects to the login page on any HTTP 401, so an expired 8-hour session never leaves users staring at failed lookups
@@ -278,7 +279,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ├── styles/
 │   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, extension modal, responsive)
 ├── extension/                      # Chrome extension (Manifest V3) for JIRA integration, Abuse Desk automation, and Google Sheets logging
-│   ├── manifest.json               # Extension config: v4.4.8, permissions, ES-module service worker, content scripts for webapp, JIRA, Abuse Desk, and Partner Panel
+│   ├── manifest.json               # Extension config: v4.5, permissions, ES-module service worker, content scripts for webapp, JIRA, Abuse Desk, and Partner Panel
 │   ├── rg-lib.js                   # Shared pure logic (ESM): history analysis, JIRA body builder, image extraction, fallback URL builder, reason-TTL check — imported by the service worker and unit-tested
 │   ├── background.js               # Module service worker: create-jira (+optional markDone), log-to-sheet with verified response, partner-panel-lookup (closes its tab, analyzes raw events), open-abusedesk-tabs
 │   ├── content-webapp.js           # Content script on Report Generator: handles JIRA creation, Unsuspend (create + markDone + AD via background), partner panel lookup, sheet logging with cellUrl result

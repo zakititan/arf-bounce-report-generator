@@ -1,4 +1,5 @@
 (function () {
+  var requestId = new URLSearchParams(window.location.search).get('rgRequestId') || 'legacy';
   function log(msg) { console.log('[Report→AbuseDesk] ' + msg); }
 
   function showToast(message) {
@@ -52,7 +53,8 @@
         data: {
           failed: r.outcome === 'failed',
           outcome: r.outcome || 'unknown',
-          account: r.account || ''
+          account: r.account || '',
+          requestId: requestId
         }
       });
     } catch (e) { /* extension context gone — nothing to do */ }
@@ -112,30 +114,22 @@
     });
   }
 
-  // Per-account verify markers: after saving, the page reloads and this
-  // script runs again while the unsuspend reason is still TTL-fresh. The
-  // marker switches that load into verification mode instead of re-running
-  // the automation.
-  function getVerifyMap(cb) {
-    chrome.storage.local.get(['unsuspendVerify'], function (r) {
-      cb(r.unsuspendVerify || {});
-    });
-  }
+  function reasonKey() { return 'unsuspendReason:' + requestId; }
+  function verifyKey(account) { return 'unsuspendVerify:' + requestId + ':' + encodeURIComponent(account); }
+
+  // A marker is scoped to both the run and account. Individual storage keys
+  // avoid read-modify-write collisions between concurrent tabs.
   function setVerifyEntry(account, attempt, cb) {
-    getVerifyMap(function (map) {
-      map[account] = { ts: Date.now(), attempt: attempt || 1 };
-      chrome.storage.local.set({ unsuspendVerify: map }, function () { if (cb) cb(); });
+    chrome.storage.local.set({ [verifyKey(account)]: { ts: Date.now(), attempt: attempt || 1 } }, function () {
+      if (cb) cb();
     });
   }
   function consumeVerifyEntry(account, cb) {
-    getVerifyMap(function (map) {
-      var entry = map[account];
-      var ts = typeof entry === 'object' ? entry.ts : typeof entry === 'number' ? entry : null;
+    chrome.storage.local.get(verifyKey(account), function (result) {
+      var entry = result[verifyKey(account)];
+      var ts = entry && typeof entry.ts === 'number' ? entry.ts : null;
       if (cb) cb(ts);
-      if (entry) {
-        delete map[account];
-        chrome.storage.local.set({ unsuspendVerify: map }, function () {});
-      }
+      if (entry) chrome.storage.local.remove(verifyKey(account), function () {});
     });
   }
 
@@ -204,15 +198,14 @@
   }
 
   async function run() {
-    chrome.storage.local.get(['unsuspendReason', 'unsuspendVerify'], async function (result) {
+    chrome.storage.local.get([reasonKey(), verifyKey(new URLSearchParams(window.location.search).get('entity') || '')], async function (result) {
       var account = new URLSearchParams(window.location.search).get('entity');
       if (!account) { log('No entity in URL — skipping automation'); return; }
 
       // ── Verification mode: this load was triggered by our own reload ──
-      var vMap = result.unsuspendVerify || {};
-      var vEntry = vMap[account];
-      var vTs = typeof vEntry === 'object' ? vEntry.ts : typeof vEntry === 'number' ? vEntry : null;
-      var vAttempt = typeof vEntry === 'object' ? (vEntry.attempt || 1) : 1;
+      var vEntry = result[verifyKey(account)];
+      var vTs = vEntry && typeof vEntry.ts === 'number' ? vEntry.ts : null;
+      var vAttempt = vEntry && typeof vEntry.attempt === 'number' ? vEntry.attempt : 1;
       if (typeof vTs === 'number' && (Date.now() - vTs) <= 90000) {
         if (vAttempt >= 2) consumeVerifyEntry(account, function () {});
         log('Verification mode for ' + account + ' (attempt ' + vAttempt + ')');
@@ -222,7 +215,7 @@
       }
 
       // ── Automation mode ──
-      var rec = result.unsuspendReason;
+      var rec = result[reasonKey()];
       var fresh = rec && typeof rec === 'object' && typeof rec.reason === 'string' && rec.reason !== '' &&
                   typeof rec.ts === 'number' && (Date.now() - rec.ts) <= 90000;
       if (!fresh) { log('No fresh unsuspend reason in storage'); return; }

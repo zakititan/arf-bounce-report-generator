@@ -31,13 +31,18 @@
   }
 
   function getReportData() {
+    const params = new URLSearchParams(window.location.search);
+    const reportId = params.get('rgReportId') || '';
+    const requestId = params.get('rgRequestId') || '';
+    const panel = params.get('rgPanel') || '';
+    const key = 'reportData:' + JSON.stringify([reportId, panel, requestId]);
     return new Promise((resolve) => {
-      chrome.storage.local.get('reportData', (result) => {
+      chrome.storage.local.get(key, (result) => {
         if (chrome.runtime.lastError) { resolve(null); return; }
-        const data = result.reportData;
+        const data = result[key];
         if (!data) { resolve(null); return; }
         if (Date.now() - (data.timestamp || 0) > EXPIRY_MS) {
-          chrome.storage.local.remove('reportData');
+          chrome.storage.local.remove(key);
           resolve(null); return;
         }
         resolve(data);
@@ -45,7 +50,10 @@
     });
   }
 
-  function clearReportData() { chrome.storage.local.remove('reportData'); }
+  function clearReportData() {
+    const params = new URLSearchParams(window.location.search);
+    chrome.storage.local.remove('reportData:' + JSON.stringify([params.get('rgReportId') || '', params.get('rgPanel') || '', params.get('rgRequestId') || '']));
+  }
 
   // ── Image extraction ──────────────────────────────────────────────
 

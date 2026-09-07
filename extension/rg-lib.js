@@ -3,6 +3,156 @@
 export const REASON_TTL_MS = 90000;
 export const JIRA_DONE_TRANSITION_ID = '71';
 
+const ACCOUNT_EMAIL_LOCAL_RE = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+$/;
+const ACCOUNT_DOMAIN_RE = /^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z](?:[A-Za-z0-9-]{0,60}[A-Za-z0-9])$/;
+const REQUEST_ID_RE = /^[A-Za-z][A-Za-z0-9_-]{0,99}$/;
+
+export function createUnsuspendReasonKey(requestId) {
+  return 'unsuspendReason:' + (requestId || 'legacy');
+}
+
+export function persistUnsuspendReason(storageSet, getLastError, value) {
+  return new Promise((resolve, reject) => {
+    try {
+      storageSet(value, () => {
+        const error = getLastError();
+        if (error) {
+          reject(new Error(error.message || String(error)));
+          return;
+        }
+        resolve();
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+export function createUnsuspendVerifyKey(requestId, account) {
+  return 'unsuspendVerify:' + (requestId || 'legacy') + ':' + encodeURIComponent(account || '');
+}
+
+function isHttpsUrl(value, hostname, pathPattern) {
+  if (typeof value !== 'string') return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && url.hostname === hostname && pathPattern.test(url.pathname);
+  } catch (_) {
+    return false;
+  }
+}
+
+export function isSafeJiraUrl(value) {
+  return isHttpsUrl(value, 'jira.directi.com', /^\/browse\/[A-Z][A-Z0-9]+-\d+$/);
+}
+
+export function selectJiraUrl(displayed, stored) {
+  if (isSafeJiraUrl(displayed)) return displayed;
+  return isSafeJiraUrl(stored) ? stored : '';
+}
+
+export function isSafeGoogleSheetsUrl(value) {
+  return isHttpsUrl(value, 'docs.google.com', /^\/spreadsheets\/d\/[A-Za-z0-9_-]+\/edit$/);
+}
+
+export function isAllowedWebAppOrigin(origin) {
+  if (typeof origin !== 'string') return false;
+  return origin === 'http://localhost:3000' ||
+    origin === 'https://arf-bounce-report-generator.vercel.app' ||
+    /^https:\/\/arf-bounce-report-generator-[a-z0-9-]+\.vercel\.app$/.test(origin);
+}
+
+export function isValidAccountIdentifier(value) {
+  if (typeof value !== 'string' || value.length > 254) return false;
+  const atIndex = value.indexOf('@');
+  if (atIndex === -1) return ACCOUNT_DOMAIN_RE.test(value);
+  return atIndex === value.lastIndexOf('@') &&
+    atIndex > 0 && atIndex <= 64 &&
+    ACCOUNT_EMAIL_LOCAL_RE.test(value.slice(0, atIndex)) &&
+    ACCOUNT_DOMAIN_RE.test(value.slice(atIndex + 1));
+}
+
+export function normalizeAccountList(value) {
+  const values = Array.isArray(value) ? value : typeof value === 'string' ? [value] : [];
+  return values.flatMap(item => typeof item === 'string' ? item.split(',') : [])
+    .map(item => item.trim()).filter(Boolean);
+}
+
+export function areValidAccountList(value) {
+  const accounts = normalizeAccountList(value);
+  return accounts.length > 0 && accounts.every(isValidAccountIdentifier);
+}
+
+export function validateWebAppMessage(message) {
+  if (!message || typeof message !== 'object' || typeof message.type !== 'string') return false;
+  const hasStrings = (keys) => keys.every(key => typeof message[key] === 'string');
+  const hasRequestId = typeof message.requestId === 'string' && REQUEST_ID_RE.test(message.requestId);
+
+  if (message.type === 'REPORT_GENERATOR_PING') return true;
+  if (message.type === 'REPORT_GENERATOR_JIRA') {
+    return hasRequestId && hasStrings(['panel', 'account']) &&
+      (typeof message.text === 'string' || typeof message.html === 'string') &&
+      Boolean(message.text || message.html) && normalizeAccountList(message.account).length === 1 &&
+      isValidAccountIdentifier(message.account.trim());
+  }
+  if (message.type === 'REPORT_GENERATOR_UNSUSPEND' || message.type === 'REPORT_GENERATOR_UNSUSPEND_NO_JIRA') {
+    const accounts = message.accounts || message.account;
+    return hasRequestId && hasStrings(['panel']) && typeof message.text === 'string' &&
+      typeof message.html === 'string' && areValidAccountList(accounts);
+  }
+  if (message.type === 'REPORT_GENERATOR_LOG_SHEET') {
+    return hasRequestId && hasStrings(['date', 'zdLink', 'domainEmail', 'reportType', 'reason', 'appsScriptUrl', 'panel']);
+  }
+  if (message.type === 'REPORT_GENERATOR_PARTNER_PANEL_LOOKUP') {
+    return hasRequestId && isValidAccountIdentifier(typeof message.account === 'string' ? message.account.trim() : '');
+  }
+  return false;
+}
+
+export function validateExtensionResult(message) {
+  if (!message || typeof message !== 'object' || typeof message.type !== 'string') return false;
+  if (message.requestId !== undefined &&
+      (typeof message.requestId !== 'string' || !REQUEST_ID_RE.test(message.requestId))) return false;
+  if (typeof message.success !== 'boolean' && message.type !== 'PARTNER_PANEL_RESULT') return false;
+
+  if (message.type === 'REPORT_GENERATOR_JIRA_RESULT') {
+    return (!message.error || typeof message.error === 'string') &&
+      (!message.success || (typeof message.issueKey === 'string' && isSafeJiraUrl(message.url)));
+  }
+  if (message.type === 'REPORT_GENERATOR_UNSUSPEND_RESULT') {
+    return (!message.issueKey || typeof message.issueKey === 'string') &&
+      (!message.url || isSafeJiraUrl(message.url)) &&
+      (!message.error || typeof message.error === 'string');
+  }
+  if (message.type === 'REPORT_GENERATOR_LOG_SHEET_RESULT') {
+    return (!message.cellUrl || isSafeGoogleSheetsUrl(message.cellUrl)) &&
+      (!message.unverified || typeof message.unverified === 'boolean') &&
+      (!message.error || typeof message.error === 'string');
+  }
+  if (message.type === 'PARTNER_PANEL_RESULT') {
+    return Boolean(message.data) && typeof message.data === 'object' &&
+      typeof message.data.success === 'boolean';
+  }
+  return false;
+}
+
+let requestSequence = 0;
+export function createRequestId(prefix, now = Date.now(), entropy = Math.random()) {
+  requestSequence = (requestSequence + 1) % 1000000;
+  return prefix + '-' + now.toString(36) + '-' + Math.floor(entropy * 1e9).toString(36) + '-' + requestSequence.toString(36);
+}
+
+export function createRequestContextKey(reportId, panel, requestId) {
+  return JSON.stringify([reportId || '', panel || '', requestId || '']);
+}
+
+export function getScopedJiraUrl(stored, reportId, panel, requestId) {
+  if (!stored || typeof stored !== 'object') return '';
+  const entry = stored[createRequestContextKey(reportId, panel, requestId)];
+  return entry && typeof entry.url === 'string' &&
+    /^https:\/\/jira\.directi\.com\/browse\/[A-Z][A-Z0-9]+-\d+$/.test(entry.url) ? entry.url : '';
+}
+
 export function analyzeHistory(events) {
   var suspensionIdx = -1;
   var passwordResetAfterSuspension = false;
@@ -102,4 +252,8 @@ export function isReasonFresh(record, now = Date.now()) {
   if (!record || typeof record.reason !== 'string' || record.reason.length === 0) return false;
   if (typeof record.ts !== 'number' || !Number.isFinite(record.ts)) return false;
   return now - record.ts <= REASON_TTL_MS;
+}
+
+export function isSuccessfulResponse(response) {
+  return Boolean(response && response.ok === true);
 }

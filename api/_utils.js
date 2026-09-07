@@ -67,9 +67,10 @@ export function sanitiseDomain(raw) {
   if (LOCAL_TLD_RE.test(v)) return null;
 
   // Reject malformed hostnames: each label must start/end with alnum and
-  // may contain hyphens; no consecutive dots; TLD must be at least 2 alpha chars.
+  // may contain hyphens; no consecutive dots; the final label must start with
+  // a letter and contain at least two ASCII alphanumeric/hyphen characters.
   // This prevents constructions like 'a..b.com' or '-sub.domain.com'.
-  if (!/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/.test(v)) return null;
+  if (!/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])$/.test(v)) return null;
 
   return v;
 }

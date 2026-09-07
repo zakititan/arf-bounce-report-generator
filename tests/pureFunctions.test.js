@@ -1,8 +1,28 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { escapeHtml, parseCsvRow, sanitiseDomainInput, sanitiseAccountInput } from '../scripts/pure.js';
+import {
+  escapeHtml,
+  parseCsvRow,
+  sanitiseDomainInput,
+  sanitiseAccountInput,
+  completeUnsuspendResults,
+  matchesUnsuspendRequest,
+  shouldFinishUnsuspendTracking,
+  createUnsuspendRequestId,
+  consumePendingRequest,
+  createRequestContextKey,
+  svgMarkup,
+  validateAccountIdentifier,
+  parseAccountList,
+  validateExtensionResult,
+} from '../scripts/pure.js';
 import { describeReason, getCached, setCache } from '../scripts/api.js';
 import { parseAgeToDays } from '../scripts/ui.js';
+import {
+  buildUnsuspendAccounts,
+  cleanSheetReason,
+  getSheetReportType,
+} from '../scripts/report-actions.js';
 
 // ── escapeHtml ────────────────────────────────────────────────────────
 describe('escapeHtml', () => {
@@ -251,5 +271,195 @@ describe('sanitiseAccountInput', () => {
 
   it('does not lowercase domain (unlike sanitiseDomainInput)', () => {
     assert.equal(sanitiseAccountInput('Example.COM'), 'Example.COM');
+  });
+});
+
+describe('validateExtensionResult URL security', () => {
+  it('rejects unsafe JIRA and Sheets URLs, including HTML payloads', () => {
+    assert.equal(validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_RESULT', requestId: 'jira_1', success: true,
+      issueKey: 'NEW-1', url: 'javascript:alert(1)',
+    }), false);
+    assert.equal(validateExtensionResult({
+      type: 'REPORT_GENERATOR_LOG_SHEET_RESULT', requestId: 'sheet_1', success: true,
+      cellUrl: 'data:text/html,<img src=x onerror=alert(1)>',
+    }), false);
+  });
+
+  it('accepts expected HTTPS result URLs', () => {
+    assert.equal(validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_RESULT', requestId: 'jira_1', success: true,
+      issueKey: 'NEW-1', url: 'https://jira.directi.com/browse/NEW-1',
+    }), true);
+    assert.equal(validateExtensionResult({
+      type: 'REPORT_GENERATOR_LOG_SHEET_RESULT', requestId: 'sheet_1', success: true,
+      cellUrl: 'https://docs.google.com/spreadsheets/d/abc/edit#gid=1&range=A1',
+    }), true);
+  });
+});
+
+describe('svgMarkup', () => {
+  it('builds an escaped attribute wrapper around trusted icon content', () => {
+    assert.equal(
+      svgMarkup('<path/>', { width: '16', 'aria-hidden': 'true' }),
+      '<svg width="16" aria-hidden="true"><path/></svg>',
+    );
+  });
+
+  it('omits attributes whose names are not allowed', () => {
+    assert.equal(
+      svgMarkup('<path/>', { width: '16', onload: 'alert(1)' }),
+      '<svg width="16"><path/></svg>',
+    );
+  });
+});
+
+describe('account validation', () => {
+  it('accepts email and domain account identifiers', () => {
+    assert.equal(validateAccountIdentifier('user+tag@example.com'), true);
+    assert.equal(validateAccountIdentifier('sub.example.co.uk'), true);
+    assert.equal(validateAccountIdentifier('example.xn--p1ai'), true);
+  });
+
+  it('rejects malformed account identifiers', () => {
+    assert.equal(validateAccountIdentifier('example.x'), false);
+    assert.equal(validateAccountIdentifier('user@example.x'), false);
+    assert.equal(validateAccountIdentifier('user@@example.com'), false);
+    assert.equal(validateAccountIdentifier('bad domain.example'), false);
+    assert.equal(validateAccountIdentifier('javascript:alert(1)'), false);
+    assert.equal(validateAccountIdentifier('example.xn--'), false);
+  });
+
+  it('parses valid comma-separated account lists', () => {
+    assert.deepEqual(
+      parseAccountList('one@example.com, sub.example.com, two@example.com'),
+      ['one@example.com', 'sub.example.com', 'two@example.com'],
+    );
+  });
+
+  it('rejects malformed comma-separated account lists', () => {
+    assert.equal(parseAccountList('one@example.com, not an account'), null);
+    assert.equal(parseAccountList('one@example.com,,two@example.com'), null);
+  });
+});
+
+describe('concurrent request state', () => {
+  it('consumes only the matching request and ignores completed or unknown responses', () => {
+    const pending = new Map([
+      ['jira-one', { panel: 'arf' }],
+      ['jira-two', { panel: 'bounce' }],
+    ]);
+
+    assert.deepEqual(consumePendingRequest(pending, 'jira-two'), { panel: 'bounce' });
+    assert.deepEqual(consumePendingRequest(pending, 'jira-one'), { panel: 'arf' });
+    assert.equal(consumePendingRequest(pending, 'jira-two'), null);
+    assert.equal(consumePendingRequest(pending, 'unknown'), null);
+    assert.equal(pending.size, 0);
+  });
+
+  it('creates distinct storage keys for each report and request context', () => {
+    assert.notEqual(
+      createRequestContextKey('report-1', 'arf', 'jira-one'),
+      createRequestContextKey('report-1', 'arf', 'jira-two'),
+    );
+    assert.notEqual(
+      createRequestContextKey('report-1', 'arf', 'jira-one'),
+      createRequestContextKey('report-2', 'arf', 'jira-one'),
+    );
+  });
+});
+
+describe('shouldFinishUnsuspendTracking', () => {
+  it('finishes as soon as every expected account reports', () => {
+    assert.equal(shouldFinishUnsuspendTracking({ resultCount: 2, expected: 2, now: 10, deadline: 100 }), true);
+  });
+
+  it('does not finish incomplete tracking at the soft 45-second point', () => {
+    assert.equal(shouldFinishUnsuspendTracking({ resultCount: 1, expected: 2, now: 45_000, deadline: 90_000 }), false);
+  });
+
+  it('finishes incomplete tracking at the hard deadline', () => {
+    assert.equal(shouldFinishUnsuspendTracking({ resultCount: 1, expected: 2, now: 90_000, deadline: 90_000 }), true);
+  });
+});
+
+describe('completeUnsuspendResults', () => {
+  it('adds unverified results for accounts that did not report', () => {
+    assert.deepEqual(
+      completeUnsuspendResults(['one@example.com', 'two@example.com'], [
+        { account: 'one@example.com', outcome: 'confirmed' },
+      ]),
+      [
+        { account: 'one@example.com', outcome: 'confirmed' },
+        { account: 'two@example.com', outcome: 'unverified' },
+      ],
+    );
+  });
+});
+
+describe('matchesUnsuspendRequest', () => {
+  it('requires a request ID when an active request has one', () => {
+    assert.equal(matchesUnsuspendRequest('current', undefined), false);
+    assert.equal(matchesUnsuspendRequest('current', 'old'), false);
+    assert.equal(matchesUnsuspendRequest('current', 'current'), true);
+  });
+
+  it('accepts legacy responses when no correlated request is active', () => {
+    assert.equal(matchesUnsuspendRequest(null, undefined), true);
+    assert.equal(matchesUnsuspendRequest(null, 'legacy-compatible'), true);
+  });
+});
+
+describe('matchesRequest', () => {
+  it('uses legacy compatibility only when no request is active', async () => {
+    const { matchesRequest } = await import('../scripts/pure.js');
+    assert.equal(matchesRequest(null, undefined), true);
+    assert.equal(matchesRequest('current', undefined), false);
+    assert.equal(matchesRequest('current', 'old'), false);
+    assert.equal(matchesRequest('current', 'current'), true);
+  });
+});
+
+describe('createUnsuspendRequestId', () => {
+  it('creates a stable, traceable ID from supplied time and entropy', () => {
+    assert.equal(createUnsuspendRequestId(1234, 0.5), 'unsuspend-ya-89oqgw');
+  });
+});
+
+describe('buildUnsuspendAccounts', () => {
+  it('includes blocked accounts while filtering the main account', () => {
+    assert.deepEqual(
+      buildUnsuspendAccounts('main@example.com', 'bounce', 'Yes', 'other@example.com, main@example.com, third@example.com'),
+      ['main@example.com', 'other@example.com', 'third@example.com'],
+    );
+  });
+
+  it('does not add blocked accounts for non-bounce panels', () => {
+    assert.deepEqual(
+      buildUnsuspendAccounts('main@example.com', 'arf', 'Yes', 'other@example.com'),
+      ['main@example.com'],
+    );
+  });
+
+  it('rejects malformed main or comma-separated accounts', () => {
+    assert.equal(buildUnsuspendAccounts('not an account', 'bounce', 'No', ''), null);
+    assert.equal(buildUnsuspendAccounts('main@example.com', 'bounce', 'Yes', 'bad account'), null);
+  });
+});
+
+describe('getSheetReportType', () => {
+  it('maps panel prefixes to sheet report types', () => {
+    assert.equal(getSheetReportType('arf'), 'ARF');
+    assert.equal(getSheetReportType('smtpsuspend'), 'SMTP');
+    assert.equal(getSheetReportType('bounce'), 'BOUNCE');
+  });
+});
+
+describe('cleanSheetReason', () => {
+  it('removes report markers and screenshot labels while preserving report content', () => {
+    assert.equal(
+      cleanSheetReason('#ARF\nReason line\n── Screenshots ──\n1. proof.PNG\n#Bounce'),
+      'Reason line',
+    );
   });
 });

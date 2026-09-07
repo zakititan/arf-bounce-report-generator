@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import * as rgLib from '../extension/rg-lib.js';
 import {
   REASON_TTL_MS,
   JIRA_DONE_TRANSITION_ID,
@@ -8,6 +9,15 @@ import {
   extractImagesRegex,
   buildFallbackJiraUrl,
   isReasonFresh,
+  isSuccessfulResponse,
+  createRequestContextKey,
+  getScopedJiraUrl,
+  selectJiraUrl,
+  createUnsuspendReasonKey,
+  createUnsuspendVerifyKey,
+  isSafeJiraUrl,
+  isSafeGoogleSheetsUrl,
+  isValidAccountIdentifier,
 } from '../extension/rg-lib.js';
 
 // ── constants ─────────────────────────────────────────────────────────
@@ -18,6 +28,140 @@ describe('constants', () => {
 
   it('exports JIRA_DONE_TRANSITION_ID of "71"', () => {
     assert.equal(JIRA_DONE_TRANSITION_ID, '71');
+  });
+});
+
+describe('isSuccessfulResponse', () => {
+  it('counts only an ok HTTP response as successful', () => {
+    assert.equal(isSuccessfulResponse({ ok: true, status: 200 }), true);
+    assert.equal(isSuccessfulResponse({ ok: false, status: 500 }), false);
+  });
+
+  it('does not treat a missing response as successful', () => {
+    assert.equal(isSuccessfulResponse(null), false);
+  });
+});
+
+describe('web app message security helpers', () => {
+  it('uses distinct request-scoped keys for unsuspension state', () => {
+    assert.notEqual(createUnsuspendReasonKey('run-1'), createUnsuspendReasonKey('run-2'));
+    assert.notEqual(createUnsuspendVerifyKey('run-1', 'a@example.com'), createUnsuspendVerifyKey('run-2', 'a@example.com'));
+    assert.notEqual(createUnsuspendVerifyKey('run-1', 'a@example.com'), createUnsuspendVerifyKey('run-1', 'b@example.com'));
+  });
+
+  it('accepts only expected JIRA and Google Sheets HTTPS result URLs', () => {
+    assert.equal(isSafeJiraUrl('https://jira.directi.com/browse/NEW-1'), true);
+    assert.equal(isSafeGoogleSheetsUrl('https://docs.google.com/spreadsheets/d/abc123/edit#gid=1&range=A1'), true);
+    for (const url of [
+      'javascript:alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'https://evil.example/browse/NEW-1',
+      'http://jira.directi.com/browse/NEW-1',
+      'https://docs.google.com/document/d/abc123',
+    ]) {
+      assert.equal(isSafeJiraUrl(url) || isSafeGoogleSheetsUrl(url), false, url);
+    }
+  });
+
+  it('rejects one-character TLDs but accepts valid punycode accounts', () => {
+    assert.equal(isValidAccountIdentifier('example.x'), false);
+    assert.equal(isValidAccountIdentifier('user@example.x'), false);
+    assert.equal(isValidAccountIdentifier('example.xn--p1ai'), true);
+    assert.equal(isValidAccountIdentifier('user@example.xn--p1ai'), true);
+  });
+
+  it('accepts the production and project-scoped Vercel preview origins only', () => {
+    assert.equal(rgLib.isAllowedWebAppOrigin('https://arf-bounce-report-generator.vercel.app'), true);
+    assert.equal(rgLib.isAllowedWebAppOrigin('https://arf-bounce-report-generator-git-test-project-improvements-zaki-titans-projects.vercel.app'), true);
+    assert.equal(rgLib.isAllowedWebAppOrigin('https://preview-123.vercel.app'), false);
+    assert.equal(rgLib.isAllowedWebAppOrigin('http://localhost:3000'), true);
+    assert.equal(rgLib.isAllowedWebAppOrigin('https://evil.example'), false);
+    assert.equal(rgLib.isAllowedWebAppOrigin('null'), false);
+  });
+
+  it('validates result payload shapes before the app consumes them', () => {
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_RESULT', requestId: 'jira_123', success: true,
+      issueKey: 'NEW-1', url: 'https://jira.directi.com/browse/NEW-1'
+    }), true);
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_RESULT', requestId: 'jira_123', success: true,
+      issueKey: 'NEW-1'
+    }), false);
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'REPORT_GENERATOR_LOG_SHEET_RESULT', requestId: 'sheet_123', success: false, error: 'failed'
+    }), true);
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'PARTNER_PANEL_RESULT', requestId: 'partner_123', data: { success: true }
+    }), true);
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'PARTNER_PANEL_RESULT', requestId: 'partner_123', data: 'forged'
+    }), false);
+  });
+
+  it('rejects malformed or invalid result request IDs', () => {
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', requestId: 'bad id', success: false
+    }), false);
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', success: false
+    }), true);
+  });
+
+  it('generates distinct IDs for distinct submissions even with identical inputs', () => {
+    const first = rgLib.createRequestId('jira', 1234, 0.5);
+    const second = rgLib.createRequestId('jira', 1234, 0.5);
+    assert.notEqual(first, second);
+  });
+
+  it('requires typed JIRA payload fields before forwarding', () => {
+    assert.equal(rgLib.validateWebAppMessage({
+      type: 'REPORT_GENERATOR_JIRA', text: 'report', html: '', panel: 'arf',
+      account: 'user@example.com', requestId: 'jira_123'
+    }), true);
+    assert.equal(rgLib.validateWebAppMessage({
+      type: 'REPORT_GENERATOR_JIRA', text: '', html: '', panel: 'arf',
+      account: 'user@example.com', requestId: 'jira_123'
+    }), false);
+    assert.equal(rgLib.validateWebAppMessage({
+      type: 'REPORT_GENERATOR_JIRA', text: 'report', html: '', panel: 'arf',
+      account: 'not an account', requestId: 'jira_123'
+    }), false);
+  });
+
+  it('accepts comma-separated valid accounts with or without spaces', () => {
+    assert.deepEqual(rgLib.normalizeAccountList('one@example.com,two.example.com, three@example.net'), [
+      'one@example.com', 'two.example.com', 'three@example.net'
+    ]);
+    assert.equal(rgLib.validateWebAppMessage({
+      type: 'REPORT_GENERATOR_UNSUSPEND', accounts: ['one@example.com', 'two.example.com'],
+      text: 'report', html: '', panel: 'bounce', requestId: 'unsuspend_123'
+    }), true);
+    assert.equal(rgLib.validateWebAppMessage({
+      type: 'REPORT_GENERATOR_UNSUSPEND', accounts: ['one@example.com', 'bad account'],
+      text: 'report', html: '', panel: 'bounce', requestId: 'unsuspend_123'
+    }), false);
+  });
+
+  it('returns a stored JIRA URL only for the current report context', () => {
+    const key = createRequestContextKey('report_2', 'bounce', 'jira_2');
+    const stored = {
+      [key]: { url: 'https://jira.directi.com/browse/NEW-1' },
+      [createRequestContextKey('report_2', 'bounce', 'jira_3')]: { url: 'https://jira.directi.com/browse/NEW-3' },
+    };
+    assert.equal(getScopedJiraUrl(stored, 'report_2', 'bounce', 'jira_2'), stored[key].url);
+    assert.equal(getScopedJiraUrl(stored, 'report_2', 'bounce', 'jira_3'), 'https://jira.directi.com/browse/NEW-3');
+    assert.equal(getScopedJiraUrl(stored, 'report_1', 'bounce', 'jira_2'), '');
+    assert.equal(getScopedJiraUrl(stored, 'report_2', 'arf', 'jira_2'), '');
+    assert.equal(getScopedJiraUrl(stored, 'report_2', 'bounce', 'jira_1'), '');
+    assert.equal(getScopedJiraUrl({ lastJiraUrl: stored }, 'report_2', 'bounce', 'jira_2'), '');
+  });
+
+  it('prefers the current panel JIRA link and falls back to scoped storage', () => {
+    const stored = 'https://jira.directi.com/browse/NEW-3';
+    assert.equal(selectJiraUrl('https://jira.directi.com/browse/NEW-4', stored), 'https://jira.directi.com/browse/NEW-4');
+    assert.equal(selectJiraUrl('', stored), stored);
+    assert.equal(selectJiraUrl('javascript:alert(1)', stored), stored);
   });
 });
 

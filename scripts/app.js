@@ -15,9 +15,10 @@
 
 import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx,
          fetchLaravelCheck, fetchXmlrpcCheck, fetchWordPressCheck } from './api.js';
-import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow } from './pure.js';
+import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, matchesRequest, consumePendingRequest, createUnsuspendRequestId, createRequestId, createRequestContextKey, isAllowedWebAppOrigin, validateExtensionResult, validateUnsuspendOutcome, validateAccountIdentifier, isSafeJiraUrl } from './pure.js';
+import { buildUnsuspendAccounts, cleanSheetReason, getSheetReportType } from './report-actions.js';
 import {
-  showToast, initThemeToggle,
+  showToast, showToastLink, initThemeToggle,
   clearFieldErrors, showValidationErrors,
   handleDragOver, handleDragLeave,
   handleCsvDragOver, handleCsvDragLeave,
@@ -181,17 +182,25 @@ document.addEventListener('DOMContentLoaded', () => {
   }).catch(() => {});
 
   window.addEventListener('message', (e) => {
+    if (e.source !== window || !isAllowedWebAppOrigin(e.origin) ||
+        !validateExtensionResult(e.data) || e.data.type !== 'PARTNER_PANEL_RESULT' ||
+        !matchesRequest(_activePartnerRequestId, e.data.requestId)) return;
     if (e.data && e.data.type === 'PARTNER_PANEL_RESULT') {
       setPartnerPanelResult(e.data.data);
+      _activePartnerRequestId = null;
     }
   });
 
 });
 
-// Panel that initiated the latest extension request — result messages are
-// anonymous, so replies are routed by remembering the initiator.
-let _lastJiraPanel = null;
+// Each extension request owns its panel, report, and button state. Responses
+// can therefore arrive in any order without stealing another request's UI.
+const _pendingJiraRequests = new Map();
+const _jiraRequestByReport = {};
+const _reportContextIds = {};
 let _lastUnsuspendPanel = null;
+let _activeUnsuspendRequestId = null;
+let _activePartnerRequestId = null;
 // Assigned during init; lets top-level code (e.g. Clear) cancel an in-flight
 // unsuspension tracking session for a panel.
 let _cancelUnsuspendTracking = null;
@@ -210,7 +219,7 @@ function setPanelJiraLink(prefix, issueKey, url, extra) {
   const err = document.getElementById(prefix + '-jira-error');
   wrap.hidden = false;
   row.hidden = false;
-  if (issueKey && url) {
+  if (issueKey && isSafeJiraUrl(url)) {
     link.hidden = false;
     link.href = url;
     link.textContent = issueKey + (extra || '');
@@ -250,14 +259,18 @@ function renderUnsuspendVerdicts(prefix, accounts, results, final) {
 }
 
 window.addEventListener('message', (e) => {
+  if (e.source !== window || !isAllowedWebAppOrigin(e.origin) || !validateExtensionResult(e.data)) return;
   const d = e.data || {};
   const action = PENDING_RESULT_ACTIONS[d.type];
   if (!action) return;
-  document.querySelectorAll('[data-action="' + action + '"][data-original-html]').forEach(resetBtn);
 
   if (d.type === 'REPORT_GENERATOR_JIRA_RESULT') {
-    const prefix = _lastJiraPanel;
+    const request = consumePendingRequest(_pendingJiraRequests, d.requestId);
+    if (!request) return;
+    resetBtn(request.button);
+    const prefix = request.panel;
     if (d.success && d.issueKey && d.url) {
+      _jiraRequestByReport[createRequestContextKey(request.reportId, prefix, '')] = d.requestId;
       const imgExtra = d.imagesTotal > 0 && d.imagesUploaded < d.imagesTotal
         ? ' (' + d.imagesUploaded + '/' + d.imagesTotal + ' img)' : '';
       if (prefix) setPanelJiraLink(prefix, d.issueKey, d.url, imgExtra);
@@ -270,6 +283,9 @@ window.addEventListener('message', (e) => {
   }
 
   // REPORT_GENERATOR_UNSUSPEND_RESULT
+  if (!matchesUnsuspendRequest(_activeUnsuspendRequestId, d.requestId)) return;
+  document.querySelectorAll('[data-action="' + action + '"][data-original-html]').forEach(resetBtn);
+  console.log('[Report→Unsuspend][' + (d.requestId || 'legacy') + '] JIRA result received');
   const prefix = _lastUnsuspendPanel;
   const status = d.unsuspendStatus;
   if (status && status.done === false) {
@@ -287,15 +303,18 @@ window.addEventListener('message', (e) => {
 
 // ── Unsuspension confirmation (verdicts relayed from Abuse Desk tabs) ──
 let _unsuspendConfirm = null;
+const UNSUSPEND_HARD_TIMEOUT_MS = 90_000;
 const _lastFailedAccounts = {};
 
 function finishUnsuspendTracking() {
   const session = _unsuspendConfirm;
   _unsuspendConfirm = null;
+  _activeUnsuspendRequestId = null;
   if (!session) return;
-  const r = session.results;
-  // Legacy extensions never send verdicts — hide the pending chips and
-  // stay quiet instead of nagging.
+  clearTimeout(session.timer);
+  const r = completeUnsuspendResults(session.accounts, session.results);
+  // Legacy extensions never send verdicts; current runs mark those accounts
+  // unverified so they remain visible and retryable.
   if (r.length === 0) {
     hideUnsuspendSection(session.panel);
     return;
@@ -324,9 +343,13 @@ function finishUnsuspendTracking() {
     bad.length ? 'error' : 'warning', { durationMs: 9000 });
 }
 
-function beginUnsuspendTracking(expected, panel, accounts) {
+function beginUnsuspendTracking(expected, panel, accounts, requestId) {
   clearTimeout(_unsuspendConfirm && _unsuspendConfirm.timer);
-  _unsuspendConfirm = { expected, panel, accounts, results: [], timer: setTimeout(finishUnsuspendTracking, 45000) };
+  requestId = requestId || createUnsuspendRequestId();
+  const deadline = Date.now() + UNSUSPEND_HARD_TIMEOUT_MS;
+  _activeUnsuspendRequestId = requestId;
+  _unsuspendConfirm = { expected, panel, accounts, requestId, deadline, results: [], timer: setTimeout(finishUnsuspendTracking, UNSUSPEND_HARD_TIMEOUT_MS) };
+  console.log('[Report→Unsuspend][' + requestId + '] tracking ' + expected + ' account(s)');
   _lastFailedAccounts[panel] = [];
   const retryBtn = document.getElementById(panel + '-retry-unsuspend');
   if (retryBtn) retryBtn.hidden = true;
@@ -336,18 +359,23 @@ function beginUnsuspendTracking(expected, panel, accounts) {
 _cancelUnsuspendTracking = function (prefix) {
   if (_unsuspendConfirm && _unsuspendConfirm.panel === prefix) {
     clearTimeout(_unsuspendConfirm.timer);
+    _activeUnsuspendRequestId = null;
     _unsuspendConfirm = null;
     hideUnsuspendSection(prefix);
   }
 };
 
 window.addEventListener('message', (e) => {
+  if (e.source !== window || !isAllowedWebAppOrigin(e.origin)) return;
   const outcome = e.data && e.data.type === 'REPORT_GENERATOR_UNSUSPEND_OUTCOME' ? e.data.outcome : null;
+  if (!validateUnsuspendOutcome(outcome)) return;
   if (!outcome || !_unsuspendConfirm) return;
+  if (!matchesUnsuspendRequest(_unsuspendConfirm.requestId, outcome.requestId)) return;
   if (_unsuspendConfirm.results.some(x => x.account && x.account === outcome.account)) return; // dedupe
   _unsuspendConfirm.results.push(outcome);
+  console.log('[Report→Unsuspend][' + _unsuspendConfirm.requestId + '] outcome for ' + (outcome.account || 'unknown') + ': ' + outcome.outcome);
   renderUnsuspendVerdicts(_unsuspendConfirm.panel, _unsuspendConfirm.accounts, _unsuspendConfirm.results, false);
-  if (_unsuspendConfirm.results.length >= _unsuspendConfirm.expected) finishUnsuspendTracking();
+  if (shouldFinishUnsuspendTracking({ resultCount: _unsuspendConfirm.results.length, expected: _unsuspendConfirm.expected, now: Date.now(), deadline: _unsuspendConfirm.deadline })) finishUnsuspendTracking();
 });
 
 // ── Delegated click handler for retry-unsuspend buttons ──
@@ -1271,6 +1299,7 @@ function validateBounce() {
 
 // ── ARF Generate / Clear ──────────────────────────────────────────────
 function renderReportOutput(prefix, lines, fullCopyText, inlineScreenshots) {
+  _reportContextIds[prefix] = createUnsuspendRequestId();
   const outputSection = document.getElementById(prefix + '-output-section');
   const outputArea = outputSection.querySelector('.output-area');
   const copyBtn = outputArea.querySelector('.copy-btn-wrap');
@@ -1745,6 +1774,10 @@ function createTaeJira(prefix, btn) {
   copyOutputWithFeedback(prefix + '-output-text');
 
   const account = document.getElementById(prefix + '-account')?.value.trim() || '';
+  if (!validateAccountIdentifier(account)) {
+    showToast('Please enter a valid email address or domain.', 'warning');
+    return;
+  }
   const zdLink = document.getElementById(prefix + '-zd-link')?.value.trim() || '';
   const typeLabel = prefix === 'arf' ? 'ARF' : prefix === 'smtpsuspend' ? 'SMTP Compromised' : 'Bounce';
   const summary = encodeURIComponent(typeLabel + ' unsuspension request: ' + account);
@@ -1760,7 +1793,9 @@ function createTaeJira(prefix, btn) {
     .map(el => el.outerHTML).join('') : '';
   const region = (state[prefix] || state.arf).region === 'eu' ? 'eu-central-1' : 'us-east-1';
   setBtnPending(btn, 'Creating…');
-  _lastJiraPanel = prefix;
+  const reportId = _reportContextIds[prefix] || (_reportContextIds[prefix] = createUnsuspendRequestId());
+  const requestId = createRequestId('jira');
+  _pendingJiraRequests.set(requestId, { panel: prefix, reportId, button: btn });
   window.postMessage({
     type: 'REPORT_GENERATOR_JIRA',
     text: reportText,
@@ -1770,6 +1805,8 @@ function createTaeJira(prefix, btn) {
     zdLink: zdLink,
     region: region,
     timestamp: Date.now(),
+    requestId,
+    reportId,
   }, '*');
 
   showToast('Creating JIRA ticket...', 'info');
@@ -1783,26 +1820,24 @@ function unsuspendAccount(prefix, btn) {
   }
 
   const account = document.getElementById(prefix + '-account')?.value.trim() || '';
-  if (!account) {
-    showToast('Please enter an account name.', 'warning');
+  if (!validateAccountIdentifier(account)) {
+    showToast('Please enter a valid email address or domain.', 'warning');
     return;
   }
 
   // Build accounts array: main account + blocked accounts (if any)
-  const accounts = [account];
-  if (prefix === 'bounce') {
-    const otherBlocked = document.getElementById('bounce-other-blocked')?.value;
-    if (otherBlocked === 'Yes') {
-      const blockedRaw = document.getElementById('bounce-other-blocked-detail')?.value.trim() || '';
-      if (blockedRaw) {
-        const blocked = blockedRaw.split(',').map(s => s.trim()).filter(s => s && s !== account);
-        accounts.push(...blocked);
-      }
-    }
+  const otherBlocked = prefix === 'bounce' ? document.getElementById('bounce-other-blocked')?.value : undefined;
+  const blockedDetail = prefix === 'bounce' ? document.getElementById('bounce-other-blocked-detail')?.value : undefined;
+  const accounts = buildUnsuspendAccounts(account, prefix, otherBlocked, blockedDetail);
+  if (!accounts) {
+    showToast('Please enter valid comma-separated email addresses or domains.', 'warning');
+    return;
   }
 
   const zdLink = document.getElementById(prefix + '-zd-link')?.value.trim() || '';
   const region = (state[prefix] || state.arf).region === 'eu' ? 'eu-central-1' : 'us-east-1';
+  const requestId = createUnsuspendRequestId();
+  const reportId = _reportContextIds[prefix] || createUnsuspendRequestId();
 
   let reason;
   if (prefix === 'ipspike') {
@@ -1829,13 +1864,15 @@ function unsuspendAccount(prefix, btn) {
     html: reportHtml,
     panel: prefix,
     zdLink: zdLink,
+    requestId: requestId,
+    reportId: reportId,
   }, '*');
 
   const msg = accounts.length > 1
     ? 'Opening Abuse Desk for ' + accounts.length + ' accounts...'
     : 'Opening Abuse Desk to unsuspend ' + account + '...';
   showToast(msg, 'info');
-  beginUnsuspendTracking(accounts.length, prefix, accounts);
+  beginUnsuspendTracking(accounts.length, prefix, accounts, requestId);
 }
 
 function retryUnsuspend(prefix) {
@@ -1860,6 +1897,8 @@ function retryUnsuspend(prefix) {
     .map(el => el.outerHTML).join('') : '';
 
   _lastUnsuspendPanel = prefix;
+  const requestId = createUnsuspendRequestId();
+  const reportId = _reportContextIds[prefix] || createUnsuspendRequestId();
   window.postMessage({
     type: 'REPORT_GENERATOR_UNSUSPEND_NO_JIRA',
     accounts: accounts,
@@ -1870,11 +1909,14 @@ function retryUnsuspend(prefix) {
     html: reportHtml,
     panel: prefix,
     zdLink: zdLink,
+    requestId: requestId,
+    reportId: reportId,
   }, '*');
+
+  beginUnsuspendTracking(accounts.length, prefix, accounts, requestId);
 
   const msg = 'Retrying unsuspension for ' + accounts.length + ' account' + (accounts.length > 1 ? 's' : '') + '...';
   showToast(msg, 'info');
-  beginUnsuspendTracking(accounts.length, prefix, accounts);
 }
 
 function logToSheet(prefix) {
@@ -1890,25 +1932,25 @@ function logToSheet(prefix) {
   const outputArea = outputSection.querySelector('.output-area');
   const reportText = (outputArea?.dataset.copyText) ||
                      document.getElementById(prefix + '-output-text')?.textContent || '';
-  const type = prefix === 'arf' ? 'ARF' : prefix === 'smtpsuspend' ? 'SMTP' : 'BOUNCE';
+  const type = getSheetReportType(prefix);
   const date = new Date().toLocaleDateString('en-US');
+  const reportId = _reportContextIds[prefix] || createUnsuspendRequestId();
+  const requestId = createRequestId('sheet');
+  const jiraRequestId = _jiraRequestByReport[createRequestContextKey(reportId, prefix, '')] || '';
 
-  const cleanedReason = reportText
-    .split('\n')
-    .filter(l => !l.startsWith('#ARF') && !l.startsWith('#Bounce') && !l.startsWith('#SMTP Suspension'))
-    .filter(l => !/^── (Screenshots|Assurance Screenshots) ──$/.test(l.trim()))
-    .filter(l => !/^\d+\.\s+\S+\.(png|jpg|jpeg|gif|webp)$/i.test(l.trim()))
-    .join('\n')
-    .trim();
+  const cleanedReason = cleanSheetReason(reportText);
 
   const listener = (e) => {
+    if (e.source !== window || !isAllowedWebAppOrigin(e.origin) ||
+        !validateExtensionResult(e.data) || e.data.type !== 'REPORT_GENERATOR_LOG_SHEET_RESULT' ||
+        !matchesRequest(requestId, e.data.requestId)) return;
     if (e.data && e.data.type === 'REPORT_GENERATOR_LOG_SHEET_RESULT') {
       window.removeEventListener('message', listener);
       clearTimeout(timeout);
       resetBtn(btn);
       if (e.data.success) {
         if (e.data.cellUrl) {
-          showToast('Logged to Sheet ✓ <a href="' + e.data.cellUrl + '" target="_blank" rel="noopener">View row</a>', 'success', { html: true, durationMs: 8000 });
+          showToastLink('Logged to Sheet ✓ ', 'View row', e.data.cellUrl, 'success', 8000);
         } else if (e.data.unverified) {
           showToast('Sent to Sheet (delivery unverified)', 'success');
         } else {
@@ -1930,8 +1972,13 @@ function logToSheet(prefix) {
     domainEmail: account,
     reportType: type,
     reason: cleanedReason,
+    jiraLink: document.getElementById(prefix + '-jira-link')?.href || '',
     sheetId: sheetConfig.sheetId,
     appsScriptUrl: sheetConfig.appsScriptUrl,
+    panel: prefix,
+    reportId,
+    jiraRequestId,
+    requestId,
   }, '*');
 
   showToast('Logging to Sheet…');
@@ -1945,6 +1992,8 @@ function checkPasswordChange(prefix) {
   }
 
   const btn = document.querySelector('[data-action="check-password"][data-panel="' + prefix + '"]');
+  const requestId = createUnsuspendRequestId();
+  _activePartnerRequestId = requestId;
   if (btn) {
     btn.disabled = true;
     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 0.8s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Checking…';
@@ -1955,6 +2004,7 @@ function checkPasswordChange(prefix) {
   window.postMessage({
     type: 'REPORT_GENERATOR_PARTNER_PANEL_LOOKUP',
     account: account,
+    requestId: requestId,
   }, '*');
 
   showToast('Opening Partner Panel to check password change…', 'info');
