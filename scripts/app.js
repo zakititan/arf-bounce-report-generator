@@ -183,8 +183,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   window.addEventListener('message', (e) => {
     if (e.source !== window || !isAllowedWebAppOrigin(e.origin) ||
-        !validateExtensionResult(e.data) || e.data.type !== 'PARTNER_PANEL_RESULT' ||
-        !matchesRequest(_activePartnerRequestId, e.data.requestId)) return;
+        !validateExtensionResult(e.data) ||
+        (e.data.type !== 'PARTNER_PANEL_RESULT' && e.data.type !== 'REPORT_GENERATOR_ERROR')) return;
+    // ERROR replies without an in-flight lookup are stale or another tab's — ignore.
+    if (e.data.type === 'REPORT_GENERATOR_ERROR' && _activePartnerRequestId == null) return;
+    if (!matchesRequest(_activePartnerRequestId, e.data.requestId)) return;
+    if (e.data && e.data.type === 'REPORT_GENERATOR_ERROR') {
+      setPartnerPanelResult({ success: false, error: describeExtensionError(e.data.code) });
+      _activePartnerRequestId = null;
+      return;
+    }
     if (e.data && e.data.type === 'PARTNER_PANEL_RESULT') {
       setPartnerPanelResult(e.data.data);
       _activePartnerRequestId = null;
@@ -237,6 +245,31 @@ function hideUnsuspendSection(prefix) {
   if (row) row.hidden = true;
 }
 
+function describeExtensionError(code) {
+  if (code === 'STORAGE_UNAVAILABLE') return 'extension storage unavailable — is the extension installed and enabled?';
+  if (code === 'INVALID_MESSAGE') return 'request rejected by the extension (invalid shape)';
+  if (code === 'UNKNOWN_TYPE') return 'request type not supported by the installed extension — update the extension';
+  return 'unknown extension error';
+}
+
+function handleExtensionError(d) {
+  const detail = describeExtensionError(d.code);
+  const jiraRequest = consumePendingRequest(_pendingJiraRequests, d.requestId);
+  if (jiraRequest) {
+    resetBtn(jiraRequest.button);
+    if (jiraRequest.panel) setPanelJiraLink(jiraRequest.panel, null, null);
+    showToast('Extension error: ' + detail, 'error', { durationMs: 6000 });
+    return;
+  }
+  if (_activeUnsuspendRequestId != null && matchesUnsuspendRequest(_activeUnsuspendRequestId, d.requestId)) {
+    document.querySelectorAll('[data-action="unsuspend"][data-original-html]').forEach(resetBtn);
+    if (_lastUnsuspendPanel) _cancelUnsuspendTracking(_lastUnsuspendPanel);
+    _activeUnsuspendRequestId = null;
+    showToast('Extension error: ' + detail, 'error', { durationMs: 6000 });
+  }
+  // No matching pending action (stale or another tab's request) — ignore.
+}
+
 function renderUnsuspendVerdicts(prefix, accounts, results, final) {
   const wrap = document.getElementById(prefix + '-action-results');
   const row = document.getElementById(prefix + '-unsuspend-result');
@@ -252,7 +285,7 @@ function renderUnsuspendVerdicts(prefix, accounts, results, final) {
     chip.textContent = hit
       ? (hit.outcome === 'confirmed' ? '\u2713 ' : hit.outcome === 'failed' ? '\u2717 ' : '? ') + account
       : '\u2026 ' + account;
-    chip.title = hit ? hit.outcome : 'waiting for Abuse Desk';
+    chip.title = hit ? (hit.outcome + (hit.cause ? ' — ' + hit.cause : '')) : 'waiting for Abuse Desk';
     list.appendChild(chip);
   });
   void final;
@@ -261,6 +294,12 @@ function renderUnsuspendVerdicts(prefix, accounts, results, final) {
 window.addEventListener('message', (e) => {
   if (e.source !== window || !isAllowedWebAppOrigin(e.origin) || !validateExtensionResult(e.data)) return;
   const d = e.data || {};
+  // Typed extension errors (invalid payload, missing storage, unknown type)
+  // resolve the matching pending action instead of hanging until timeout.
+  if (d.type === 'REPORT_GENERATOR_ERROR') {
+    handleExtensionError(d);
+    return;
+  }
   const action = PENDING_RESULT_ACTIONS[d.type];
   if (!action) return;
 
@@ -273,7 +312,8 @@ window.addEventListener('message', (e) => {
       _jiraRequestByReport[createRequestContextKey(request.reportId, prefix, '')] = d.requestId;
       const imgExtra = d.imagesTotal > 0 && d.imagesUploaded < d.imagesTotal
         ? ' (' + d.imagesUploaded + '/' + d.imagesTotal + ' img)' : '';
-      if (prefix) setPanelJiraLink(prefix, d.issueKey, d.url, imgExtra);
+      const dropExtra = d.imagesDropped > 0 ? ' (' + d.imagesDropped + ' img over size cap)' : '';
+      if (prefix) setPanelJiraLink(prefix, d.issueKey, d.url, imgExtra + dropExtra);
       showToast('JIRA ' + d.issueKey + ' created \u2713', 'success');
     } else {
       if (prefix) setPanelJiraLink(prefix, null, null);
@@ -1942,8 +1982,16 @@ function logToSheet(prefix) {
 
   const listener = (e) => {
     if (e.source !== window || !isAllowedWebAppOrigin(e.origin) ||
-        !validateExtensionResult(e.data) || e.data.type !== 'REPORT_GENERATOR_LOG_SHEET_RESULT' ||
+        !validateExtensionResult(e.data) ||
+        (e.data.type !== 'REPORT_GENERATOR_LOG_SHEET_RESULT' && e.data.type !== 'REPORT_GENERATOR_ERROR') ||
         !matchesRequest(requestId, e.data.requestId)) return;
+    if (e.data && e.data.type === 'REPORT_GENERATOR_ERROR') {
+      window.removeEventListener('message', listener);
+      clearTimeout(timeout);
+      resetBtn(btn);
+      showToast('Extension error: ' + describeExtensionError(e.data.code), 'error', { durationMs: 6000 });
+      return;
+    }
     if (e.data && e.data.type === 'REPORT_GENERATOR_LOG_SHEET_RESULT') {
       window.removeEventListener('message', listener);
       clearTimeout(timeout);
@@ -1952,7 +2000,7 @@ function logToSheet(prefix) {
         if (e.data.cellUrl) {
           showToastLink('Logged to Sheet ✓ ', 'View row', e.data.cellUrl, 'success', 8000);
         } else if (e.data.unverified) {
-          showToast('Sent to Sheet (delivery unverified)', 'success');
+          showToast('Sent to Sheet (delivery unverified — open the sheet to confirm)', 'warning', { durationMs: 8000 });
         } else {
           showToast('Logged to Sheet ✓', 'success');
         }

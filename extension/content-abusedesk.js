@@ -2,6 +2,17 @@
   var requestId = new URLSearchParams(window.location.search).get('rgRequestId') || 'legacy';
   function log(msg) { console.log('[Report→AbuseDesk] ' + msg); }
 
+  // Pure helpers live in extension/ad-helpers.js (no browser deps). The
+  // content script is a classic script (no imports), so helpers are read as
+  // globals when present, with inline fallbacks mirroring them until the
+  // manifest loads ad-helpers.js before this file.
+  function adHelpers() {
+    try { if (typeof AD_HELPERS !== 'undefined' && AD_HELPERS) return AD_HELPERS; } catch (e) { /* not loaded yet */ }
+    try { if (typeof window !== 'undefined' && window.AD_HELPERS) return window.AD_HELPERS; } catch (e) { /* noop */ }
+    try { if (typeof globalThis !== 'undefined' && globalThis.AD_HELPERS) return globalThis.AD_HELPERS; } catch (e) { /* noop */ }
+    return null;
+  }
+
   function showToast(message) {
     var existing = document.getElementById('rg-unsuspend-toast');
     if (existing) existing.remove();
@@ -54,21 +65,42 @@
           failed: r.outcome === 'failed',
           outcome: r.outcome || 'unknown',
           account: r.account || '',
-          requestId: requestId
+          requestId: requestId,
+          cause: r.cause || ''
         }
       });
     } catch (e) { /* extension context gone — nothing to do */ }
   }
 
   function findUnblockButton() {
-    var el = document.getElementById('unblockBtn');
-    if (!el) {
-      var btns = document.querySelectorAll('button');
-      for (var i = 0; i < btns.length; i++) {
-        if (btns[i].textContent.trim() === 'Unblock') { el = btns[i]; break; }
-      }
+    var h = adHelpers();
+    var toInfo = function (el) {
+      return {
+        text: (el && el.textContent) || '',
+        disabled: !!(el && el.disabled),
+        ariaDisabled: el && el.getAttribute ? el.getAttribute('aria-disabled') : null,
+        hidden: !!(el && (el.hidden || el.offsetParent === null)),
+        visible: !!(el && el.offsetParent !== null)
+      };
+    };
+    var isMatch = function (text) {
+      if (h && h.isUnblockLabel) return h.isUnblockLabel(text);
+      var s = (text == null ? '' : String(text)).replace(/\s+/g, ' ').trim().toLowerCase();
+      return s.replace(/ /g, '') === 'unblock';
+    };
+    var isUsable = function (el) {
+      if (!el) return false;
+      if (h && h.isUnblockButtonCandidate) return h.isUnblockButtonCandidate(toInfo(el));
+      return isMatch(el.textContent) && !el.disabled && el.offsetParent !== null && !el.hidden &&
+        (!el.getAttribute || String(el.getAttribute('aria-disabled') || '').toLowerCase() !== 'true');
+    };
+    var idEl = document.getElementById('unblockBtn');
+    if (idEl && isUsable(idEl)) return idEl;
+    var btns = document.querySelectorAll('button');
+    for (var i = 0; i < btns.length; i++) {
+      if (isUsable(btns[i])) return btns[i];
     }
-    return el || null;
+    return null;
   }
 
   function detectError() {
@@ -114,7 +146,42 @@
     });
   }
 
-  function reasonKey() { return 'unsuspendReason:' + requestId; }
+  function reasonKey() {
+    var h = adHelpers();
+    if (h && h.createSharedReasonKey) return h.createSharedReasonKey(requestId);
+    return 'unsuspendReason:' + requestId;
+  }
+  function perAccountReasonKey(account) {
+    var h = adHelpers();
+    if (h && h.createPerAccountReasonKey) return h.createPerAccountReasonKey(requestId, account);
+    return 'unsuspendReason:' + requestId + ':' + String(account == null ? '' : account).trim().toLowerCase();
+  }
+  function isFreshReason(rec, now) {
+    var h = adHelpers();
+    if (h && h.isFreshReasonRecord) return h.isFreshReasonRecord(rec, now);
+    return rec && typeof rec === 'object' && typeof rec.reason === 'string' && rec.reason !== '' &&
+      typeof rec.ts === 'number' && ((typeof now === 'number' ? now : Date.now()) - rec.ts) <= 90000;
+  }
+  function findReasonTextarea() {
+    var scoped = null;
+    try {
+      scoped = document.querySelector('[role="dialog"] textarea, .modal textarea, form textarea');
+      if (!scoped) {
+        var container = document.querySelector('[role="dialog"], .modal, [class*="modal"], form');
+        if (container) scoped = container.querySelector('textarea');
+      }
+    } catch (e) { scoped = null; }
+    var fallback = null;
+    try { fallback = document.querySelector('textarea'); } catch (e) { fallback = null; }
+    var h = adHelpers();
+    if (h && h.selectPreferredTextarea) return h.selectPreferredTextarea(scoped, fallback);
+    return scoped || fallback || null;
+  }
+  function errorPollTimeoutMs() {
+    var h = adHelpers();
+    if (h && typeof h.ERROR_POLL_TIMEOUT_MS === 'number') return h.ERROR_POLL_TIMEOUT_MS;
+    return 5000;
+  }
   function verifyKey(account) { return 'unsuspendVerify:' + requestId + ':' + encodeURIComponent(account); }
 
   // A marker is scoped to both the run and account. Individual storage keys
@@ -198,7 +265,12 @@
   }
 
   async function run() {
-    chrome.storage.local.get([reasonKey(), verifyKey(new URLSearchParams(window.location.search).get('entity') || '')], async function (result) {
+    var earlyEntity = new URLSearchParams(window.location.search).get('entity') || '';
+    var earlyHelpers = adHelpers();
+    var reasonKeys = earlyHelpers && earlyHelpers.getReasonLookupKeys
+      ? earlyHelpers.getReasonLookupKeys(requestId, earlyEntity)
+      : [perAccountReasonKey(earlyEntity), reasonKey()];
+    chrome.storage.local.get([reasonKeys[0], reasonKeys[1], verifyKey(earlyEntity)], async function (result) {
       var account = new URLSearchParams(window.location.search).get('entity');
       if (!account) { log('No entity in URL — skipping automation'); return; }
 
@@ -215,25 +287,52 @@
       }
 
       // ── Automation mode ──
-      var rec = result[reasonKey()];
-      var fresh = rec && typeof rec === 'object' && typeof rec.reason === 'string' && rec.reason !== '' &&
-                  typeof rec.ts === 'number' && (Date.now() - rec.ts) <= 90000;
-      if (!fresh) { log('No fresh unsuspend reason in storage'); return; }
-      var reason = rec.reason;
+      // Per-account key first (unsuspendReason:{requestId}:{lowercased-account}),
+      // then the shared per-request key. Slow bulks expire later tabs past the
+      // 90s TTL — never hang the run: always reportDone, even with no reason.
+      var hReason = adHelpers();
+      var perRec = result[perAccountReasonKey(account)];
+      var sharedRec = result[reasonKey()];
+      var selected = hReason && hReason.selectFreshReason
+        ? hReason.selectFreshReason(perRec, sharedRec)
+        : (isFreshReason(perRec) ? { reason: perRec.reason, source: 'per-account' }
+          : (isFreshReason(sharedRec) ? { reason: sharedRec.reason, source: 'shared' } : null));
+      if (!selected) {
+        var cause = hReason && hReason.buildMissingReasonCause
+          ? hReason.buildMissingReasonCause(account)
+          : ('No fresh unsuspend reason for ' + account + ' (checked per-account and shared keys, 90s TTL)');
+        log(cause);
+        showToast('\u26A0\uFE0F ' + cause);
+        reportDone({ outcome: 'unverified', account: account, cause: cause });
+        return;
+      }
+      var reason = selected.reason;
 
       log('Starting unsuspend automation for ' + account);
 
       var unblockBtn = await waitFor(findUnblockButton, 10000);
       if (!unblockBtn) {
-        log('Unblock button not found');
-        showToast('Unblock button not found for ' + account);
-        reportDone({ outcome: 'failed', account: account });
+        // No Unblock button: the account may already be Active (no action
+        // needed) — report confirmed instead of failed in that case.
+        var badgeStatus = readUserStatus();
+        var hMissing = adHelpers();
+        var missingOutcome = hMissing && hMissing.classifyNoUnblockOutcome
+          ? hMissing.classifyNoUnblockOutcome(badgeStatus)
+          : (String(badgeStatus || '').trim().toLowerCase() === 'active' ? 'confirmed' : 'failed');
+        if (missingOutcome === 'confirmed') {
+          log('No Unblock button but USER STATUS is Active for ' + account + ' — already unsuspended');
+          showToast('\u2705 Already Active for ' + account + ' — no Unblock needed');
+        } else {
+          log('Unblock button not found');
+          showToast('Unblock button not found for ' + account);
+        }
+        reportDone({ outcome: missingOutcome, account: account });
         return;
       }
       log('Clicking Unblock for ' + account);
       simulateClick(unblockBtn);
 
-      var textarea = await waitFor(function () { return document.querySelector('textarea'); }, 5000);
+      var textarea = await waitFor(findReasonTextarea, 5000);
       if (!textarea) {
         log('Textarea not found');
         showToast('Textarea not found for ' + account);
@@ -259,9 +358,10 @@
       log('Clicking Save for ' + account);
       simulateClick(saveBtn);
 
-      // Fast-fail: a visible error right after saving means no reload needed.
-      await sleep(2500);
-      if (detectError()) {
+      // Fast-fail: poll briefly for a visible error after saving (slow
+      // networks) instead of a fixed sleep-then-check that false-proceeds.
+      var saveError = await waitFor(detectError, errorPollTimeoutMs());
+      if (saveError) {
         showToast('\u274C Unsuspension failed for ' + account + ' — see error on page');
         log('Error indicator shown after save for ' + account);
         reportDone({ outcome: 'failed', account: account });

@@ -296,6 +296,15 @@ describe('validateExtensionResult URL security', () => {
       cellUrl: 'https://docs.google.com/spreadsheets/d/abc/edit#gid=1&range=A1',
     }), true);
   });
+  it('accepts typed extension error replies with known codes', () => {
+    for (const code of ['INVALID_MESSAGE', 'STORAGE_UNAVAILABLE', 'UNKNOWN_TYPE']) {
+      assert.equal(validateExtensionResult({
+        type: 'REPORT_GENERATOR_ERROR', requestId: 'jira_1', code,
+      }), true);
+    }
+    assert.equal(validateExtensionResult({ type: 'REPORT_GENERATOR_ERROR', requestId: 'jira_1' }), false);
+    assert.equal(validateExtensionResult({ type: 'REPORT_GENERATOR_ERROR', requestId: 'jira_1', code: 42 }), false);
+  });
 });
 
 describe('svgMarkup', () => {

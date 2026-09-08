@@ -1,8 +1,10 @@
-import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList, createUnsuspendReasonKey, persistUnsuspendReason, isSafeJiraUrl, isSafeGoogleSheetsUrl } from './rg-lib.js';
+import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList, createUnsuspendReasonKey, createPerAccountUnsuspendReasonKey, persistUnsuspendReason, isSafeJiraUrl, isSafeGoogleSheetsUrl, isSafeAppsScriptUrl, createPendingMap, capInlineImages, isValidJiraCreatePayload, discoverDoneTransitionId, buildBulkSummary } from './rg-lib.js';
 import { fetchWithTimeout } from './timeout.js';
 
 const EXPIRY_MS = 10 * 60 * 1000;
-let _partnerPanelPending = null;
+// Outstanding partner-panel lookups keyed by requestId — concurrent lookups
+// no longer clobber each other the way a single global slot did.
+const _partnerPanelPending = createPendingMap();
 const _openAdTabIds = new Set();
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -41,6 +43,10 @@ async function openSheetAndLog(rowData) {
 
   // Google Apps Script never returns CORS headers for extension origins —
   // skip the CORS attempt (which always fails) and go straight to no-cors.
+  // Only allowlist-approved logging URLs are ever fetched.
+  if (!isSafeAppsScriptUrl(url)) {
+    return { success: false, error: 'Apps Script URL not allowlisted' };
+  }
   const isGas = /script\.google\.com/i.test(url);
   if (!isGas) {
     let response;
@@ -93,6 +99,12 @@ async function handlePartnerPanelLookup(data, sendResponse) {
     tab = await new Promise(function(resolve) {
       chrome.tabs.create({ url: 'https://admin.titan.email', active: false }, resolve);
     });
+    if (!tab || tab.id == null) {
+      const err = (chrome.runtime.lastError && chrome.runtime.lastError.message) || 'Tab creation failed';
+      console.warn('[PartnerPanel] tabs.create failed:', err);
+      sendResponse({ success: false, error: err });
+      return;
+    }
 
     const loaded = await waitForTabLoad(tab.id, 15000);
     if (!loaded) {
@@ -103,18 +115,16 @@ async function handlePartnerPanelLookup(data, sendResponse) {
     await sleep(3000);
 
     const result = await new Promise(function(resolve) {
-      _partnerPanelPending = { requestId, resolve };
+      _partnerPanelPending.set(requestId, { resolve });
       chrome.tabs.sendMessage(tab.id, { action: 'run-partner-panel-lookup', account, requestId }, function(r) {
         if (chrome.runtime.lastError) {
           console.warn('[PartnerPanel] sendMessage error:', chrome.runtime.lastError.message);
-          _partnerPanelPending = null;
-          resolve({ success: false, error: chrome.runtime.lastError.message });
+          _partnerPanelPending.resolve(requestId, { success: false, error: chrome.runtime.lastError.message });
         }
       });
       setTimeout(function() {
-        if (_partnerPanelPending && _partnerPanelPending.requestId === requestId) {
-          _partnerPanelPending = null;
-          resolve({ success: false, error: 'Timeout waiting for partner panel result' });
+        if (_partnerPanelPending.has(requestId)) {
+          _partnerPanelPending.resolve(requestId, { success: false, error: 'Timeout waiting for partner panel result' });
         }
       }, 60000);
     });
@@ -148,6 +158,11 @@ async function openAbuseDeskTabs(accounts, region, requestId) {
     const url = 'https://abusedesk.ops.titan.email/blocked_users.html?entity=' +
       encodeURIComponent(account) + '&region=' + region + (requestId ? '&rgRequestId=' + encodeURIComponent(requestId) : '');
     const tab = await new Promise(resolve => chrome.tabs.create({ url, active: false }, resolve));
+    if (!tab || tab.id == null) {
+      console.warn('[Report→AbuseDesk][' + (requestId || 'legacy') + '] tabs.create failed for ' + account + ':',
+        (chrome.runtime.lastError && chrome.runtime.lastError.message) || 'unknown error');
+      continue;
+    }
     _openAdTabIds.add(tab.id);
     opened++;
   }
@@ -228,12 +243,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleCreateJira(message.data, true)
       .then(async result => {
         if (result.success === true) {
+          // Store the shared per-request key plus one per-account key so slow
+          // bulk tabs can still find a fresh reason under their own account.
+          const accounts = normalizeAccountList(message.data.account);
+          const reasonRecord = { reason: result.issueUrl, ts: Date.now() };
+          const reasonValue = { [createUnsuspendReasonKey(message.data.requestId)]: reasonRecord };
+          for (const account of accounts) {
+            reasonValue[createPerAccountUnsuspendReasonKey(message.data.requestId, account)] = reasonRecord;
+          }
           await persistUnsuspendReason(
             (value, callback) => chrome.storage.local.set(value, callback),
             () => chrome.runtime.lastError,
-            { [createUnsuspendReasonKey(message.data.requestId)]: { reason: result.issueUrl, ts: Date.now() } }
+            reasonValue
           );
-          const accounts = normalizeAccountList(message.data.account);
           try {
             result.opened = await openAbuseDeskTabs(accounts, message.data.region, message.data.requestId);
           } catch (e) {
@@ -288,8 +310,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const requestId = d.requestId || 'legacy';
     console.log('[Report→AbuseDesk][' + requestId + '] tab done for ' + (d.account || 'unknown') + ': ' + outcome);
     // Relay the verdict back to the report page so the user gets an explicit
-    // confirmation there, not just the transient on-page toast.
-    forwardUnsuspendOutcome({ outcome, account: d.account || '', requestId: d.requestId });
+    // confirmation there, not just the transient on-page toast. The cause
+    // (when present) travels with it for the verdict chip tooltip.
+    forwardUnsuspendOutcome({ outcome, account: d.account || '', requestId: d.requestId, cause: d.cause || '' });
     if (typeof tid === 'number' && _openAdTabIds.has(tid)) {
       _openAdTabIds.delete(tid);
       // Let the user read the on-page toast: short on verified, longer otherwise.
@@ -303,10 +326,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const resultReqId = message.requestId !== undefined
       ? message.requestId
       : (message.data && message.data.requestId);
-    if (_partnerPanelPending && resultReqId === _partnerPanelPending.requestId) {
-      _partnerPanelPending.resolve(message.data);
-      _partnerPanelPending = null;
-    }
+    // Unknown/stale keys are ignored (resolve returns false) instead of
+    // clobbering another lookup's slot.
+    if (typeof resultReqId === 'string') _partnerPanelPending.resolve(resultReqId, message.data);
     return;
   }
 });
@@ -315,11 +337,16 @@ async function handleCreateJira(data, andDone) {
   try {
     const { text, html, panel, account, zdLink } = data;
     if (!areValidAccountList(account)) return { success: false, error: 'Invalid account or email domain', status: 400 };
+    if (!isValidJiraCreatePayload({ text, html, account, panel })) {
+      return { success: false, error: 'Empty report: nothing to file (no text and no images)', status: 400 };
+    }
     const requestId = data.requestId || 'legacy';
-    console.log('[Report→JIRA][' + requestId + '] creating issue for ' + account);
+    const cleanAccount = buildBulkSummary(account);
+    console.log('[Report→JIRA][' + requestId + '] creating issue for ' + cleanAccount);
 
-    const issueBody = buildJiraIssueBody({ text, panel, account, zdLink });
-    const images = extractImagesRegex(html);
+    const issueBody = buildJiraIssueBody({ text, panel, account: cleanAccount, zdLink });
+    const capped = capInlineImages(extractImagesRegex(html));
+    const images = capped.kept;
 
     const issueResponse = await fetchWithTimeout('https://jira.directi.com/rest/api/2/issue', {
       method: 'POST',
@@ -377,12 +404,13 @@ async function handleCreateJira(data, andDone) {
       issueUrl,
       imagesUploaded,
       imagesTotal: images.length,
+      imagesDropped: capped.dropped.count,
       imagesFailed: attachmentFailures.length,
       attachmentFailures
     };
 
     if (andDone) {
-      result.unsuspendStatus = await markDone(issueKey, requestId);
+      result.unsuspendStatus = await markDone(issueKey, requestId, cleanAccount);
     }
 
     return result;
@@ -391,15 +419,30 @@ async function handleCreateJira(data, andDone) {
   }
 }
 
-async function markDone(issueKey, requestId = 'legacy') {
+async function markDone(issueKey, requestId = 'legacy', context = '') {
   try {
+    // Discover the Done transition instead of assuming the hardcoded id —
+    // fall back to JIRA_DONE_TRANSITION_ID when discovery fails.
+    let transitionId = JIRA_DONE_TRANSITION_ID;
+    try {
+      const transGetResp = await fetchWithTimeout(
+        `https://jira.directi.com/rest/api/2/issue/${issueKey}/transitions`,
+        { credentials: 'include', headers: { 'Accept': 'application/json' } }
+      );
+      if (transGetResp.ok) {
+        const discovered = discoverDoneTransitionId(await transGetResp.json());
+        if (discovered) transitionId = discovered;
+      }
+    } catch (e) {
+      console.warn('[Report→JIRA][' + requestId + '] transition discovery failed, using default:', e.message);
+    }
     const transPostResp = await fetchWithTimeout(
       `https://jira.directi.com/rest/api/2/issue/${issueKey}/transitions`,
       {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transition: { id: JIRA_DONE_TRANSITION_ID } })
+        body: JSON.stringify({ transition: { id: transitionId } })
       }
     );
 
@@ -415,7 +458,7 @@ async function markDone(issueKey, requestId = 'legacy') {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: 'Unsuspended' })
+        body: JSON.stringify({ body: context ? 'Unsuspended ' + context : 'Unsuspended' })
       }
     );
 

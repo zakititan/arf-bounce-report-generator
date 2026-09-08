@@ -4,6 +4,94 @@
 
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+  function getHelpers() {
+    try {
+      if (typeof globalThis !== 'undefined' && globalThis.ReportGenPartnerHelpers) return globalThis.ReportGenPartnerHelpers;
+      if (typeof window !== 'undefined' && window.ReportGenPartnerHelpers) return window.ReportGenPartnerHelpers;
+    } catch (_) {}
+    return null;
+  }
+
+  function isActiveStatusCell(text) {
+    var h = getHelpers();
+    if (h && typeof h.isActiveStatusCell === 'function') {
+      try { return h.isActiveStatusCell(text); } catch (_) {}
+    }
+    if (typeof text !== 'string') return false;
+    return /\bActive\b/.test(text);
+  }
+
+  function isEmptyOrUnknownStatus(text) {
+    var h = getHelpers();
+    if (h && typeof h.isEmptyOrUnknownStatus === 'function') {
+      try { return h.isEmptyOrUnknownStatus(text); } catch (_) {}
+    }
+    if (typeof text !== 'string') return true;
+    var t = text.trim();
+    if (!t) return true;
+    if (/\bActive\b/.test(t)) return false;
+    if (/\bInactive\b/.test(t)) return false;
+    return true;
+  }
+
+  function isAdminLoginExpiredFromDom() {
+    var pwField = document.querySelector('input[type="password"]');
+    var hasPasswordField = !!pwField;
+    if (!hasPasswordField) return false;
+    var form = null;
+    try { form = pwField.closest('form'); } catch (_) { form = null; }
+    var formAction = '';
+    var buttonTexts = [];
+    try {
+      if (form) {
+        formAction = form.getAttribute('action') || form.action || '';
+        var btns = form.querySelectorAll('button, input[type="submit"], a');
+        for (var i = 0; i < btns.length; i++) {
+          var label = (btns[i].textContent || btns[i].value || '').trim();
+          if (label) buttonTexts.push(label);
+        }
+      } else {
+        var allBtns = document.querySelectorAll('button, a');
+        for (var j = 0; j < allBtns.length; j++) {
+          var txt = (allBtns[j].textContent || '').trim();
+          if (txt) buttonTexts.push(txt);
+        }
+      }
+    } catch (_) {}
+    var desc = {
+      hasPasswordField: hasPasswordField,
+      formAction: formAction || '',
+      buttonTexts: buttonTexts,
+      pathname: (location && location.pathname) || '',
+    };
+    var h = getHelpers();
+    if (h && typeof h.isAdminLoginExpired === 'function') {
+      try { return h.isAdminLoginExpired(desc); } catch (_) {}
+    }
+    if (/login/i.test(desc.formAction)) return true;
+    if (/login/i.test(desc.pathname)) return true;
+    for (var k = 0; k < desc.buttonTexts.length; k++) {
+      if (/log\s*in/i.test(desc.buttonTexts[k]) || /sign\s*in/i.test(desc.buttonTexts[k])) return true;
+    }
+    return false;
+  }
+
+  function waitForCondition(predicate, timeout, interval) {
+    return new Promise(function(resolve) {
+      var start = Date.now();
+      var step = interval || 250;
+      var maxMs = timeout || 10000;
+      var check = function() {
+        var ok = false;
+        try { ok = !!predicate(); } catch (_) { ok = false; }
+        if (ok) { resolve(true); return; }
+        if (Date.now() - start >= maxMs) { resolve(false); return; }
+        setTimeout(check, step);
+      };
+      check();
+    });
+  }
+
   function waitForElement(selector, timeout) {
     return new Promise(function(resolve) {
       var el = document.querySelector(selector);
@@ -145,8 +233,7 @@
 
   async function runPartnerPanelLookup(account, currentRequestId) {
     try {
-      var pwField = document.querySelector('input[type="password"]');
-      if (pwField || /login/i.test(location.pathname)) {
+      if (isAdminLoginExpiredFromDom()) {
         chrome.runtime.sendMessage({ action: 'partner-panel-result', requestId: currentRequestId, data: { success: false, error: 'Partner Panel session expired — log in to admin.titan.email and retry' } });
         return;
       }
@@ -160,7 +247,10 @@
       input.value = account;
       input.dispatchEvent(new Event('input', { bubbles: true }));
       input.dispatchEvent(new Event('change', { bubbles: true }));
-      await sleep(500);
+      await waitForCondition(function() {
+        var btn = document.querySelector('button[name="btndashBoard"], button.dashboard-button, button.button-primary');
+        return !!btn && !btn.disabled;
+      }, 5000, 250);
 
       var getInfoBtn = document.querySelector('button[name="btndashBoard"], button.dashboard-button, button.button-primary');
       if (!getInfoBtn) {
@@ -177,7 +267,15 @@
         return;
       }
 
-      await sleep(1500);
+      await waitForCondition(function() {
+        var rows = document.querySelectorAll('tr, [class*="row"], [class*="Row"]');
+        if (rows.length === 0) return false;
+        var btns = document.querySelectorAll('button');
+        for (var i = 0; i < btns.length; i++) {
+          if ((btns[i].textContent || '').trim() === 'View') return true;
+        }
+        return false;
+      }, 10000, 300);
 
       var viewBtns = document.querySelectorAll('button');
       var activeViewBtn = null;
@@ -185,7 +283,7 @@
 
       for (var r = 0; r < allRows.length; r++) {
         var rowText = allRows[r].textContent;
-        if (rowText.indexOf('Active') !== -1) {
+        if (isActiveStatusCell(rowText)) {
           var btns = allRows[r].querySelectorAll('button');
           for (var b = 0; b < btns.length; b++) {
             if (btns[b].textContent.trim() === 'View') {
@@ -198,23 +296,34 @@
       }
 
       if (!activeViewBtn) {
-        var allViewBtns = document.querySelectorAll('button');
-        for (var v = 0; v < allViewBtns.length; v++) {
-          if (allViewBtns[v].textContent.trim() === 'View') {
-            activeViewBtn = allViewBtns[v];
-            break;
+        for (var fr = 0; fr < allRows.length; fr++) {
+          var fallbackRowText = allRows[fr].textContent;
+          if (!isEmptyOrUnknownStatus(fallbackRowText)) continue;
+          var fallbackBtns = allRows[fr].querySelectorAll('button');
+          for (var fb = 0; fb < fallbackBtns.length; fb++) {
+            if (fallbackBtns[fb].textContent.trim() === 'View') {
+              activeViewBtn = fallbackBtns[fb];
+              break;
+            }
           }
+          if (activeViewBtn) break;
         }
       }
 
       if (!activeViewBtn) {
-        chrome.runtime.sendMessage({ action: 'partner-panel-result', requestId: currentRequestId, data: { success: false, error: 'No View button found' } });
+        chrome.runtime.sendMessage({ action: 'partner-panel-result', requestId: currentRequestId, data: { success: false, error: 'No active order found' } });
         return;
       }
 
       activeViewBtn.click();
       await waitForTextInBody('EMAIL INFORMATION', 10000);
-      await sleep(1500);
+      await waitForCondition(function() {
+        var els = document.querySelectorAll('button, a');
+        for (var i = 0; i < els.length; i++) {
+          if ((els[i].textContent || '').trim().indexOf('View Account History') !== -1) return true;
+        }
+        return false;
+      }, 10000, 300);
 
       var viewHistoryBtn = null;
       var allBtns = document.querySelectorAll('button, a');
@@ -233,23 +342,18 @@
       viewHistoryBtn.click();
       await waitForTextInBody('Action History', 10000);
 
-      var historyReady = await new Promise(function(resolve) {
-        var start = Date.now();
-        var check = function() {
-          var cells = document.querySelectorAll('td.action-history-time');
-          if (cells.length > 0) { resolve(true); return; }
-          if (Date.now() - start > 10000) { resolve(false); return; }
-          setTimeout(check, 300);
-        };
-        check();
-      });
+      var historyReady = await waitForCondition(function() {
+        return document.querySelectorAll('td.action-history-time').length > 0;
+      }, 10000, 300);
 
       if (!historyReady) {
         chrome.runtime.sendMessage({ action: 'partner-panel-result', requestId: currentRequestId, data: { success: false, error: 'Action History rows did not load' } });
         return;
       }
 
-      await sleep(500);
+      await waitForCondition(function() {
+        try { return parseAccountHistory().length > 0; } catch (_) { return false; }
+      }, 5000, 300);
       var events = parseAccountHistory();
 
       chrome.runtime.sendMessage({

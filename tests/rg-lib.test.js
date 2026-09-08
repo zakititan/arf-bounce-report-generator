@@ -14,6 +14,8 @@ import {
   getScopedJiraUrl,
   selectJiraUrl,
   createUnsuspendReasonKey,
+  createPerAccountUnsuspendReasonKey,
+  isSafeAppsScriptUrl,
   createUnsuspendVerifyKey,
   isSafeJiraUrl,
   isSafeGoogleSheetsUrl,
@@ -49,6 +51,23 @@ describe('web app message security helpers', () => {
     assert.notEqual(createUnsuspendVerifyKey('run-1', 'a@example.com'), createUnsuspendVerifyKey('run-1', 'b@example.com'));
   });
 
+  it('builds distinct per-account unsuspend reason keys', () => {
+    assert.equal(createPerAccountUnsuspendReasonKey('run-1', 'A@Example.com'), 'unsuspendReason:run-1:a@example.com');
+    assert.notEqual(createPerAccountUnsuspendReasonKey('run-1', 'a@example.com'), createPerAccountUnsuspendReasonKey('run-1', 'b@example.com'));
+    assert.notEqual(createPerAccountUnsuspendReasonKey('run-1', 'a@example.com'), createUnsuspendReasonKey('run-1'));
+  });
+
+  it('accepts only safe Apps Script logging URLs', () => {
+    assert.equal(isSafeAppsScriptUrl('https://script.google.com/macros/s/abc/exec'), true);
+    assert.equal(isSafeAppsScriptUrl('https://script.googleusercontent.com/macros/echo?x=1'), true);
+    for (const url of [
+      'http://script.google.com/macros/s/abc/exec',
+      'https://evil.example/log',
+      'javascript:alert(1)',
+      '',
+      null,
+    ]) assert.equal(isSafeAppsScriptUrl(url), false);
+  });
   it('accepts only expected JIRA and Google Sheets HTTPS result URLs', () => {
     assert.equal(isSafeJiraUrl('https://jira.directi.com/browse/NEW-1'), true);
     assert.equal(isSafeGoogleSheetsUrl('https://docs.google.com/spreadsheets/d/abc123/edit#gid=1&range=A1'), true);
@@ -420,5 +439,198 @@ describe('isReasonFresh', () => {
 
   it('returns false for a non-string reason', () => {
     assert.equal(isReasonFresh({ reason: 42, ts: now - 1000 }, now), false);
+  });
+});
+
+// ── capInlineImages ───────────────────────────────────────────────────
+describe('capInlineImages', () => {
+  const mk = (base64, extra = {}) => ({ mimeType: 'image/png', base64, filename: 'a.png', ...extra });
+
+  it('keeps images under limits without mutating input', () => {
+    const input = [mk('QUJD'), mk('REVG')];
+    const snapshot = JSON.parse(JSON.stringify(input));
+    const out = rgLib.capInlineImages(input);
+    assert.equal(out.kept.length, 2);
+    assert.deepEqual(out.dropped, { count: 0, bytes: 0 });
+    assert.deepEqual(input, snapshot);
+  });
+
+  it('enforces maxCount, keeping first N', () => {
+    const images = Array.from({ length: 12 }, (_, i) => mk('QUJD', { filename: `${i}.png` }));
+    const out = rgLib.capInlineImages(images);
+    assert.equal(out.kept.length, 10);
+    assert.equal(out.dropped.count, 2);
+    assert.deepEqual(out.kept.map((x) => x.filename), Array.from({ length: 10 }, (_, i) => `${i}.png`));
+  });
+
+  it('drops images exceeding maxBytesEach', () => {
+    const big = 'A'.repeat(400); // 300 bytes
+    const out = rgLib.capInlineImages([mk('QUJD'), mk(big)], { maxBytesEach: 100 });
+    assert.equal(out.kept.length, 1);
+    assert.equal(out.kept[0].base64, 'QUJD');
+    assert.equal(out.dropped.count, 1);
+    assert.equal(out.dropped.bytes, 300);
+  });
+
+  it('enforces maxBytesTotal across kept images', () => {
+    const img = 'A'.repeat(400); // 300 bytes each
+    const out = rgLib.capInlineImages([mk(img), mk(img), mk(img)], { maxBytesTotal: 600 });
+    assert.equal(out.kept.length, 2);
+    assert.equal(out.dropped.count, 1);
+    assert.equal(out.dropped.bytes, 300);
+  });
+
+  it('honours custom maxCount', () => {
+    const images = [mk('QUJD'), mk('REVG'), mk('SElK')];
+    const out = rgLib.capInlineImages(images, { maxCount: 2 });
+    assert.equal(out.kept.length, 2);
+    assert.equal(out.dropped.count, 1);
+  });
+});
+
+// ── matchesActiveStatus ───────────────────────────────────────────────
+describe('matchesActiveStatus', () => {
+  it('matches active case-insensitively with surrounding text', () => {
+    assert.equal(rgLib.matchesActiveStatus('Active'), true);
+    assert.equal(rgLib.matchesActiveStatus('  ACTIVE  '), true);
+    assert.equal(rgLib.matchesActiveStatus('Status: active (verified)'), true);
+  });
+
+  it('rejects inactive, reactivated and similar words', () => {
+    assert.equal(rgLib.matchesActiveStatus('inactive'), false);
+    assert.equal(rgLib.matchesActiveStatus('InActive user'), false);
+    assert.equal(rgLib.matchesActiveStatus('reactivated'), false);
+    assert.equal(rgLib.matchesActiveStatus('actively'), false);
+    assert.equal(rgLib.matchesActiveStatus('hyperactive'), false);
+  });
+
+  it('returns false for non-strings and blank input', () => {
+    assert.equal(rgLib.matchesActiveStatus(''), false);
+    assert.equal(rgLib.matchesActiveStatus('   '), false);
+    assert.equal(rgLib.matchesActiveStatus(null), false);
+    assert.equal(rgLib.matchesActiveStatus(undefined), false);
+    assert.equal(rgLib.matchesActiveStatus(42), false);
+  });
+});
+
+// ── createPendingMap ──────────────────────────────────────────────────
+describe('createPendingMap', () => {
+  it('stores, retrieves and tracks entries by key', () => {
+    const m = rgLib.createPendingMap();
+    assert.equal(m.size(), 0);
+    assert.equal(m.has('a'), false);
+    m.set('a', 1);
+    m.set('b', 2);
+    assert.equal(m.get('a'), 1);
+    assert.equal(m.has('a'), true);
+    assert.equal(m.size(), 2);
+  });
+
+  it('resolve removes the entry and fulfils the stored deferred', async () => {
+    const m = rgLib.createPendingMap();
+    let done = null;
+    m.set('req-1', { resolve: (v) => { done = v; } });
+    assert.equal(m.resolve('req-1', 'ok'), true);
+    assert.equal(done, 'ok');
+    assert.equal(m.has('req-1'), false);
+    assert.equal(m.size(), 0);
+    assert.equal(m.resolve('missing', 'x'), false);
+  });
+
+  it('reject removes the entry and rejects the stored deferred', () => {
+    const m = rgLib.createPendingMap();
+    let failed = null;
+    m.set('req-2', { reject: (e) => { failed = e; } });
+    const err = new Error('boom');
+    assert.equal(m.reject('req-2', err), true);
+    assert.equal(failed, err);
+    assert.equal(m.has('req-2'), false);
+    assert.equal(m.reject('missing', err), false);
+  });
+
+  it('throws TypeError for non-empty-string keys', () => {
+    const m = rgLib.createPendingMap();
+    for (const bad of ['', 42, null, undefined, {}, []]) {
+      assert.throws(() => m.set(bad, 1), TypeError);
+      assert.throws(() => m.get(bad), TypeError);
+      assert.throws(() => m.has(bad), TypeError);
+      assert.throws(() => m.resolve(bad, 1), TypeError);
+      assert.throws(() => m.reject(bad, new Error('x')), TypeError);
+    }
+  });
+});
+
+// ── JIRA transition discovery + create payload ────────────────────────
+describe('discoverDoneTransitionId', () => {
+  it('returns the id of the transition leading to Done', () => {
+    const res = { transitions: [
+      { id: '21', name: 'In Progress', to: { name: 'In Progress' } },
+      { id: '71', name: 'Done', to: { name: 'Done' } },
+    ] };
+    assert.equal(rgLib.discoverDoneTransitionId(res), '71');
+  });
+
+  it('prefers exact Done over Closed and matches case-insensitively', () => {
+    const res = { transitions: [
+      { id: '81', name: 'Close', to: { name: 'Closed' } },
+      { id: '72', name: 'done it', to: { name: 'DONE' } },
+    ] };
+    assert.equal(rgLib.discoverDoneTransitionId(res), '72');
+    assert.equal(rgLib.discoverDoneTransitionId({ transitions: [{ id: '81', to: { name: 'closed' } }] }), '81');
+  });
+
+  it('returns null when absent or malformed', () => {
+    assert.equal(rgLib.discoverDoneTransitionId({ transitions: [{ id: '21', to: { name: 'In Progress' } }] }), null);
+    assert.equal(rgLib.discoverDoneTransitionId({ transitions: [] }), null);
+    assert.equal(rgLib.discoverDoneTransitionId({}), null);
+    assert.equal(rgLib.discoverDoneTransitionId(null), null);
+  });
+});
+
+describe('isValidJiraCreatePayload', () => {
+  it('accepts non-blank text with account and panel', () => {
+    assert.equal(rgLib.isValidJiraCreatePayload({ text: 'hello', html: '', account: 'a@x.com', panel: 'arf' }), true);
+  });
+
+  it('accepts blank text when html contains an inline image', () => {
+    const html = '<img src="data:image/png;base64,QUJD">';
+    assert.equal(rgLib.isValidJiraCreatePayload({ text: '   ', html, account: 'a@x.com', panel: 'arf' }), true);
+  });
+
+  it('rejects blank text with no extractable images', () => {
+    assert.equal(rgLib.isValidJiraCreatePayload({ text: '  ', html: '<p>no img</p>', account: 'a@x.com', panel: 'arf' }), false);
+    assert.equal(rgLib.isValidJiraCreatePayload({ text: '', html: '', account: 'a@x.com', panel: 'arf' }), false);
+  });
+
+  it('rejects blank account or panel', () => {
+    assert.equal(rgLib.isValidJiraCreatePayload({ text: 'hi', html: '', account: '  ', panel: 'arf' }), false);
+    assert.equal(rgLib.isValidJiraCreatePayload({ text: 'hi', html: '', account: 'a@x.com', panel: '' }), false);
+    assert.equal(rgLib.isValidJiraCreatePayload({ text: 'hi', html: '', account: null, panel: 'arf' }), false);
+  });
+});
+
+describe('buildJiraTransitionDiscoveryUrl', () => {
+  it('builds a transitions URL builder for an issue key', () => {
+    const build = rgLib.buildJiraTransitionDiscoveryUrl('https://jira.directi.com');
+    assert.equal(build('NEW-1'), 'https://jira.directi.com/rest/api/2/issue/NEW-1/transitions');
+    const trailing = rgLib.buildJiraTransitionDiscoveryUrl('https://jira.directi.com/');
+    assert.equal(trailing('NEW-1'), 'https://jira.directi.com/rest/api/2/issue/NEW-1/transitions');
+  });
+});
+
+// ── buildBulkSummary ────────────────────────────────────────────────────
+describe('buildBulkSummary', () => {
+  it('joins, trims and dedupes comma-separated input', () => {
+    assert.equal(rgLib.buildBulkSummary('a@x.com, b@x.com, a@x.com'), 'a@x.com, b@x.com');
+  });
+
+  it('handles array input with blanks and dupes', () => {
+    assert.equal(rgLib.buildBulkSummary([' a@x.com ', '', 'b@x.com', 'a@x.com', '  ']), 'a@x.com, b@x.com');
+  });
+
+  it('splits commas inside array elements and returns empty for blank input', () => {
+    assert.equal(rgLib.buildBulkSummary(['a@x.com, b@x.com', 'b@x.com']), 'a@x.com, b@x.com');
+    assert.equal(rgLib.buildBulkSummary('  , , '), '');
+    assert.equal(rgLib.buildBulkSummary([]), '');
   });
 });

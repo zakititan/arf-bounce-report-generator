@@ -30,6 +30,18 @@
     setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 4000);
   }
 
+  function getHelpers() {
+    try {
+      if (typeof globalThis !== 'undefined' && globalThis.ReportGenPartnerHelpers) return globalThis.ReportGenPartnerHelpers;
+      if (typeof window !== 'undefined' && window.ReportGenPartnerHelpers) return window.ReportGenPartnerHelpers;
+    } catch (_) {}
+    return null;
+  }
+
+  function isFresh(data) {
+    return !!data && (Date.now() - (data.timestamp || 0) <= EXPIRY_MS);
+  }
+
   function getReportData() {
     const params = new URLSearchParams(window.location.search);
     const reportId = params.get('rgReportId') || '';
@@ -37,33 +49,56 @@
     const panel = params.get('rgPanel') || '';
     const key = 'reportData:' + JSON.stringify([reportId, panel, requestId]);
     return new Promise((resolve) => {
-      chrome.storage.local.get(key, (result) => {
+      chrome.storage.local.get([key, 'reportData'], (result) => {
         if (chrome.runtime.lastError) { resolve(null); return; }
-        const data = result[key];
-        if (!data) { resolve(null); return; }
-        if (Date.now() - (data.timestamp || 0) > EXPIRY_MS) {
-          chrome.storage.local.remove(key);
-          resolve(null); return;
-        }
-        resolve(data);
+        const scoped = result && result[key];
+        if (isFresh(scoped)) { resolve(scoped); return; }
+        if (scoped) { chrome.storage.local.remove(key); }
+        const plain = result && result['reportData'];
+        if (isFresh(plain)) { resolve(plain); return; }
+        if (plain) { chrome.storage.local.remove('reportData'); }
+        resolve(null);
       });
     });
   }
 
   function clearReportData() {
     const params = new URLSearchParams(window.location.search);
-    chrome.storage.local.remove('reportData:' + JSON.stringify([params.get('rgReportId') || '', params.get('rgPanel') || '', params.get('rgRequestId') || '']));
+    chrome.storage.local.remove([
+      'reportData:' + JSON.stringify([params.get('rgReportId') || '', params.get('rgPanel') || '', params.get('rgRequestId') || '']),
+      'reportData',
+    ]);
   }
 
   // ── Image extraction ──────────────────────────────────────────────
 
+  function parseDataUrlSafe(dataUrl) {
+    const helpers = getHelpers();
+    if (helpers && typeof helpers.parseDataUrl === 'function') {
+      try { return helpers.parseDataUrl(dataUrl); } catch (_) { return null; }
+    }
+    if (typeof dataUrl !== 'string') return null;
+    const comma = dataUrl.indexOf(',');
+    if (comma === -1) return null;
+    const header = dataUrl.slice(0, comma);
+    const base64 = dataUrl.slice(comma + 1);
+    if (!base64) return null;
+    const m = header.match(/:(.*?);/);
+    if (!m || !m[1]) return null;
+    return { mime: m[1], base64 };
+  }
+
   function dataUrlToFile(dataUrl, filename) {
-    const [header, base64] = dataUrl.split(',');
-    const mime = header.match(/:(.*?);/)[1];
-    const binary = atob(base64);
-    const array = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) array[i] = binary.charCodeAt(i);
-    return new File([array], filename, { type: mime });
+    const parsed = parseDataUrlSafe(dataUrl);
+    if (!parsed) return null;
+    try {
+      const binary = atob(parsed.base64);
+      const array = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) array[i] = binary.charCodeAt(i);
+      return new File([array], filename, { type: parsed.mime });
+    } catch (_) {
+      return null;
+    }
   }
 
   function extractImages(html) {
@@ -74,7 +109,13 @@
     const files = [];
     imgs.forEach((img, i) => {
       const filename = img.alt || ('screenshot-' + (i + 1) + '.png');
-      const file = dataUrlToFile(img.src, filename);
+      let file = null;
+      try {
+        file = dataUrlToFile(img.getAttribute('src') || img.src, filename);
+      } catch (_) {
+        file = null;
+      }
+      if (!file) { warn('Skipping malformed image: ' + filename); img.remove(); return; }
       files.push(file);
       log('Extracted image: ' + filename + ' (' + file.type + ', ' + file.size + ' bytes)');
       img.remove();

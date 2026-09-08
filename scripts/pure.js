@@ -96,6 +96,10 @@ export function validateExtensionResult(message) {
     return Boolean(message.data) && typeof message.data === 'object' &&
       typeof message.data.success === 'boolean';
   }
+  if (message.type === 'REPORT_GENERATOR_ERROR') {
+    return typeof message.code === 'string' &&
+      (message.code === 'INVALID_MESSAGE' || message.code === 'STORAGE_UNAVAILABLE' || message.code === 'UNKNOWN_TYPE');
+  }
   if (typeof message.success !== 'boolean') return false;
   if (message.type === 'REPORT_GENERATOR_JIRA_RESULT') {
     return (!message.error || typeof message.error === 'string') &&

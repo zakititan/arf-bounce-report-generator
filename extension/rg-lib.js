@@ -11,6 +11,15 @@ export function createUnsuspendReasonKey(requestId) {
   return 'unsuspendReason:' + (requestId || 'legacy');
 }
 
+export function createPerAccountUnsuspendReasonKey(requestId, account) {
+  return createUnsuspendReasonKey(requestId) + ':' + String(account == null ? '' : account).trim().toLowerCase();
+}
+
+export function isSafeAppsScriptUrl(value) {
+  return isHttpsUrl(value, 'script.google.com', /^\/macros\//) ||
+    isHttpsUrl(value, 'script.googleusercontent.com', /^\/macros\//);
+}
+
 export function persistUnsuspendReason(storageSet, getLastError, value) {
   return new Promise((resolve, reject) => {
     try {
@@ -256,4 +265,94 @@ export function isReasonFresh(record, now = Date.now()) {
 
 export function isSuccessfulResponse(response) {
   return Boolean(response && response.ok === true);
+}
+
+export function capInlineImages(images, { maxCount = 10, maxBytesEach = 5 * 1024 * 1024, maxBytesTotal = 10 * 1024 * 1024 } = {}) {
+  const list = Array.isArray(images) ? images : [];
+  const kept = [];
+  let keptBytes = 0;
+  let droppedCount = 0;
+  let droppedBytes = 0;
+  for (const img of list) {
+    const len = typeof img?.base64 === 'string' ? img.base64.length : 0;
+    const bytes = Math.floor(len * 3 / 4);
+    if (kept.length >= maxCount || bytes > maxBytesEach || keptBytes + bytes > maxBytesTotal) {
+      droppedCount++;
+      droppedBytes += bytes;
+    } else {
+      kept.push(img);
+      keptBytes += bytes;
+    }
+  }
+  return { kept, dropped: { count: droppedCount, bytes: droppedBytes } };
+}
+
+export function matchesActiveStatus(text) {
+  if (typeof text !== 'string') return false;
+  return /\bactive\b/.test(text.trim().toLowerCase());
+}
+
+export function createPendingMap() {
+  const map = new Map();
+  const check = (key) => { if (typeof key !== 'string' || key.length === 0) throw new TypeError('key must be a non-empty string'); };
+  return {
+    set(key, value) { check(key); map.set(key, value); },
+    get(key) { check(key); return map.get(key); },
+    has(key) { check(key); return map.has(key); },
+    size() { return map.size; },
+    resolve(key, result) {
+      check(key);
+      if (!map.has(key)) return false;
+      const entry = map.get(key);
+      map.delete(key);
+      if (entry && typeof entry.resolve === 'function') entry.resolve(result);
+      else if (typeof entry === 'function') entry(result);
+      return true;
+    },
+    reject(key, err) {
+      check(key);
+      if (!map.has(key)) return false;
+      const entry = map.get(key);
+      map.delete(key);
+      if (entry && typeof entry.reject === 'function') entry.reject(err);
+      return true;
+    }
+  };
+}
+
+export function buildJiraTransitionDiscoveryUrl(jiraBase) {
+  const base = typeof jiraBase === 'string' ? jiraBase.replace(/\/+$/, '') : '';
+  return (issueKey) => base + '/rest/api/2/issue/' + issueKey + '/transitions';
+}
+
+export function discoverDoneTransitionId(response) {
+  const list = response?.transitions;
+  if (!Array.isArray(list)) return null;
+  const norm = (v) => typeof v === 'string' ? v.toLowerCase() : '';
+  const done = list.find((t) => norm(t?.to?.name) === 'done');
+  if (done) return done.id;
+  const closed = list.find((t) => norm(t?.to?.name) === 'closed');
+  return closed ? closed.id : null;
+}
+
+export function isValidJiraCreatePayload({ text, html, account, panel } = {}) {
+  if (typeof account !== 'string' || account.trim() === '') return false;
+  if (typeof panel !== 'string' || panel.trim() === '') return false;
+  if (typeof text === 'string' && text.trim() !== '') return true;
+  const images = extractImagesRegex(typeof html === 'string' ? html : '');
+  return images.length > 0;
+}
+
+export function buildBulkSummary(accounts) {
+  const parts = Array.isArray(accounts) ? accounts : typeof accounts === 'string' ? [accounts] : [];
+  const seen = new Set();
+  const out = [];
+  for (const item of parts) {
+    if (typeof item !== 'string') continue;
+    for (const piece of item.split(',')) {
+      const t = piece.trim();
+      if (t && !seen.has(t)) { seen.add(t); out.push(t); }
+    }
+  }
+  return out.join(', ');
 }
