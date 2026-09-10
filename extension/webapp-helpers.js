@@ -18,6 +18,32 @@
 
   var WEBAPP_ERROR_TYPE = 'REPORT_GENERATOR_ERROR';
 
+  // Types this bridge SENDS (never receives legitimately). Answering them —
+  // e.g. an UNKNOWN_TYPE error for an echoed PONG — feeds echo storms, so
+  // they are silently ignored on receipt.
+  var OUTBOUND_WEBAPP_MESSAGE_TYPES = [
+    'REPORT_GENERATOR_PONG',
+    'REPORT_GENERATOR_ERROR',
+    'REPORT_GENERATOR_JIRA_RESULT',
+    'REPORT_GENERATOR_UNSUSPEND_RESULT',
+    'REPORT_GENERATOR_LOG_SHEET_RESULT',
+    'PARTNER_PANEL_RESULT',
+    'REPORT_GENERATOR_UNSUSPEND_OUTCOME',
+  ];
+
+  function isOutboundReportGeneratorType(type) {
+    return typeof type === 'string' && OUTBOUND_WEBAPP_MESSAGE_TYPES.indexOf(type) !== -1;
+  }
+
+  // PONG replies are handshake-only: at most one per second no matter how
+  // many PINGs arrive, so a PING flood can't become a PONG flood.
+  var PONG_THROTTLE_MS = 1000;
+
+  function shouldAnswerPing(lastPongAt, now) {
+    if (typeof lastPongAt !== 'number') return true;
+    return now - lastPongAt >= PONG_THROTTLE_MS;
+  }
+
   function isAllowedWebAppOrigin(origin) {
     if (typeof origin !== 'string') return false;
     return origin === 'http://localhost:3000' ||
@@ -88,9 +114,12 @@
 
   function decideEarlyErrorReply(data, storageAvailable) {
     if (!data || typeof data.type !== 'string') return null;
-    if (data.type.indexOf('REPORT_GENERATOR_') !== 0) return null;
+    if (data.type.indexOf('REPORT_GENERATOR_') !== 0 && data.type !== 'PARTNER_PANEL_RESULT') return null;
     // PING owns the PONG handshake and needs no storage; never convert it to an error.
     if (data.type === 'REPORT_GENERATOR_PING') return null;
+    // Our own outbound types (echoes) are silently ignored — replying would
+    // amplify an echo storm with a fresh error post per echo.
+    if (isOutboundReportGeneratorType(data.type)) return null;
     if (!storageAvailable) return buildErrorReply('STORAGE_UNAVAILABLE', extractRequestId(data));
     if (isKnownReportGeneratorType(data.type)) {
       return isValidWebAppMessage(data)
@@ -103,10 +132,14 @@
   var api = {
     HANDLED_WEBAPP_MESSAGE_TYPES: HANDLED_WEBAPP_MESSAGE_TYPES,
     WEBAPP_ERROR_TYPE: WEBAPP_ERROR_TYPE,
+    OUTBOUND_WEBAPP_MESSAGE_TYPES: OUTBOUND_WEBAPP_MESSAGE_TYPES,
+    PONG_THROTTLE_MS: PONG_THROTTLE_MS,
     isAllowedWebAppOrigin: isAllowedWebAppOrigin,
     resolveReplyOrigin: resolveReplyOrigin,
     extractRequestId: extractRequestId,
     isKnownReportGeneratorType: isKnownReportGeneratorType,
+    isOutboundReportGeneratorType: isOutboundReportGeneratorType,
+    shouldAnswerPing: shouldAnswerPing,
     isValidWebAppMessage: isValidWebAppMessage,
     buildErrorReply: buildErrorReply,
     decideEarlyErrorReply: decideEarlyErrorReply,

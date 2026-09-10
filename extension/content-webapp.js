@@ -73,8 +73,14 @@
     }
     // Local fallback mirroring webapp-helpers.decideEarlyErrorReply.
     if (!data || typeof data.type !== 'string') return null;
-    if (data.type.indexOf('REPORT_GENERATOR_') !== 0) return null;
+    if (data.type.indexOf('REPORT_GENERATOR_') !== 0 && data.type !== 'PARTNER_PANEL_RESULT') return null;
     if (data.type === 'REPORT_GENERATOR_PING') return null;
+    // Our own outbound types (echoes) are silently ignored — replying would
+    // amplify an echo storm with a fresh error post per echo.
+    if (data.type === 'REPORT_GENERATOR_PONG' || data.type === 'REPORT_GENERATOR_ERROR' ||
+        data.type === 'REPORT_GENERATOR_JIRA_RESULT' || data.type === 'REPORT_GENERATOR_UNSUSPEND_RESULT' ||
+        data.type === 'REPORT_GENERATOR_LOG_SHEET_RESULT' || data.type === 'PARTNER_PANEL_RESULT' ||
+        data.type === 'REPORT_GENERATOR_UNSUSPEND_OUTCOME') return null;
     if (!storageAvailable) return helperBuildError('STORAGE_UNAVAILABLE', helperExtractRequestId(data));
     var known = data.type === 'REPORT_GENERATOR_JIRA' ||
       data.type === 'REPORT_GENERATOR_UNSUSPEND' ||
@@ -88,13 +94,34 @@
   }
 
   function postPong(targetOrigin) {
+    window.postMessage({ type: 'REPORT_GENERATOR_PONG', version: extensionVersion() }, targetOrigin);
+  }
+
+  var _cachedVersion = null;
+  function extensionVersion() {
+    if (_cachedVersion !== null) return _cachedVersion;
     var version = 'unknown';
     try {
       if (typeof chrome !== 'undefined' && chrome.runtime && typeof chrome.runtime.getManifest === 'function') {
         version = chrome.runtime.getManifest().version;
       }
     } catch (_) {}
-    window.postMessage({ type: 'REPORT_GENERATOR_PONG', version: version }, targetOrigin);
+    _cachedVersion = version;
+    return version;
+  }
+
+  // PONG replies are handshake-only (see webapp-helpers.shouldAnswerPing):
+  // at most one per second no matter how many PINGs arrive.
+  var _lastPongAt = null;
+  function shouldAnswerPingNow() {
+    if (RGHelpers && typeof RGHelpers.shouldAnswerPing === 'function') {
+      try {
+        var now = Date.now();
+        if (RGHelpers.shouldAnswerPing(_lastPongAt, now)) { _lastPongAt = now; return true; }
+        return false;
+      } catch (_) {}
+    }
+    return true;
   }
 
   var ACCOUNT_EMAIL_LOCAL_RE = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+$/;
@@ -199,7 +226,7 @@
     var replyOrigin = replyOriginFor(event.origin);
     // PING needs no storage so the handshake works even when storage is unavailable.
     if (event.data.type === 'REPORT_GENERATOR_PING') {
-      postPong(replyOrigin);
+      if (shouldAnswerPingNow()) postPong(replyOrigin);
       return;
     }
     var storageAvailable = (typeof chrome !== 'undefined' && !!chrome.storage);

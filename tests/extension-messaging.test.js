@@ -10,6 +10,8 @@ const {
   isValidWebAppMessage,
   buildErrorReply,
   decideEarlyErrorReply,
+  isOutboundReportGeneratorType,
+  shouldAnswerPing,
 } = globalThis.RGWebappHelpers;
 
 // ── isAllowedWebAppOrigin ───────────────────────────────────────────────
@@ -87,6 +89,54 @@ describe('extractRequestId', () => {
     assert.equal(extractRequestId(null), undefined);
     assert.equal(extractRequestId(undefined), undefined);
     assert.equal(extractRequestId('nope'), undefined);
+  });
+});
+
+// ── echo-storm immunity ─────────────────────────────────────────────────
+describe('isOutboundReportGeneratorType', () => {
+  it('flags our own outbound types so echoes never get replies', () => {
+    for (const type of [
+      'REPORT_GENERATOR_PONG',
+      'REPORT_GENERATOR_ERROR',
+      'REPORT_GENERATOR_JIRA_RESULT',
+      'REPORT_GENERATOR_UNSUSPEND_RESULT',
+      'REPORT_GENERATOR_LOG_SHEET_RESULT',
+      'PARTNER_PANEL_RESULT',
+      'REPORT_GENERATOR_UNSUSPEND_OUTCOME',
+    ]) {
+      assert.equal(isOutboundReportGeneratorType(type), true, type);
+    }
+  });
+
+  it('does not flag inbound request types', () => {
+    for (const type of [
+      'REPORT_GENERATOR_PING',
+      'REPORT_GENERATOR_JIRA',
+      'REPORT_GENERATOR_UNSUSPEND',
+      'REPORT_GENERATOR_NOPE',
+      null,
+      undefined,
+    ]) {
+      assert.equal(isOutboundReportGeneratorType(type), false, String(type));
+    }
+  });
+});
+
+describe('decideEarlyErrorReply echo immunity', () => {
+  it('returns null for our own outbound types instead of error replies', () => {
+    assert.equal(decideEarlyErrorReply({ type: 'REPORT_GENERATOR_PONG', version: '4.7' }, true), null);
+    assert.equal(decideEarlyErrorReply({ type: 'REPORT_GENERATOR_JIRA_RESULT', requestId: 'jira_1', success: true }, true), null);
+    assert.equal(decideEarlyErrorReply({ type: 'REPORT_GENERATOR_ERROR', code: 'UNKNOWN_TYPE' }, true), null);
+  });
+});
+
+describe('shouldAnswerPing', () => {
+  it('answers the first PING and throttles repeats to one per second', () => {
+    assert.equal(shouldAnswerPing(undefined, 1000), true);
+    assert.equal(shouldAnswerPing(0, 1000), true);
+    assert.equal(shouldAnswerPing(1000, 1500), false);
+    assert.equal(shouldAnswerPing(1000, 2000), true);
+    assert.equal(shouldAnswerPing(1000, 2001), true);
   });
 });
 
