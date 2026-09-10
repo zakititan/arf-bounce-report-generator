@@ -188,6 +188,15 @@
   // avoid read-modify-write collisions between concurrent tabs.
   function setVerifyEntry(account, attempt, cb) {
     chrome.storage.local.set({ [verifyKey(account)]: { ts: Date.now(), attempt: attempt || 1 } }, function () {
+      // Fail closed: without a persisted marker the post-reload load can't
+      // enter verification mode, so reloading would re-run the automation
+      // forever. Surface the failure instead of looping.
+      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.lastError) {
+        log('Verify marker write failed: ' + (chrome.runtime.lastError.message || 'storage unavailable'));
+        showToast('\u274C Could not save verification state for ' + account + ' — storage unavailable');
+        reportDone({ outcome: 'failed', account: account, cause: 'verify marker write failed' });
+        return;
+      }
       if (cb) cb();
     });
   }

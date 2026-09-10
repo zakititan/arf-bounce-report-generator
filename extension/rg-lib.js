@@ -263,6 +263,42 @@ export function isReasonFresh(record, now = Date.now()) {
   return now - record.ts <= REASON_TTL_MS;
 }
 
+// Storage safety: chrome.storage.local has a ~10MB quota and writes are never
+// cleaned today. A single manual-fallback report with screenshots can exceed
+// the whole quota in one write and break every later storage op — so cap what
+// we store and sweep what we no longer need.
+export const STORAGE_REPORT_HTML_MAX_BYTES = 500 * 1024;
+export const REPORT_FALLBACK_TTL_MS = 10 * 60 * 1000;
+export const JIRA_URL_TTL_MS = 24 * 60 * 60 * 1000;
+
+export function isStorableReportHtml(html) {
+  return typeof html === 'string' && html.length <= STORAGE_REPORT_HTML_MAX_BYTES;
+}
+
+function hasExpiredTs(value, field, ttlMs, now) {
+  if (!value || typeof value !== 'object') return false;
+  const ts = value[field];
+  return typeof ts === 'number' && Number.isFinite(ts) && now - ts > ttlMs;
+}
+
+export function findStaleStorageKeys(entries, now = Date.now()) {
+  const stale = [];
+  if (!entries || typeof entries !== 'object') return stale;
+  for (const key of Object.keys(entries)) {
+    const value = entries[key];
+    if (key.indexOf('unsuspendReason:') === 0) {
+      if (value && typeof value === 'object' && !isReasonFresh(value, now)) stale.push(key);
+    } else if (key.indexOf('unsuspendVerify:') === 0) {
+      if (hasExpiredTs(value, 'ts', REASON_TTL_MS, now)) stale.push(key);
+    } else if (key.indexOf('reportData:') === 0) {
+      if (hasExpiredTs(value, 'timestamp', REPORT_FALLBACK_TTL_MS, now)) stale.push(key);
+    } else if (key.indexOf('jiraUrl:') === 0) {
+      if (hasExpiredTs(value, 'ts', JIRA_URL_TTL_MS, now)) stale.push(key);
+    }
+  }
+  return stale;
+}
+
 export function isSuccessfulResponse(response) {
   return Boolean(response && response.ok === true);
 }

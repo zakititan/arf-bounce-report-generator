@@ -251,6 +251,9 @@
 
     log('Report found: panel=' + data.panel + ', account=' + data.account);
     log('HTML length: ' + (data.html || '').length);
+    if (data.htmlTruncated) {
+      showToast('Report ready — paste manually (screenshots were too large to carry over)');
+    }
 
     // Step 0: Extract images from HTML
     const html = data.html || '';

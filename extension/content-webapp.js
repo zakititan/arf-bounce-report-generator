@@ -241,7 +241,7 @@
             var jiraUrl = response.issueUrl;
             window.postMessage({ type: 'REPORT_GENERATOR_JIRA_RESULT', requestId: data.requestId, success: true, issueKey: response.issueKey, url: jiraUrl, imagesUploaded: response.imagesUploaded, imagesTotal: response.imagesTotal, imagesDropped: response.imagesDropped || 0 }, replyOrigin);
 
-            chrome.storage.local.set({ [jiraStorageKey(data.reportId, panel, data.requestId)]: { url: jiraUrl } });
+            chrome.storage.local.set({ [jiraStorageKey(data.reportId, panel, data.requestId)]: { url: jiraUrl, ts: Date.now() } });
           } else {
             window.postMessage({ type: 'REPORT_GENERATOR_JIRA_RESULT', requestId: data.requestId, success: false }, replyOrigin);
             fallbackToStorage(text, html, panel, account, data.reportId, data.requestId);
@@ -277,7 +277,7 @@
             window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', requestId: unsuspendData.requestId, success: false, error: 'Invalid JIRA result URL' }, replyOrigin);
             return;
           }
-          chrome.storage.local.set({ [jiraStorageKey(unsuspendData.reportId, unsuspendData.panel, unsuspendData.requestId)]: { url: jiraUrl } });
+          chrome.storage.local.set({ [jiraStorageKey(unsuspendData.reportId, unsuspendData.panel, unsuspendData.requestId)]: { url: jiraUrl, ts: Date.now() } });
           window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', requestId: unsuspendData.requestId, success: true, issueKey: response.issueKey || null, url: jiraUrl || null, unsuspendStatus: response.unsuspendStatus || null }, replyOrigin);
         }
       );
@@ -364,8 +364,15 @@
     }
   });
 
+  // chrome.storage.local is ~10MB total and never cleaned by itself: a
+  // single fallback report with screenshots can exceed the whole quota and
+  // break every later storage op. Store the full HTML only under this cap
+  // (mirrors rg-lib STORAGE_REPORT_HTML_MAX_BYTES); text always fits.
+  var REPORT_HTML_STORE_MAX = 500 * 1024;
+
   function fallbackToStorage(text, html, panel, account, reportId, requestId) {
-    var reportData = { text: text, html: html, panel: panel, account: account, reportId: reportId, requestId: requestId, timestamp: Date.now() };
+    var storableHtml = (typeof html === 'string' && html.length <= REPORT_HTML_STORE_MAX) ? html : '';
+    var reportData = { text: text, html: storableHtml, htmlTruncated: storableHtml !== html, panel: panel, account: account, reportId: reportId, requestId: requestId, timestamp: Date.now() };
 
     chrome.storage.local.set({ ['reportData:' + requestContextKey(reportId, panel, requestId)]: reportData }, function () {
       if (chrome.runtime.lastError) {

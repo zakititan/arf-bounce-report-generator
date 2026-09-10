@@ -1,4 +1,4 @@
-import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList, createUnsuspendReasonKey, createPerAccountUnsuspendReasonKey, persistUnsuspendReason, isSafeJiraUrl, isSafeGoogleSheetsUrl, isSafeAppsScriptUrl, createPendingMap, capInlineImages, isValidJiraCreatePayload, discoverDoneTransitionId, buildBulkSummary } from './rg-lib.js';
+import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList, createUnsuspendReasonKey, createPerAccountUnsuspendReasonKey, persistUnsuspendReason, isSafeJiraUrl, isSafeGoogleSheetsUrl, isSafeAppsScriptUrl, createPendingMap, capInlineImages, isValidJiraCreatePayload, discoverDoneTransitionId, buildBulkSummary, findStaleStorageKeys } from './rg-lib.js';
 import { fetchWithTimeout } from './timeout.js';
 
 const EXPIRY_MS = 10 * 60 * 1000;
@@ -6,6 +6,19 @@ const EXPIRY_MS = 10 * 60 * 1000;
 // no longer clobber each other the way a single global slot did.
 const _partnerPanelPending = createPendingMap();
 const _openAdTabIds = new Set();
+
+// Storage keys are write-only during runs (reasons, verify markers, fallback
+// reports, JIRA links) — sweep expired ones at startup so a long-lived
+// profile can't grow chrome.storage.local toward its quota forever.
+try {
+  chrome.storage.local.get(null, (all) => {
+    try {
+      if (chrome.runtime.lastError || !all) return;
+      const stale = findStaleStorageKeys(all, Date.now());
+      if (stale.length) chrome.storage.local.remove(stale, () => { void chrome.runtime.lastError; });
+    } catch (_) {}
+  });
+} catch (_) {}
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 

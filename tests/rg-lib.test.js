@@ -634,3 +634,50 @@ describe('buildBulkSummary', () => {
     assert.equal(rgLib.buildBulkSummary([]), '');
   });
 });
+
+// ── storage safety (quota-blowout + janitor) ───────────────────────────
+describe('isStorableReportHtml', () => {
+  it('accepts small HTML for the manual-fallback store', () => {
+    assert.equal(rgLib.isStorableReportHtml('<p>hi</p>'), true);
+    assert.equal(rgLib.isStorableReportHtml(''), true);
+  });
+
+  it('rejects multi-MB base64 HTML that would blow the storage quota', () => {
+    assert.equal(rgLib.isStorableReportHtml('x'.repeat(600 * 1024)), false);
+    assert.equal(rgLib.isStorableReportHtml(null), false);
+  });
+});
+
+describe('findStaleStorageKeys', () => {
+  it('flags expired unsuspend, verify and fallback-report keys', () => {
+    const now = 1_000_000;
+    const stale = { reason: 'https://jira.directi.com/browse/X-1', ts: now - 200_000 };
+    const fresh = { reason: 'https://jira.directi.com/browse/X-2', ts: now };
+    const keys = rgLib.findStaleStorageKeys({
+      'unsuspendReason:req-1': stale,
+      'unsuspendReason:req-1:a@x.com': stale,
+      'unsuspendVerify:req-1:a@x.com': { ts: now - 200_000, attempt: 1 },
+      'unsuspendReason:req-2': fresh,
+      'reportData:["r","arf","q"]': { text: 't', timestamp: now - 20 * 60 * 1000 },
+      'jiraUrl:["r","arf","q"]': { url: 'https://jira.directi.com/browse/X-3', ts: now - 25 * 3600 * 1000 },
+      'unrelated': { ts: 0 },
+    }, now);
+    assert.ok(keys.includes('unsuspendReason:req-1'));
+    assert.ok(keys.includes('unsuspendReason:req-1:a@x.com'));
+    assert.ok(keys.includes('unsuspendVerify:req-1:a@x.com'));
+    assert.ok(keys.includes('reportData:["r","arf","q"]'));
+    assert.ok(keys.includes('jiraUrl:["r","arf","q"]'));
+    assert.ok(!keys.includes('unsuspendReason:req-2'));
+    assert.ok(!keys.includes('unrelated'));
+  });
+
+  it('keeps fresh entries and tolerates malformed values', () => {
+    const now = 1_000_000;
+    assert.deepEqual(rgLib.findStaleStorageKeys({
+      'unsuspendReason:req-1': { reason: 'x', ts: now },
+      'reportData:k': { text: 't', timestamp: now },
+      'jiraUrl:k': { url: 'https://jira.directi.com/browse/X-1', ts: now },
+      'unsuspendReason:broken': 'not-an-object',
+    }, now), []);
+  });
+});
