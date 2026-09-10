@@ -15,7 +15,7 @@
 
 import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx,
          fetchLaravelCheck, fetchXmlrpcCheck, fetchWordPressCheck } from './api.js';
-import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, matchesRequest, consumePendingRequest, createUnsuspendRequestId, createRequestId, createRequestContextKey, isAllowedWebAppOrigin, validateExtensionResult, validateUnsuspendOutcome, validateAccountIdentifier, isSafeJiraUrl } from './pure.js';
+import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, matchesRequest,   consumePendingRequest, registerPendingRequest, createUnsuspendRequestId, createRequestId, createRequestContextKey, isAllowedWebAppOrigin, validateExtensionResult, validateUnsuspendOutcome, validateAccountIdentifier, isSafeJiraUrl } from './pure.js';
 import { buildUnsuspendAccounts, cleanSheetReason, getSheetReportType } from './report-actions.js';
 import {
   showToast, showToastLink, initThemeToggle,
@@ -310,6 +310,9 @@ window.addEventListener('message', (e) => {
     const prefix = request.panel;
     if (d.success && d.issueKey && d.url) {
       _jiraRequestByReport[createRequestContextKey(request.reportId, prefix, '')] = d.requestId;
+      // One entry per generated report; cap so long sessions can't grow it forever.
+      const reportKeys = Object.keys(_jiraRequestByReport);
+      for (let i = 0; i < reportKeys.length - 50; i++) delete _jiraRequestByReport[reportKeys[i]];
       const imgExtra = d.imagesTotal > 0 && d.imagesUploaded < d.imagesTotal
         ? ' (' + d.imagesUploaded + '/' + d.imagesTotal + ' img)' : '';
       const dropExtra = d.imagesDropped > 0 ? ' (' + d.imagesDropped + ' img over size cap)' : '';
@@ -1835,7 +1838,7 @@ function createTaeJira(prefix, btn) {
   setBtnPending(btn, 'Creating…');
   const reportId = _reportContextIds[prefix] || (_reportContextIds[prefix] = createUnsuspendRequestId());
   const requestId = createRequestId('jira');
-  _pendingJiraRequests.set(requestId, { panel: prefix, reportId, button: btn });
+  registerPendingRequest(_pendingJiraRequests, requestId, { panel: prefix, reportId, button: btn });
   window.postMessage({
     type: 'REPORT_GENERATOR_JIRA',
     text: reportText,

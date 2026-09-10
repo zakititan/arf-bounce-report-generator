@@ -10,6 +10,8 @@ import {
   shouldFinishUnsuspendTracking,
   createUnsuspendRequestId,
   consumePendingRequest,
+  registerPendingRequest,
+  PENDING_REQUEST_TTL_MS,
   createRequestContextKey,
   svgMarkup,
   validateAccountIdentifier,
@@ -364,6 +366,17 @@ describe('concurrent request state', () => {
     assert.equal(consumePendingRequest(pending, 'jira-two'), null);
     assert.equal(consumePendingRequest(pending, 'unknown'), null);
     assert.equal(pending.size, 0);
+  });
+
+  it('evicts unanswered requests older than the TTL on register', () => {
+    const pending = new Map();
+    registerPendingRequest(pending, 'jira-old', { panel: 'arf' }, 1_000);
+    registerPendingRequest(pending, 'jira-new', { panel: 'bounce' }, 1_000 + PENDING_REQUEST_TTL_MS - 1);
+    assert.equal(pending.size, 2);
+    registerPendingRequest(pending, 'jira-now', { panel: 'arf' }, 1_000 + PENDING_REQUEST_TTL_MS + 1);
+    assert.equal(pending.has('jira-old'), false);
+    assert.equal(pending.has('jira-new'), true);
+    assert.equal(pending.has('jira-now'), true);
   });
 
   it('creates distinct storage keys for each report and request context', () => {

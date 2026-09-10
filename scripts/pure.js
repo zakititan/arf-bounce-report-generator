@@ -173,6 +173,20 @@ export function consumePendingRequest(pending, requestId) {
   return request;
 }
 
+// Pending extension requests must never outlive their safety timeout:
+// without the extension installed nothing consumes them, so unanswered
+// entries (which retain DOM button references) would grow the map forever.
+export const PENDING_REQUEST_TTL_MS = 90_000;
+
+export function registerPendingRequest(pending, requestId, value, now = Date.now()) {
+  const cutoff = now - PENDING_REQUEST_TTL_MS;
+  for (const [key, entry] of pending) {
+    if (!entry || typeof entry.createdAt !== 'number' || entry.createdAt <= cutoff) pending.delete(key);
+  }
+  pending.set(requestId, { ...value, createdAt: now });
+  return pending;
+}
+
 export function createRequestContextKey(reportId, panel, requestId) {
   return JSON.stringify([reportId || '', panel || '', requestId || '']);
 }
