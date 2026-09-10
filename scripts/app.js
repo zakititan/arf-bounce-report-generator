@@ -432,6 +432,17 @@ document.addEventListener('click', (e) => {
   retryUnsuspend(prefix);
 });
 
+// ── Clear all panels at once (single confirm, reuses each panel's clear path)
+function clearAllPanels() {
+  if (!confirm('Clear ALL panels (ARF, Bounce, IP Spike, SMTP Suspension)? All form data, screenshots, reports, and results will be erased. This cannot be undone.')) return;
+  const skip = { skipConfirm: true };
+  clearARF(skip);
+  clearBounce(skip);
+  clearIPspike(skip);
+  clearSMTPSuspend(skip);
+  showToast('All panels cleared.', 'info');
+}
+
 // ── Keyboard shortcuts (Ctrl/Cmd + Enter) ─────────────────────────────
 // Uses lastActivePanel (set on field focus) instead of a fragile DOM heuristic.
 function initKeyboardShortcuts() {
@@ -722,6 +733,9 @@ function initEventDelegation() {
       }
       case 'clear-csv':
         clearCsv();
+        break;
+      case 'clear-all':
+        clearAllPanels();
         break;
       case 'toggle-assurance':
         if (panel) toggleAssurance(target, panel);
@@ -1425,9 +1439,9 @@ function generateARF() {
 }
 
 // clearARF/clearBounce: confirm before destroying form data
-function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, afterClear }) {
+function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, afterClear, skipConfirm }) {
   const label = prefix === 'arf' ? 'ARF' : prefix === 'bounce' ? 'Bounce' : prefix === 'ipspike' ? 'IP Spike' : 'SMTP Suspension';
-  if (!confirm('Clear all ' + label + ' form data? This cannot be undone.')) return;
+  if (!skipConfirm && !confirm('Clear all ' + label + ' form data? This cannot be undone.')) return;
 
   fieldIds.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
 
@@ -1513,11 +1527,11 @@ function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, af
   if (afterClear) afterClear();
 }
 
-function clearARF() {
+function clearARF(opts) {
   clearPanel('arf',
     ['arf-account','arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website','arf-domain-input','arf-zd-link'],
     ['arf-complaints','arf-prev-unblock','arf-blocked-lt2','arf-email-type','arf-website'],
-    { clearScreenshots: true }
+    { clearScreenshots: true, skipConfirm: !!(opts && opts.skipConfirm) }
   );
 }
 
@@ -1561,19 +1575,19 @@ function generateBounce() {
 }
 
 // clearBounce: confirm before destroying form data
-function clearBounce() {
+function clearBounce(opts) {
   clearPanel('bounce',
     ['bounce-account','bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-domain-input','bounce-other-blocked-detail','bounce-zd-link'],
     ['bounce-prev-unblock','bounce-other-blocked','bounce-website','bounce-other-blocked-detail'],
-    { clearScreenshots: false }
+    { clearScreenshots: false, skipConfirm: !!(opts && opts.skipConfirm) }
   );
 }
 
-function clearIPspike() {
+function clearIPspike(opts) {
   clearPanel('ipspike',
     ['ipspike-account', 'ipspike-domain-input', 'ipspike-pwd-changed'],
     [],
-    { clearScreenshots: false, afterClear: () => {
+    { clearScreenshots: false, skipConfirm: !!(opts && opts.skipConfirm), afterClear: () => {
       const results = document.getElementById('ipspike-partner-results');
       if (results) results.style.display = 'none';
       const createdEl = document.getElementById('ipspike-result-created');
@@ -1657,11 +1671,11 @@ function generateSMTPSuspend() {
   }
 }
 
-function clearSMTPSuspend() {
+function clearSMTPSuspend(opts) {
   clearPanel('smtpsuspend',
     ['smtpsuspend-account', 'smtpsuspend-zd-link', 'smtpsuspend-domain-input', 'smtpsuspend-pwd-changed'],
     [],
-    { clearScreenshots: true, afterClear: () => {
+    { clearScreenshots: true, skipConfirm: !!(opts && opts.skipConfirm), afterClear: () => {
       const results = document.getElementById('smtpsuspend-partner-results');
       if (results) results.style.display = 'none';
       const pwdBtn = document.querySelector('[data-value="Password changed"][data-panel="smtpsuspend"]');

@@ -18,6 +18,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Scannable output actions** — Create TAE JIRA (ticket icon), Unsuspend (unlock icon), and Log to Sheet (table icon) buttons carry distinct icons across all panels
 - **Keyboard shortcut** — `Ctrl`/`Cmd` + `Enter` generates the report for whichever panel is currently active
 - **Confirm before clear** — clearing any panel requires confirmation to prevent accidental data loss
+- **Clear all panels** — a "Clear all" button in the top-right header (next to the theme toggle) wipes ARF, Bounce, IP Spike, and SMTP Suspension in one go behind a single confirmation
 
 ### Domain Lookup
 - **Auto WHOIS lookup** — fetches domain creation date and age via RDAP (Registration Data Access Protocol); falls back to [whoisjson.com](https://whoisjson.com) if RDAP fails
