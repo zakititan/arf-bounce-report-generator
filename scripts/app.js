@@ -15,7 +15,7 @@
 
 import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx,
          fetchLaravelCheck, fetchXmlrpcCheck, fetchWordPressCheck } from './api.js';
-import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, matchesRequest,   consumePendingRequest, registerPendingRequest, createUnsuspendRequestId, createRequestId, createRequestContextKey, isAllowedWebAppOrigin, validateExtensionResult, validateUnsuspendOutcome, validateAccountIdentifier, isSafeJiraUrl } from './pure.js';
+import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, matchesRequest,   consumePendingRequest, registerPendingRequest, screenshotAcceptCount, isAcceptableScreenshotSize, MAX_SCREENSHOT_BYTES, createUnsuspendRequestId, createRequestId, createRequestContextKey, isAllowedWebAppOrigin, validateExtensionResult, validateUnsuspendOutcome, validateAccountIdentifier, isSafeJiraUrl } from './pure.js';
 import { buildUnsuspendAccounts, cleanSheetReason, getSheetReportType } from './report-actions.js';
 import {
   showToast, showToastLink, initThemeToggle,
@@ -41,6 +41,9 @@ const BTN_PENDING_TIMEOUT_MS = 90000;
 const _lookupTimers = { arf: null, bounce: null };
 const _draftTimers = {};
 const _btnTimers = new WeakMap();
+// FileReader pushes asynchronously: count in-flight reads per slot so rapid
+// pastes can't all observe a stale length and blow past MAX_SCREENSHOTS.
+const _screenshotInFlight = {};
 // prefix (used in element ids/state) → tab data-tab / panel id suffix
 const TAB_DATA_TAB = { arf: 'arf', bounce: 'bounce', ipspike: 'ip-spike', smtpsuspend: 'smtp-suspension' };
 // Fields counted by updateReqCounter (required-field chips)
@@ -1153,13 +1156,32 @@ function handleDrop(e, prefix, key) {
 function handleFileSelect(e, prefix, key) { processFiles(Array.from(e.target.files), prefix, key); e.target.value = ''; }
 function processFiles(files, prefix, key) {
   const target = state[prefix][key];
-  const available = MAX_SCREENSHOTS - target.length;
+  const slot = prefix + ':' + key;
+  const inFlight = _screenshotInFlight[slot] || 0;
+  const imageFiles = files.filter(f => f.type.startsWith('image/'));
+  const acceptable = [];
+  let skippedOversize = 0;
+  for (const file of imageFiles) {
+    if (isAcceptableScreenshotSize(file.size, MAX_SCREENSHOT_BYTES)) acceptable.push(file);
+    else skippedOversize++;
+  }
+  if (skippedOversize > 0) showToast(skippedOversize + ' file(s) skipped — over the 20MB per-image limit.');
+  const available = screenshotAcceptCount(target.length, inFlight, acceptable.length, MAX_SCREENSHOTS);
   if (available <= 0) { showToast('Maximum ' + MAX_SCREENSHOTS + ' screenshots allowed.'); return; }
-  const toProcess = files.slice(0, available);
-  if (files.length > available) showToast('Only ' + available + ' more screenshot(s) allowed (max ' + MAX_SCREENSHOTS + '). ' + (files.length - available) + ' file(s) skipped.');
+  const toProcess = acceptable.slice(0, available);
+  if (acceptable.length > available) showToast('Only ' + available + ' more screenshot(s) allowed (max ' + MAX_SCREENSHOTS + '). ' + (acceptable.length - available) + ' file(s) skipped.');
+  _screenshotInFlight[slot] = inFlight + toProcess.length;
   toProcess.forEach(file => {
     const reader = new FileReader();
-    reader.onload = ev => { target.push({ dataUrl: ev.target.result, name: file.name }); renderPreviews(prefix, key); };
+    reader.onload = ev => {
+      _screenshotInFlight[slot] = Math.max(0, (_screenshotInFlight[slot] || 1) - 1);
+      // Re-check at push time: with concurrent reads the synchronous check
+      // above can still over-admit, so overflow is dropped, never stored.
+      if (target.length >= MAX_SCREENSHOTS) { renderPreviews(prefix, key); return; }
+      target.push({ dataUrl: ev.target.result, name: file.name });
+      renderPreviews(prefix, key);
+    };
+    reader.onerror = () => { _screenshotInFlight[slot] = Math.max(0, (_screenshotInFlight[slot] || 1) - 1); };
     reader.readAsDataURL(file);
   });
 }

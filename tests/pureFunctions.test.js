@@ -12,6 +12,9 @@ import {
   consumePendingRequest,
   registerPendingRequest,
   PENDING_REQUEST_TTL_MS,
+  screenshotAcceptCount,
+  isAcceptableScreenshotSize,
+  MAX_SCREENSHOT_BYTES,
   createRequestContextKey,
   svgMarkup,
   validateAccountIdentifier,
@@ -368,8 +371,7 @@ describe('concurrent request state', () => {
     assert.equal(pending.size, 0);
   });
 
-  it('evicts unanswered requests older than the TTL on register', () => {
-    const pending = new Map();
+  it('evicts unanswered requests older than the TTL on register', () => {    const pending = new Map();
     registerPendingRequest(pending, 'jira-old', { panel: 'arf' }, 1_000);
     registerPendingRequest(pending, 'jira-new', { panel: 'bounce' }, 1_000 + PENDING_REQUEST_TTL_MS - 1);
     assert.equal(pending.size, 2);
@@ -377,6 +379,21 @@ describe('concurrent request state', () => {
     assert.equal(pending.has('jira-old'), false);
     assert.equal(pending.has('jira-new'), true);
     assert.equal(pending.has('jira-now'), true);
+  });
+
+  it('counts in-flight reads so rapid pastes cannot bypass the cap', () => {
+    assert.equal(screenshotAcceptCount(0, 0, 10, 10), 10);
+    assert.equal(screenshotAcceptCount(0, 10, 10, 10), 0);
+    assert.equal(screenshotAcceptCount(8, 0, 10, 10), 2);
+    assert.equal(screenshotAcceptCount(8, 5, 10, 10), 0);
+    assert.equal(screenshotAcceptCount(10, 0, 5, 10), 0);
+  });
+
+  it('rejects absurdly large single files', () => {
+    assert.equal(isAcceptableScreenshotSize(1024, MAX_SCREENSHOT_BYTES), true);
+    assert.equal(isAcceptableScreenshotSize(MAX_SCREENSHOT_BYTES, MAX_SCREENSHOT_BYTES), true);
+    assert.equal(isAcceptableScreenshotSize(MAX_SCREENSHOT_BYTES + 1, MAX_SCREENSHOT_BYTES), false);
+    assert.equal(isAcceptableScreenshotSize(-1, MAX_SCREENSHOT_BYTES), false);
   });
 
   it('creates distinct storage keys for each report and request context', () => {

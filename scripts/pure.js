@@ -187,6 +187,19 @@ export function registerPendingRequest(pending, requestId, value, now = Date.now
   return pending;
 }
 
+// Screenshot caps: FileReader pushes asynchronously, so the check must count
+// in-flight reads too — otherwise rapid pastes all see a stale length and
+// blow past MAX_SCREENSHOTS with multi-MB dataURLs each.
+export const MAX_SCREENSHOT_BYTES = 20 * 1024 * 1024;
+
+export function screenshotAcceptCount(currentCount, inFlightCount, incomingCount, max) {
+  return Math.max(0, Math.min(incomingCount, max - currentCount - inFlightCount));
+}
+
+export function isAcceptableScreenshotSize(fileBytes, maxBytes = MAX_SCREENSHOT_BYTES) {
+  return typeof fileBytes === 'number' && fileBytes >= 0 && fileBytes <= maxBytes;
+}
+
 export function createRequestContextKey(reportId, panel, requestId) {
   return JSON.stringify([reportId || '', panel || '', requestId || '']);
 }
