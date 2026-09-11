@@ -11,6 +11,12 @@ export function createUnsuspendReasonKey(requestId) {
   return 'unsuspendReason:' + (requestId || 'legacy');
 }
 
+export function buildAbuseDeskUrl(account, region, requestId) {
+  return 'https://abusedesk.ops.titan.email/blocked_users.html?entity=' +
+    encodeURIComponent(account) + '&region=' + region +
+    (requestId ? '&rgRequestId=' + encodeURIComponent(requestId) : '');
+}
+
 export function createPerAccountUnsuspendReasonKey(requestId, account) {
   return createUnsuspendReasonKey(requestId) + ':' + String(account == null ? '' : account).trim().toLowerCase();
 }

@@ -77,6 +77,13 @@
     return scoped || fallback || null;
   }
 
+  // Domain entities (bare domains, no '@') verify in a fresh tab; email
+  // entities keep the reload-in-place flow (the AD page is janky on reload
+  // for domain lookups).
+  function isDomainEntity(account) {
+    return typeof account === 'string' && account.length > 0 && account.indexOf('@') === -1;
+  }
+
   var api = {
     REASON_TTL_MS: REASON_TTL_MS,
     ERROR_POLL_TIMEOUT_MS: ERROR_POLL_TIMEOUT_MS,
@@ -94,6 +101,7 @@
     buildMissingReasonCause: buildMissingReasonCause,
     isVisibleErrorRecord: isVisibleErrorRecord,
     selectPreferredTextarea: selectPreferredTextarea,
+    isDomainEntity: isDomainEntity,
   };
 
   if (typeof globalThis !== 'undefined') {

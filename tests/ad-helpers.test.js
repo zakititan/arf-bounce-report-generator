@@ -19,6 +19,7 @@ const {
   buildMissingReasonCause,
   isVisibleErrorRecord,
   selectPreferredTextarea,
+  isDomainEntity,
 } = globalThis.AD_HELPERS;
 
 // ── tolerant unblock matching ─────────────────────────────────────────
@@ -226,5 +227,20 @@ describe('selectPreferredTextarea', () => {
     const fallback = { id: 'fallback' };
     assert.equal(selectPreferredTextarea(null, fallback), fallback);
     assert.equal(selectPreferredTextarea(null, null), null);
+  });
+});
+
+// ── domain vs email entities ──────────────────────────────────────────
+describe('isDomainEntity', () => {
+  it('treats bare domains as domain entities', () => {
+    assert.equal(isDomainEntity('example.com'), true);
+    assert.equal(isDomainEntity('sub.example.co.uk'), true);
+  });
+
+  it('treats emails and blank input as user entities', () => {
+    assert.equal(isDomainEntity('user@example.com'), false);
+    assert.equal(isDomainEntity(''), false);
+    assert.equal(isDomainEntity(null), false);
+    assert.equal(isDomainEntity(undefined), false);
   });
 });

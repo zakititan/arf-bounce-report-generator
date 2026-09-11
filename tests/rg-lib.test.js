@@ -648,8 +648,7 @@ describe('isStorableReportHtml', () => {
   });
 });
 
-describe('findStaleStorageKeys', () => {
-  it('flags expired unsuspend, verify and fallback-report keys', () => {
+describe('findStaleStorageKeys', () => {  it('flags expired unsuspend, verify and fallback-report keys', () => {
     const now = 1_000_000;
     const stale = { reason: 'https://jira.directi.com/browse/X-1', ts: now - 200_000 };
     const fresh = { reason: 'https://jira.directi.com/browse/X-2', ts: now };
@@ -679,5 +678,22 @@ describe('findStaleStorageKeys', () => {
       'jiraUrl:k': { url: 'https://jira.directi.com/browse/X-1', ts: now },
       'unsuspendReason:broken': 'not-an-object',
     }, now), []);
+  });
+});
+
+// ── buildAbuseDeskUrl ─────────────────────────────────────────────────
+describe('buildAbuseDeskUrl', () => {
+  it('builds the blocked-users URL with entity, region and request id', () => {
+    assert.equal(
+      rgLib.buildAbuseDeskUrl('user@example.com', 'us-east-1', 'req-1'),
+      'https://abusedesk.ops.titan.email/blocked_users.html?entity=user%40example.com&region=us-east-1&rgRequestId=req-1'
+    );
+  });
+
+  it('omits the request id when absent', () => {
+    assert.equal(
+      rgLib.buildAbuseDeskUrl('example.com', 'eu-central-1', ''),
+      'https://abusedesk.ops.titan.email/blocked_users.html?entity=example.com&region=eu-central-1'
+    );
   });
 });

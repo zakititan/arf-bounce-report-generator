@@ -379,10 +379,35 @@
 
       // Mark this account for verification, then reload — USER STATUS only
       // reflects the unsuspension after a page reload.
+      // Domain entities verify in a FRESH tab instead: the AD page is janky
+      // on reload for domain lookups, so the worker opens a clean tab (which
+      // enters verification mode via the marker) and swaps this one out.
+      var hDom = adHelpers();
+      var domainCase = (hDom && hDom.isDomainEntity) ? hDom.isDomainEntity(account) : isDomainEntity(account);
       setVerifyEntry(account, 1, function () {
-        showToast('Save accepted — reloading to verify user status\u2026');
-        log('Reloading to verify USER STATUS for ' + account);
-        setTimeout(function () { location.reload(); }, 800);
+        if (!domainCase) {
+          showToast('Save accepted — reloading to verify user status…');
+          log('Reloading to verify USER STATUS for ' + account);
+          setTimeout(function () { location.reload(); }, 800);
+          return;
+        }
+        var region = '';
+        try { region = new URLSearchParams(window.location.search).get('region') || ''; } catch (e) {}
+        showToast('Save accepted — opening a fresh tab to verify domain status…');
+        log('Requesting fresh verify tab for domain ' + account);
+        function fallbackToReload(why) {
+          log('Fresh verify tab unavailable (' + why + ') — falling back to reload');
+          setTimeout(function () { location.reload(); }, 800);
+        }
+        try {
+          chrome.runtime.sendMessage({ action: 'open-verify-tab', data: { account: account, region: region, requestId: requestId } }, function (resp) {
+            if (chrome.runtime.lastError || !resp || !resp.success) {
+              fallbackToReload((resp && resp.error) || (chrome.runtime.lastError && chrome.runtime.lastError.message) || 'no response');
+              return;
+            }
+            log('Fresh verify tab opened for ' + account + ' — verdict will arrive from there');
+          });
+        } catch (e) { fallbackToReload(e.message); }
       });
     });
   }
