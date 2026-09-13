@@ -26,6 +26,14 @@ export function getSheetReportType(prefix) {
   return 'BOUNCE';
 }
 
+// Direct panel suspension-type dropdown → Unsuspension Type column value.
+// Returns null for anything unselected so callers fail with a warning.
+export function getDirectSheetReportType(value) {
+  if (value === 'ARF') return 'ARF';
+  if (value === 'Bounce') return 'BOUNCE';
+  return null;
+}
+
 export function cleanSheetReason(reportText) {
   return reportText
     .split('\n')

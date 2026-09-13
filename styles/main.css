@@ -660,6 +660,9 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .btn-ghost:hover { background: var(--color-surface-2); color: var(--color-text); }
 .btn-full { width: 100%; }
 .panel-actions { padding: var(--space-4) var(--space-6); border-top: 1px solid var(--color-divider); display: flex; gap: var(--space-3); }
+/* Primary fills the row; secondary buttons keep natural width on one line */
+.panel-actions .btn-primary { flex: 1 1 auto; min-width: 0; }
+.panel-actions .btn-secondary { flex-shrink: 0; white-space: nowrap; }
 .panel-actions.sticky {
   position: sticky; bottom: 0; z-index: 10;
   background: color-mix(in srgb, var(--color-surface) 88%, transparent);

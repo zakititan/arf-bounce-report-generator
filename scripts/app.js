@@ -16,7 +16,7 @@
 import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx,
          fetchLaravelCheck, fetchXmlrpcCheck, fetchWordPressCheck } from './api.js';
 import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, matchesRequest,   consumePendingRequest, registerPendingRequest, screenshotAcceptCount, isAcceptableScreenshotSize, MAX_SCREENSHOT_BYTES, createUnsuspendRequestId, createRequestId, createRequestContextKey, isAllowedWebAppOrigin, validateExtensionResult, validateUnsuspendOutcome, validateAccountIdentifier, parseAccountList, isSafeJiraUrl } from './pure.js';
-import { buildUnsuspendAccounts, cleanSheetReason, getSheetReportType, truncateSheetText } from './report-actions.js';
+import { buildUnsuspendAccounts, cleanSheetReason, getSheetReportType, getDirectSheetReportType, truncateSheetText } from './report-actions.js';
 import {
   showToast, showToastLink, initThemeToggle,
   clearFieldErrors, showValidationErrors,
@@ -2033,17 +2033,29 @@ function retryUnsuspend(prefix) {
 }
 
 // ── Direct Unsuspend panel (no report — account + JIRA link only) ──────
-function unsuspendDirect(btn) {
+function validateDirectInputs() {
   const accounts = parseAccountList(document.getElementById('direct-account')?.value.trim() || '');
   if (!accounts) {
     showToast('Please enter valid comma-separated email addresses or domains.', 'warning');
-    return;
+    return null;
   }
   const jiraLink = document.getElementById('direct-jira-link')?.value.trim() || '';
   if (!isSafeJiraUrl(jiraLink)) {
     showToast('Please enter a valid JIRA link (https://jira.directi.com/browse/…).', 'warning');
-    return;
+    return null;
   }
+  const suspType = getDirectSheetReportType(document.getElementById('direct-susp-type')?.value || '');
+  if (!suspType) {
+    showToast('Please select a suspension type.', 'warning');
+    return null;
+  }
+  return { accounts, jiraLink, suspType };
+}
+
+function unsuspendDirect(btn) {
+  const inputs = validateDirectInputs();
+  if (!inputs) return;
+  const { accounts, jiraLink } = inputs;
 
   const region = (state.direct || state.arf).region === 'eu' ? 'eu-central-1' : 'us-east-1';
   const requestId = createUnsuspendRequestId();
@@ -2104,16 +2116,9 @@ function fetchJiraDescription(jiraUrl) {
 
 // Direct panel sheet logging: JIRA description → reason, one row per account.
 async function logDirectToSheet(btn) {
-  const accounts = parseAccountList(document.getElementById('direct-account')?.value.trim() || '');
-  if (!accounts) {
-    showToast('Please enter valid comma-separated email addresses or domains.', 'warning');
-    return;
-  }
-  const jiraLink = document.getElementById('direct-jira-link')?.value.trim() || '';
-  if (!isSafeJiraUrl(jiraLink)) {
-    showToast('Please enter a valid JIRA link (https://jira.directi.com/browse/…).', 'warning');
-    return;
-  }
+  const inputs = validateDirectInputs();
+  if (!inputs) return;
+  const { accounts, jiraLink, suspType } = inputs;
 
   setBtnPending(btn, 'Fetching JIRA…', 30000);
   const fetched = await fetchJiraDescription(jiraLink);
@@ -2129,7 +2134,7 @@ async function logDirectToSheet(btn) {
     return;
   }
 
-  const type = getSheetReportType('direct');
+  const type = suspType;
   const date = new Date().toLocaleDateString('en-US');
   const reportId = _reportContextIds.direct || createUnsuspendRequestId();
   let pending = accounts.length;
@@ -2187,8 +2192,10 @@ function clearDirect(opts) {
   if (!(opts && opts.skipConfirm) && !confirm('Clear Direct Unsuspend form data? This cannot be undone.')) return;
   const accountEl = document.getElementById('direct-account');
   const jiraEl = document.getElementById('direct-jira-link');
+  const typeEl = document.getElementById('direct-susp-type');
   if (accountEl) accountEl.value = '';
   if (jiraEl) jiraEl.value = '';
+  if (typeEl) typeEl.value = '';
   if (_cancelUnsuspendTracking) _cancelUnsuspendTracking('direct');
   const actionResults = document.getElementById('direct-action-results');
   if (actionResults) actionResults.hidden = true;

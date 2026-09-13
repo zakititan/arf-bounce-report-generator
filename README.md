@@ -181,10 +181,10 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Sticky generate + clear** — generate button sticks to the bottom of the panel; Clear button sits below it (same as ARF/Bounce)
 
 ### Direct Unsuspend Panel
-- **No report needed** — two fields only: Account (single or comma-separated) and JIRA link; no stepper, domain lookup, or output section
+- **No report needed** — three fields only: Account (single or comma-separated), JIRA link, and Suspension type (Bounce/ARF); no stepper, domain lookup, or output section
 - **Unsuspend via AD** — posts the JIRA link as the Abuse Desk unblock reason through the no-JIRA extension flow (empty report text/HTML); per-account verdict chips + Retry Failed work exactly like the other panels
 - **Region chip** — MX-based region detection runs on account blur (first account wins for multi-account runs)
-- **Log from JIRA** — "Log to Sheet" fetches the issue description via the extension (`GET /rest/api/2/issue/{key}?fields=description`, session-cookie auth, key parsed from the pasted link — browse path or `selectedIssue` param), strips report markers, truncates to 45k chars (Sheets cell limit), and logs one DIRECT row per account
+- **Log from JIRA** — "Log to Sheet" fetches the issue description via the extension (`GET /rest/api/2/issue/{key}?fields=description`, session-cookie auth, key parsed from the pasted link — browse path or `selectedIssue` param), strips report markers, truncates to 45k chars (Sheets cell limit), and logs one row per account with the selected suspension type (BOUNCE/ARF) in the Unsuspension Type column
 - **Draft persistence** — inputs survive refresh like the other panels; included in Clear-all
 
 ### Mailboards Integration

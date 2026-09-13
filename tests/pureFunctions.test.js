@@ -27,6 +27,7 @@ import {
   buildUnsuspendAccounts,
   cleanSheetReason,
   getSheetReportType,
+  getDirectSheetReportType,
   truncateSheetText,
 } from '../scripts/report-actions.js';
 
@@ -493,6 +494,19 @@ describe('getSheetReportType', () => {
     assert.equal(getSheetReportType('smtpsuspend'), 'SMTP');
     assert.equal(getSheetReportType('bounce'), 'BOUNCE');
     assert.equal(getSheetReportType('direct'), 'DIRECT');
+  });
+});
+
+describe('getDirectSheetReportType', () => {
+  it('maps the suspension-type dropdown to the Unsuspension Type column value', () => {
+    assert.equal(getDirectSheetReportType('Bounce'), 'BOUNCE');
+    assert.equal(getDirectSheetReportType('ARF'), 'ARF');
+  });
+
+  it('returns null for empty or unknown selections', () => {
+    assert.equal(getDirectSheetReportType(''), null);
+    assert.equal(getDirectSheetReportType(null), null);
+    assert.equal(getDirectSheetReportType('SMTP'), null);
   });
 });
 

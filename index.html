@@ -640,6 +640,11 @@
           <input type="url" id="direct-jira-link" aria-required="true" placeholder="e.g. https://jira.directi.com/browse/TAE-12345">
           <span class="hint">Used as the Abuse Desk unblock reason, and its description is logged to the sheet</span>
         </div>
+        <div class="field">
+          <label for="direct-susp-type">Suspension type<span class="req">*</span></label>
+          <select id="direct-susp-type" aria-required="true"><option value="">Select...</option><option value="Bounce">Bounce</option><option value="ARF">ARF</option></select>
+          <span class="hint">Filed in the Unsuspension Type column when logging to the sheet</span>
+        </div>
         <div class="action-results" id="direct-action-results" hidden>
           <div class="action-result-row" id="direct-unsuspend-result" hidden>
             <span class="action-result-label">Unsuspension</span>
@@ -649,7 +654,7 @@
         </div>
       </div>
       <div class="panel-actions sticky">
-        <button class="btn btn-primary btn-full btn-unsuspend" data-action="unsuspend" data-panel="direct">
+        <button class="btn btn-primary btn-unsuspend" data-action="unsuspend" data-panel="direct">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg> Unsuspend via AD
         </button>
         <button class="btn btn-secondary btn-log-sheet" data-action="log-sheet" data-panel="direct" title="Fetch the JIRA description and log it to Google Sheet"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>Log to Sheet</button>
