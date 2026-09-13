@@ -61,6 +61,27 @@ export function isSafeJiraUrl(value) {
   return isHttpsUrl(value, 'jira.directi.com', /^\/browse\/[A-Z][A-Z0-9]+-\d+$/);
 }
 
+const JIRA_ISSUE_KEY_RE = /^[A-Z][A-Z0-9]+-\d+$/;
+
+// Extracts a JIRA issue key from a pasted JIRA URL (browse path or
+// selectedIssue query param). Returns null for anything else so callers
+// fail closed instead of fetching an attacker-chosen URL.
+export function extractJiraIssueKey(value) {
+  if (typeof value !== 'string' || !value) return null;
+  let url;
+  try {
+    url = new URL(value);
+  } catch (_) {
+    return null;
+  }
+  if (url.protocol !== 'https:' || url.hostname !== 'jira.directi.com') return null;
+  const browse = url.pathname.match(/^\/browse\/([A-Z][A-Z0-9]+-\d+)$/);
+  if (browse) return browse[1];
+  const selected = url.searchParams.get('selectedIssue');
+  if (selected && JIRA_ISSUE_KEY_RE.test(selected)) return selected;
+  return null;
+}
+
 export function selectJiraUrl(displayed, stored) {
   if (isSafeJiraUrl(displayed)) return displayed;
   return isSafeJiraUrl(stored) ? stored : '';
@@ -121,6 +142,9 @@ export function validateWebAppMessage(message) {
   if (message.type === 'REPORT_GENERATOR_PARTNER_PANEL_LOOKUP') {
     return hasRequestId && isValidAccountIdentifier(typeof message.account === 'string' ? message.account.trim() : '');
   }
+  if (message.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION') {
+    return hasRequestId && hasStrings(['panel', 'jiraUrl']);
+  }
   return false;
 }
 
@@ -142,6 +166,11 @@ export function validateExtensionResult(message) {
   if (message.type === 'REPORT_GENERATOR_LOG_SHEET_RESULT') {
     return (!message.cellUrl || isSafeGoogleSheetsUrl(message.cellUrl)) &&
       (!message.unverified || typeof message.unverified === 'boolean') &&
+      (!message.error || typeof message.error === 'string');
+  }
+  if (message.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT') {
+    return (!message.issueKey || typeof message.issueKey === 'string') &&
+      (!message.description || typeof message.description === 'string') &&
       (!message.error || typeof message.error === 'string');
   }
   if (message.type === 'PARTNER_PANEL_RESULT') {

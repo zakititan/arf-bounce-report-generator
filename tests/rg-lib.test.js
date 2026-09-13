@@ -697,3 +697,70 @@ describe('buildAbuseDeskUrl', () => {
     );
   });
 });
+
+describe('extractJiraIssueKey', () => {
+  it('extracts the key from a safe browse URL', () => {
+    assert.equal(rgLib.extractJiraIssueKey('https://jira.directi.com/browse/TAE-1234'), 'TAE-1234');
+  });
+
+  it('extracts the key from a selectedIssue query param', () => {
+    assert.equal(
+      rgLib.extractJiraIssueKey('https://jira.directi.com/secure/RapidBoard.jspa?selectedIssue=ABC-99'),
+      'ABC-99'
+    );
+  });
+
+  it('rejects unsafe hosts, malformed keys and non-strings', () => {
+    assert.equal(rgLib.extractJiraIssueKey('https://evil.example/browse/TAE-1234'), null);
+    assert.equal(rgLib.extractJiraIssueKey('https://jira.directi.com/browse/not-a-key'), null);
+    assert.equal(rgLib.extractJiraIssueKey('https://jira.directi.com/browse/TAE-1234/extra'), null);
+    assert.equal(rgLib.extractJiraIssueKey(''), null);
+    assert.equal(rgLib.extractJiraIssueKey(null), null);
+    assert.equal(rgLib.extractJiraIssueKey(42), null);
+  });
+});
+
+describe('JIRA description message validation', () => {
+  it('accepts a well-formed description request', () => {
+    assert.equal(rgLib.validateWebAppMessage({
+      type: 'REPORT_GENERATOR_JIRA_DESCRIPTION',
+      requestId: 'desc-1',
+      panel: 'direct',
+      jiraUrl: 'https://jira.directi.com/browse/TAE-1234',
+    }), true);
+  });
+
+  it('rejects description requests with bad requestId or missing jiraUrl', () => {
+    assert.equal(rgLib.validateWebAppMessage({
+      type: 'REPORT_GENERATOR_JIRA_DESCRIPTION',
+      requestId: '!!!',
+      panel: 'direct',
+      jiraUrl: 'https://jira.directi.com/browse/TAE-1234',
+    }), false);
+    assert.equal(rgLib.validateWebAppMessage({
+      type: 'REPORT_GENERATOR_JIRA_DESCRIPTION',
+      requestId: 'desc-1',
+      panel: 'direct',
+    }), false);
+  });
+
+  it('accepts successful and failed description results', () => {
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT',
+      requestId: 'desc-1',
+      success: true,
+      issueKey: 'TAE-1234',
+      description: 'text',
+    }), true);
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT',
+      requestId: 'desc-1',
+      success: false,
+      error: 'nope',
+    }), true);
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT',
+      requestId: 'desc-1',
+    }), false);
+  });
+});

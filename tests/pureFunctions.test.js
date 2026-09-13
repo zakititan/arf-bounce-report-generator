@@ -27,6 +27,7 @@ import {
   buildUnsuspendAccounts,
   cleanSheetReason,
   getSheetReportType,
+  truncateSheetText,
 } from '../scripts/report-actions.js';
 
 // ── escapeHtml ────────────────────────────────────────────────────────
@@ -491,6 +492,7 @@ describe('getSheetReportType', () => {
     assert.equal(getSheetReportType('arf'), 'ARF');
     assert.equal(getSheetReportType('smtpsuspend'), 'SMTP');
     assert.equal(getSheetReportType('bounce'), 'BOUNCE');
+    assert.equal(getSheetReportType('direct'), 'DIRECT');
   });
 });
 
@@ -500,5 +502,58 @@ describe('cleanSheetReason', () => {
       cleanSheetReason('#ARF\nReason line\n── Screenshots ──\n1. proof.PNG\n#Bounce'),
       'Reason line',
     );
+  });
+});
+
+describe('truncateSheetText', () => {
+  it('returns short text unchanged', () => {
+    assert.equal(truncateSheetText('hello'), 'hello');
+    assert.equal(truncateSheetText(''), '');
+  });
+
+  it('truncates over-long JIRA descriptions with an ellipsis marker', () => {
+    const long = 'x'.repeat(50000);
+    const out = truncateSheetText(long);
+    assert.ok(out.length < long.length);
+    assert.equal(out, 'x'.repeat(45000) + '…[truncated]');
+  });
+
+  it('tolerates non-string input', () => {
+    assert.equal(truncateSheetText(null), '');
+    assert.equal(truncateSheetText(undefined), '');
+  });
+});
+
+describe('validateExtensionResult JIRA description', () => {
+  it('accepts a successful description result with issue key and text', () => {
+    assert.equal(validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT',
+      requestId: 'desc-1',
+      success: true,
+      issueKey: 'TAE-123',
+      description: 'Some description',
+    }), true);
+  });
+
+  it('accepts a failed description result with an error string', () => {
+    assert.equal(validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT',
+      requestId: 'desc-1',
+      success: false,
+      error: 'Issue not found',
+    }), true);
+  });
+
+  it('rejects malformed description results', () => {
+    assert.equal(validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT',
+      requestId: 'desc-1',
+      success: true,
+      issueKey: 42,
+    }), false);
+    assert.equal(validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT',
+      requestId: 'desc-1',
+    }), false);
   });
 });

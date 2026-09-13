@@ -115,6 +115,11 @@ export function validateExtensionResult(message) {
       (!message.unverified || typeof message.unverified === 'boolean') &&
       (!message.error || typeof message.error === 'string');
   }
+  if (message.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT') {
+    return (!message.issueKey || typeof message.issueKey === 'string') &&
+      (!message.description || typeof message.description === 'string') &&
+      (!message.error || typeof message.error === 'string');
+  }
   return false;
 }
 

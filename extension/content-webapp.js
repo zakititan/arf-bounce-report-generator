@@ -80,12 +80,14 @@
     if (data.type === 'REPORT_GENERATOR_PONG' || data.type === 'REPORT_GENERATOR_ERROR' ||
         data.type === 'REPORT_GENERATOR_JIRA_RESULT' || data.type === 'REPORT_GENERATOR_UNSUSPEND_RESULT' ||
         data.type === 'REPORT_GENERATOR_LOG_SHEET_RESULT' || data.type === 'PARTNER_PANEL_RESULT' ||
-        data.type === 'REPORT_GENERATOR_UNSUSPEND_OUTCOME') return null;
+        data.type === 'REPORT_GENERATOR_UNSUSPEND_OUTCOME' ||
+        data.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT') return null;
     if (!storageAvailable) return helperBuildError('STORAGE_UNAVAILABLE', helperExtractRequestId(data));
     var known = data.type === 'REPORT_GENERATOR_JIRA' ||
       data.type === 'REPORT_GENERATOR_UNSUSPEND' ||
       data.type === 'REPORT_GENERATOR_UNSUSPEND_NO_JIRA' ||
       data.type === 'REPORT_GENERATOR_LOG_SHEET' ||
+      data.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION' ||
       data.type === 'REPORT_GENERATOR_PARTNER_PANEL_LOOKUP';
     if (known) {
       return messageValid(data) ? null : helperBuildError('INVALID_MESSAGE', helperExtractRequestId(data));
@@ -170,6 +172,9 @@
     }
     if (data.type === 'REPORT_GENERATOR_PARTNER_PANEL_LOOKUP') {
       return requestId && validAccount(typeof data.account === 'string' ? data.account.trim() : '');
+    }
+    if (data.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION') {
+      return requestId && typeof data.panel === 'string' && typeof data.jiraUrl === 'string';
     }
     return false;
   }
@@ -341,6 +346,20 @@
           window.postMessage({ type: 'REPORT_GENERATOR_UNSUSPEND_RESULT', requestId: noJiraData.requestId, success: true, opened: resp.opened }, replyOrigin);
         });
       });
+    }
+
+    if (event.data.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION') {
+      var descData = event.data;
+      chrome.runtime.sendMessage(
+        { action: 'fetch-jira-description', data: { jiraUrl: descData.jiraUrl, requestId: descData.requestId } },
+        function (descResponse) {
+          if (chrome.runtime.lastError || !descResponse) {
+            window.postMessage({ type: 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT', requestId: descData.requestId, success: false, error: (chrome.runtime.lastError && chrome.runtime.lastError.message) || 'Failed fetching JIRA description' }, replyOrigin);
+            return;
+          }
+          window.postMessage({ type: 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT', requestId: descData.requestId, success: descResponse.success === true, issueKey: descResponse.issueKey || null, description: typeof descResponse.description === 'string' ? descResponse.description : null, error: descResponse.error || null }, replyOrigin);
+        }
+      );
     }
 
     if (event.data.type === 'REPORT_GENERATOR_LOG_SHEET') {

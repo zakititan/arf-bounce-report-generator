@@ -1,4 +1,4 @@
-import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList, createUnsuspendReasonKey, createPerAccountUnsuspendReasonKey, persistUnsuspendReason, isSafeJiraUrl, isSafeGoogleSheetsUrl, isSafeAppsScriptUrl, createPendingMap, capInlineImages, isValidJiraCreatePayload, discoverDoneTransitionId, buildBulkSummary, findStaleStorageKeys, buildAbuseDeskUrl } from './rg-lib.js';
+import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList, createUnsuspendReasonKey, createPerAccountUnsuspendReasonKey, persistUnsuspendReason, isSafeJiraUrl, isSafeGoogleSheetsUrl, isSafeAppsScriptUrl, createPendingMap, capInlineImages, isValidJiraCreatePayload, discoverDoneTransitionId, buildBulkSummary, findStaleStorageKeys, buildAbuseDeskUrl, extractJiraIssueKey } from './rg-lib.js';
 import { fetchWithTimeout } from './timeout.js';
 
 const EXPIRY_MS = 10 * 60 * 1000;
@@ -295,6 +295,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse(result);
       })
       .catch(e => sendResponse({ success: false, error: e.message, status: 0 }));
+    return true;
+  }
+
+  if (message.action === 'fetch-jira-description') {
+    const d = message.data || {};
+    const issueKey = extractJiraIssueKey(d.jiraUrl);
+    if (!issueKey) {
+      sendResponse({ success: false, error: 'Invalid JIRA link' });
+      return true;
+    }
+    // Session-cookie auth, same as issue creation — the key comes from our
+    // own allowlisted parser, never from raw caller input.
+    fetchWithTimeout('https://jira.directi.com/rest/api/2/issue/' + issueKey + '?fields=description', { credentials: 'include' })
+      .then(r => {
+        if (!r.ok) throw new Error('JIRA responded ' + r.status);
+        return r.json();
+      })
+      .then(json => {
+        const description = json && json.fields && typeof json.fields.description === 'string'
+          ? json.fields.description
+          : '';
+        sendResponse({ success: true, issueKey, description });
+      })
+      .catch(e => sendResponse({ success: false, error: e.message || 'Failed fetching JIRA issue' }));
     return true;
   }
 

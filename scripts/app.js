@@ -15,8 +15,8 @@
 
 import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx,
          fetchLaravelCheck, fetchXmlrpcCheck, fetchWordPressCheck } from './api.js';
-import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, matchesRequest,   consumePendingRequest, registerPendingRequest, screenshotAcceptCount, isAcceptableScreenshotSize, MAX_SCREENSHOT_BYTES, createUnsuspendRequestId, createRequestId, createRequestContextKey, isAllowedWebAppOrigin, validateExtensionResult, validateUnsuspendOutcome, validateAccountIdentifier, isSafeJiraUrl } from './pure.js';
-import { buildUnsuspendAccounts, cleanSheetReason, getSheetReportType } from './report-actions.js';
+import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, matchesRequest,   consumePendingRequest, registerPendingRequest, screenshotAcceptCount, isAcceptableScreenshotSize, MAX_SCREENSHOT_BYTES, createUnsuspendRequestId, createRequestId, createRequestContextKey, isAllowedWebAppOrigin, validateExtensionResult, validateUnsuspendOutcome, validateAccountIdentifier, parseAccountList, isSafeJiraUrl } from './pure.js';
+import { buildUnsuspendAccounts, cleanSheetReason, getSheetReportType, truncateSheetText } from './report-actions.js';
 import {
   showToast, showToastLink, initThemeToggle,
   clearFieldErrors, showValidationErrors,
@@ -45,7 +45,7 @@ const _btnTimers = new WeakMap();
 // pastes can't all observe a stale length and blow past MAX_SCREENSHOTS.
 const _screenshotInFlight = {};
 // prefix (used in element ids/state) → tab data-tab / panel id suffix
-const TAB_DATA_TAB = { arf: 'arf', bounce: 'bounce', ipspike: 'ip-spike', smtpsuspend: 'smtp-suspension' };
+const TAB_DATA_TAB = { arf: 'arf', bounce: 'bounce', ipspike: 'ip-spike', smtpsuspend: 'smtp-suspension', direct: 'direct' };
 // Fields counted by updateReqCounter (required-field chips)
 const REQ_SELECTOR = '[aria-required="true"]';
 
@@ -83,6 +83,9 @@ const state = {
     laravelVulnerable: null,
     xmlrpcVulnerable: null,
     wordpressDetected: null,
+  },
+  direct: {
+    region: 'na',
   },
 };
 let lastActivePanel = null; // tracks which panel the user last interacted with (for Ctrl/Cmd+Enter)
@@ -434,12 +437,13 @@ document.addEventListener('click', (e) => {
 
 // ── Clear all panels at once (single confirm, reuses each panel's clear path)
 function clearAllPanels() {
-  if (!confirm('Clear ALL panels (ARF, Bounce, IP Spike, SMTP Suspension)? All form data, screenshots, reports, and results will be erased. This cannot be undone.')) return;
+  if (!confirm('Clear ALL panels (ARF, Bounce, IP Spike, SMTP Suspension, Direct Unsuspend)? All form data, screenshots, reports, and results will be erased. This cannot be undone.')) return;
   const skip = { skipConfirm: true };
   clearARF(skip);
   clearBounce(skip);
   clearIPspike(skip);
   clearSMTPSuspend(skip);
+  clearDirect(skip);
   showToast('All panels cleared.', 'info');
 }
 
@@ -548,6 +552,30 @@ function initDomainInputs() {
     lookupDomain(prefix);
   });
 });
+
+// Direct panel account field → sanitise + region chip (no domain lookup here)
+(function initDirectAccountInput() {
+  const accountInput = document.getElementById('direct-account');
+  if (!accountInput) return;
+  const sanitise = () => {
+    const raw = accountInput.value;
+    // Allow commas for multi-account; sanitise each segment.
+    const sanitised = raw.split(',').map(part => sanitiseAccountInput(part)).join(', ');
+    if (sanitised !== raw) accountInput.value = sanitised;
+  };
+  accountInput.addEventListener('paste', (e) => {
+    e.preventDefault();
+    accountInput.value = (e.clipboardData || window.clipboardData).getData('text');
+    sanitise();
+    accountInput.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  accountInput.addEventListener('input', sanitise);
+  accountInput.addEventListener('blur', () => {
+    const first = (accountInput.value.split(',')[0] || '').trim();
+    const domain = sanitiseDomainInput(first);
+    if (domain) detectRegion('direct', domain);
+  });
+})();
 
 // ── Mailboards link href updater ─────────────────────────────────────
 ['arf', 'bounce'].forEach(prefix => {
@@ -694,6 +722,7 @@ function initEventDelegation() {
     else if (panel.id === 'panel-bounce') lastActivePanel = 'bounce';
     else if (panel.id === 'panel-ip-spike') lastActivePanel = 'ipspike';
     else if (panel.id === 'panel-smtp-suspension') lastActivePanel = 'smtpsuspend';
+    else if (panel.id === 'panel-direct') lastActivePanel = 'direct';
   });
 
   shell.addEventListener('click', (e) => {
@@ -713,6 +742,7 @@ function initEventDelegation() {
         else if (panel === 'bounce') clearBounce();
         else if (panel === 'ipspike') clearIPspike();
         else if (panel === 'smtpsuspend') clearSMTPSuspend();
+        else if (panel === 'direct') clearDirect();
         break;
       case 'lookup':
         if (panel) lookupDomainImmediate(panel);
@@ -721,10 +751,12 @@ function initEventDelegation() {
         createTaeJira(panel, target);
         break;
       case 'unsuspend':
-        unsuspendAccount(panel, target);
+        if (panel === 'direct') unsuspendDirect(target);
+        else unsuspendAccount(panel, target);
         break;
       case 'log-sheet':
-        if (panel) logToSheet(panel);
+        if (panel === 'direct') logDirectToSheet(target);
+        else if (panel) logToSheet(panel);
         break;
       case 'copy': {
         const copyTarget = target.getAttribute('data-target');
@@ -778,7 +810,7 @@ function initEventDelegation() {
 
 // ── Live validation-error clearing ────────────────────────────────────
 function initLiveErrorClear() {
-  ['arf', 'bounce', 'ipspike', 'smtpsuspend'].forEach(prefix => {
+  ['arf', 'bounce', 'ipspike', 'smtpsuspend', 'direct'].forEach(prefix => {
     const panel = document.getElementById('panel-' + TAB_DATA_TAB[prefix]);
     if (!panel) return;
     ['input', 'change'].forEach(evt => panel.addEventListener(evt, (e) => {
@@ -1813,7 +1845,7 @@ function updateReqCounter(prefix) {
 }
 
 function initDraftPersistence() {
-  ['arf', 'bounce', 'ipspike', 'smtpsuspend'].forEach(prefix => {
+  ['arf', 'bounce', 'ipspike', 'smtpsuspend', 'direct'].forEach(prefix => {
     const panel = document.getElementById('panel-' + TAB_DATA_TAB[prefix]);
     if (!panel) return;
     ['input', 'change', 'click'].forEach(evt => panel.addEventListener(evt, () => {
@@ -1958,7 +1990,9 @@ function retryUnsuspend(prefix) {
   const accounts = _lastFailedAccounts[prefix];
   if (!accounts || accounts.length === 0) return;
 
-  const zdLink = document.getElementById(prefix + '-zd-link')?.value.trim() || '';
+  const zdLink = prefix === 'direct'
+    ? (document.getElementById('direct-jira-link')?.value.trim() || '')
+    : (document.getElementById(prefix + '-zd-link')?.value.trim() || '');
   const region = (state[prefix] || state.arf).region === 'eu' ? 'eu-central-1' : 'us-east-1';
 
   let reason;
@@ -1996,6 +2030,176 @@ function retryUnsuspend(prefix) {
 
   const msg = 'Retrying unsuspension for ' + accounts.length + ' account' + (accounts.length > 1 ? 's' : '') + '...';
   showToast(msg, 'info');
+}
+
+// ── Direct Unsuspend panel (no report — account + JIRA link only) ──────
+function unsuspendDirect(btn) {
+  const accounts = parseAccountList(document.getElementById('direct-account')?.value.trim() || '');
+  if (!accounts) {
+    showToast('Please enter valid comma-separated email addresses or domains.', 'warning');
+    return;
+  }
+  const jiraLink = document.getElementById('direct-jira-link')?.value.trim() || '';
+  if (!isSafeJiraUrl(jiraLink)) {
+    showToast('Please enter a valid JIRA link (https://jira.directi.com/browse/…).', 'warning');
+    return;
+  }
+
+  const region = (state.direct || state.arf).region === 'eu' ? 'eu-central-1' : 'us-east-1';
+  const requestId = createUnsuspendRequestId();
+  const reportId = _reportContextIds.direct || createUnsuspendRequestId();
+
+  setBtnPending(btn, 'Working…');
+  _lastUnsuspendPanel = 'direct';
+  window.postMessage({
+    type: 'REPORT_GENERATOR_UNSUSPEND_NO_JIRA',
+    accounts: accounts,
+    account: accounts[0],
+    region: region,
+    reason: jiraLink,
+    text: '',
+    html: '',
+    panel: 'direct',
+    zdLink: jiraLink,
+    requestId: requestId,
+    reportId: reportId,
+  }, '*');
+
+  const msg = accounts.length > 1
+    ? 'Opening Abuse Desk for ' + accounts.length + ' accounts...'
+    : 'Opening Abuse Desk to unsuspend ' + accounts[0] + '...';
+  showToast(msg, 'info');
+  beginUnsuspendTracking(accounts.length, 'direct', accounts, requestId);
+}
+
+// Fetches a JIRA issue description through the extension (session auth).
+function fetchJiraDescription(jiraUrl) {
+  return new Promise((resolve) => {
+    const requestId = createRequestId('desc');
+    const listener = (e) => {
+      if (e.source !== window || !isAllowedWebAppOrigin(e.origin) ||
+          !validateExtensionResult(e.data) ||
+          (e.data.type !== 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT' && e.data.type !== 'REPORT_GENERATOR_ERROR') ||
+          !matchesRequest(requestId, e.data.requestId)) return;
+      window.removeEventListener('message', listener);
+      clearTimeout(timeout);
+      if (e.data.type === 'REPORT_GENERATOR_ERROR') {
+        resolve({ ok: false, error: describeExtensionError(e.data.code) });
+        return;
+      }
+      if (!e.data.success) {
+        resolve({ ok: false, error: e.data.error || 'Failed fetching JIRA description' });
+        return;
+      }
+      resolve({ ok: true, issueKey: e.data.issueKey || '', description: e.data.description || '' });
+    };
+    window.addEventListener('message', listener);
+    const timeout = setTimeout(() => {
+      window.removeEventListener('message', listener);
+      resolve({ ok: false, error: 'Extension timed out — is it installed?' });
+    }, 15000);
+    window.postMessage({ type: 'REPORT_GENERATOR_JIRA_DESCRIPTION', panel: 'direct', jiraUrl, requestId }, '*');
+  });
+}
+
+// Direct panel sheet logging: JIRA description → reason, one row per account.
+async function logDirectToSheet(btn) {
+  const accounts = parseAccountList(document.getElementById('direct-account')?.value.trim() || '');
+  if (!accounts) {
+    showToast('Please enter valid comma-separated email addresses or domains.', 'warning');
+    return;
+  }
+  const jiraLink = document.getElementById('direct-jira-link')?.value.trim() || '';
+  if (!isSafeJiraUrl(jiraLink)) {
+    showToast('Please enter a valid JIRA link (https://jira.directi.com/browse/…).', 'warning');
+    return;
+  }
+
+  setBtnPending(btn, 'Fetching JIRA…', 30000);
+  const fetched = await fetchJiraDescription(jiraLink);
+  if (!fetched.ok) {
+    resetBtn(btn);
+    showToast('JIRA fetch failed — ' + fetched.error, 'error', { durationMs: 5000 });
+    return;
+  }
+  const reason = truncateSheetText(cleanSheetReason(fetched.description || ''));
+  if (!reason) {
+    resetBtn(btn);
+    showToast('JIRA ' + (fetched.issueKey || 'issue') + ' has an empty description — nothing to log.', 'warning');
+    return;
+  }
+
+  const type = getSheetReportType('direct');
+  const date = new Date().toLocaleDateString('en-US');
+  const reportId = _reportContextIds.direct || createUnsuspendRequestId();
+  let pending = accounts.length;
+  let logged = 0;
+  let failed = 0;
+  const finish = () => {
+    if (--pending > 0) return;
+    resetBtn(btn);
+    if (failed === 0) showToast('Logged ' + logged + ' row(s) to Sheet ✓', 'success');
+    else if (logged === 0) showToast('Sheet logging failed for all ' + failed + ' account(s).', 'error', { durationMs: 5000 });
+    else showToast('Logged ' + logged + ' row(s); ' + failed + ' failed.', 'warning', { durationMs: 6000 });
+  };
+
+  setBtnPending(btn, 'Logging…', 30000);
+  showToast('Logging ' + accounts.length + ' row(s) to Sheet…');
+  accounts.forEach((account) => {
+    const requestId = createRequestId('sheet');
+    const listener = (e) => {
+      if (e.source !== window || !isAllowedWebAppOrigin(e.origin) ||
+          !validateExtensionResult(e.data) ||
+          (e.data.type !== 'REPORT_GENERATOR_LOG_SHEET_RESULT' && e.data.type !== 'REPORT_GENERATOR_ERROR') ||
+          !matchesRequest(requestId, e.data.requestId)) return;
+      window.removeEventListener('message', listener);
+      clearTimeout(timeout);
+      if (e.data.type === 'REPORT_GENERATOR_ERROR') failed++;
+      else if (e.data.success) logged++;
+      else failed++;
+      finish();
+    };
+    window.addEventListener('message', listener);
+    const timeout = setTimeout(() => {
+      window.removeEventListener('message', listener);
+      failed++;
+      finish();
+    }, 15000);
+    window.postMessage({
+      type: 'REPORT_GENERATOR_LOG_SHEET',
+      date,
+      zdLink: jiraLink,
+      domainEmail: account,
+      reportType: type,
+      reason: reason,
+      jiraLink: jiraLink,
+      sheetId: sheetConfig.sheetId,
+      appsScriptUrl: sheetConfig.appsScriptUrl,
+      panel: 'direct',
+      reportId,
+      jiraRequestId: '',
+      requestId,
+    }, '*');
+  });
+}
+
+function clearDirect(opts) {
+  if (!(opts && opts.skipConfirm) && !confirm('Clear Direct Unsuspend form data? This cannot be undone.')) return;
+  const accountEl = document.getElementById('direct-account');
+  const jiraEl = document.getElementById('direct-jira-link');
+  if (accountEl) accountEl.value = '';
+  if (jiraEl) jiraEl.value = '';
+  if (_cancelUnsuspendTracking) _cancelUnsuspendTracking('direct');
+  const actionResults = document.getElementById('direct-action-results');
+  if (actionResults) actionResults.hidden = true;
+  const unsRow = document.getElementById('direct-unsuspend-result');
+  if (unsRow) unsRow.hidden = true;
+  const verdicts = document.getElementById('direct-unsuspend-verdicts');
+  if (verdicts) verdicts.innerHTML = '';
+  state.direct.region = 'na';
+  const chip = document.getElementById('direct-region-chip');
+  if (chip) chip.hidden = true;
+  try { localStorage.removeItem(draftKey('direct')); } catch {}
 }
 
 function logToSheet(prefix) {

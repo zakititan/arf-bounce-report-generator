@@ -103,6 +103,7 @@ describe('isOutboundReportGeneratorType', () => {
       'REPORT_GENERATOR_LOG_SHEET_RESULT',
       'PARTNER_PANEL_RESULT',
       'REPORT_GENERATOR_UNSUSPEND_OUTCOME',
+      'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT',
     ]) {
       assert.equal(isOutboundReportGeneratorType(type), true, type);
     }
@@ -113,6 +114,7 @@ describe('isOutboundReportGeneratorType', () => {
       'REPORT_GENERATOR_PING',
       'REPORT_GENERATOR_JIRA',
       'REPORT_GENERATOR_UNSUSPEND',
+      'REPORT_GENERATOR_JIRA_DESCRIPTION',
       'REPORT_GENERATOR_NOPE',
       null,
       undefined,
@@ -126,6 +128,7 @@ describe('decideEarlyErrorReply echo immunity', () => {
   it('returns null for our own outbound types instead of error replies', () => {
     assert.equal(decideEarlyErrorReply({ type: 'REPORT_GENERATOR_PONG', version: '4.7' }, true), null);
     assert.equal(decideEarlyErrorReply({ type: 'REPORT_GENERATOR_JIRA_RESULT', requestId: 'jira_1', success: true }, true), null);
+    assert.equal(decideEarlyErrorReply({ type: 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT', requestId: 'desc_1', success: true }, true), null);
     assert.equal(decideEarlyErrorReply({ type: 'REPORT_GENERATOR_ERROR', code: 'UNKNOWN_TYPE' }, true), null);
   });
 });
@@ -150,6 +153,7 @@ describe('isKnownReportGeneratorType', () => {
       'REPORT_GENERATOR_UNSUSPEND_NO_JIRA',
       'REPORT_GENERATOR_LOG_SHEET',
       'REPORT_GENERATOR_PARTNER_PANEL_LOOKUP',
+      'REPORT_GENERATOR_JIRA_DESCRIPTION',
     ]) {
       assert.equal(isKnownReportGeneratorType(type), true, type);
     }
@@ -158,6 +162,7 @@ describe('isKnownReportGeneratorType', () => {
   it('rejects unknown REPORT_GENERATOR_* types and unrelated types', () => {
     assert.equal(isKnownReportGeneratorType('REPORT_GENERATOR_NOPE'), false);
     assert.equal(isKnownReportGeneratorType('REPORT_GENERATOR_JIRA_RESULT'), false);
+    assert.equal(isKnownReportGeneratorType('REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT'), false);
     assert.equal(isKnownReportGeneratorType('PARTNER_PANEL_RESULT'), false);
     assert.equal(isKnownReportGeneratorType(''), false);
     assert.equal(isKnownReportGeneratorType(null), false);
@@ -252,6 +257,29 @@ describe('isValidWebAppMessage', () => {
     assert.equal(
       isValidWebAppMessage({
         type: 'REPORT_GENERATOR_PARTNER_PANEL_LOOKUP', account: 'bad account', requestId: 'partner_1',
+      }),
+      false
+    );
+  });
+
+  it('validates JIRA description fetch shapes', () => {
+    assert.equal(
+      isValidWebAppMessage({
+        type: 'REPORT_GENERATOR_JIRA_DESCRIPTION', panel: 'direct',
+        jiraUrl: 'https://jira.directi.com/browse/TAE-123', requestId: 'desc_1',
+      }),
+      true
+    );
+    assert.equal(
+      isValidWebAppMessage({
+        type: 'REPORT_GENERATOR_JIRA_DESCRIPTION', panel: 'direct',
+        jiraUrl: 'https://jira.directi.com/browse/TAE-123',
+      }),
+      false
+    );
+    assert.equal(
+      isValidWebAppMessage({
+        type: 'REPORT_GENERATOR_JIRA_DESCRIPTION', panel: 'direct', requestId: 'desc_1',
       }),
       false
     );
