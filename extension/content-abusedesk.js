@@ -131,7 +131,6 @@
   //     └─ div.bu-field-value
   //          └─ span.bu-badge.bu-badge-active → "active"   (lowercase)
   function readUserStatus() { return readBadgeStatus('user status'); }
-  function readDomainStatus() { return readBadgeStatus('domain status'); }
 
   // Plan B: the AD page renders the badge from this API — ask the service
   // worker (which has host permission) to fetch it directly.
@@ -210,7 +209,8 @@
   }
 
   // Reload the page and read the USER STATUS badge — the only trustworthy
-  // signal that the unsuspension actually took effect.
+  // signal that the unsuspension actually took effect. Email-only: domain
+  // entities never reach here (they report unverified right after Save).
   function isDomainEntity(account) {
     return account && account.indexOf('@') === -1;
   }
@@ -218,58 +218,27 @@
   async function verifyByReload(account, attempt) {
     var status = await waitFor(readUserStatus, 10000);
     if (!status) status = await fetchStatusViaApi(account);
-    var domainStatus = '';
-    if (isDomainEntity(account)) {
-      domainStatus = await waitFor(readDomainStatus, 5000);
-    }
     var outcome;
 
-    function isActive(s) { return s === 'Active'; }
-
-    if (isDomainEntity(account)) {
-      // Domain entities require BOTH customer status and domain status to be active.
-      if (isActive(status) && isActive(domainStatus)) {
-        outcome = 'confirmed';
-        showToast('\u2705 Unsuspension verified for ' + account + ' — customer: Active, domain: Active');
-      } else if (status === 'Suspended' || domainStatus === 'Suspended') {
-        outcome = 'failed';
-        var parts = [];
-        if (status) parts.push('customer: ' + status);
-        if (domainStatus) parts.push('domain: ' + domainStatus);
-        showToast('\u274C Unsuspension failed for ' + account + ' — ' + (parts.join(', ') || 'status unknown'));
-      } else if ((!status || !domainStatus) && (!attempt || attempt < 2)) {
-        log('Could not read full status for ' + account + ' on attempt ' + (attempt || 1) + ' — retrying');
-        setVerifyEntry(account, 2, function () {
-          showToast('Retrying verification for ' + account + '…');
-          setTimeout(function () { location.reload(); }, 1500);
-        });
-        return;
-      } else {
-        outcome = 'unknown';
-        showToast('\u26A0\uFE0F Could not read status for ' + account + ' — please check manually');
-      }
+    if (status === 'Active') {
+      outcome = 'confirmed';
+      showToast('\u2705 Unsuspension verified for ' + account + ' — user status: Active');
+    } else if (status === 'Suspended') {
+      outcome = 'failed';
+      showToast('\u274C Unsuspension failed for ' + account + ' — user status still Suspended');
+    } else if (!status && (!attempt || attempt < 2)) {
+      log('Could not read status for ' + account + ' on attempt ' + (attempt || 1) + ' — retrying');
+      setVerifyEntry(account, 2, function () {
+        showToast('Retrying verification for ' + account + '…');
+        setTimeout(function () { location.reload(); }, 1500);
+      });
+      return;
     } else {
-      // User entities: only customer status matters.
-      if (isActive(status)) {
-        outcome = 'confirmed';
-        showToast('\u2705 Unsuspension verified for ' + account + ' — user status: Active');
-      } else if (status === 'Suspended') {
-        outcome = 'failed';
-        showToast('\u274C Unsuspension failed for ' + account + ' — user status still Suspended');
-      } else if (!status && (!attempt || attempt < 2)) {
-        log('Could not read status for ' + account + ' on attempt ' + (attempt || 1) + ' — retrying');
-        setVerifyEntry(account, 2, function () {
-          showToast('Retrying verification for ' + account + '…');
-          setTimeout(function () { location.reload(); }, 1500);
-        });
-        return;
-      } else {
-        outcome = 'unknown';
-        showToast('\u26A0\uFE0F Could not read user status for ' + account + ' — please check manually');
-      }
+      outcome = 'unknown';
+      showToast('\u26A0\uFE0F Could not read user status for ' + account + ' — please check manually');
     }
 
-    log('Verification for ' + account + ': ' + outcome + (status ? ' (customer:' + status + ')' : '') + (domainStatus ? ' (domain:' + domainStatus + ')' : ''));
+    log('Verification for ' + account + ': ' + outcome + (status ? ' (customer:' + status + ')' : ''));
     reportDone({ outcome: outcome, account: account });
   }
 
@@ -288,6 +257,16 @@
       var vTs = vEntry && typeof vEntry.ts === 'number' ? vEntry.ts : null;
       var vAttempt = vEntry && typeof vEntry.attempt === 'number' ? vEntry.attempt : 1;
       if (typeof vTs === 'number' && (Date.now() - vTs) <= 90000) {
+        // Stale markers from pre-removal runs: domains are no longer
+        // verified — consume the marker and report unverified instead.
+        var hDomMode = adHelpers();
+        var domainMode = (hDomMode && hDomMode.isDomainEntity) ? hDomMode.isDomainEntity(account) : isDomainEntity(account);
+        if (domainMode) {
+          consumeVerifyEntry(account, function () {});
+          log('Skipping stale verification marker for domain ' + account);
+          reportDone({ outcome: 'unverified', account: account, cause: 'domain verification skipped — check manually' });
+          return;
+        }
         if (vAttempt >= 2) consumeVerifyEntry(account, function () {});
         log('Verification mode for ' + account + ' (attempt ' + vAttempt + ')');
         await sleep(500); // let the results table finish rendering
@@ -377,37 +356,21 @@
         return;
       }
 
-      // Mark this account for verification, then reload — USER STATUS only
-      // reflects the unsuspension after a page reload.
-      // Domain entities verify in a FRESH tab instead: the AD page is janky
-      // on reload for domain lookups, so the worker opens a clean tab (which
-      // enters verification mode via the marker) and swaps this one out.
+      // Verification (USER STATUS badge) is email-only. Domain entities
+      // report unverified right after a clean Save — no reload, no fresh
+      // tab. Check domain status manually in Abuse Desk.
       var hDom = adHelpers();
       var domainCase = (hDom && hDom.isDomainEntity) ? hDom.isDomainEntity(account) : isDomainEntity(account);
+      if (domainCase) {
+        showToast('\u2705 Save accepted for ' + account + ' — domain status is not auto-checked, please verify manually');
+        log('Skipping verification for domain ' + account + ' (email-only check)');
+        reportDone({ outcome: 'unverified', account: account, cause: 'domain verification skipped — check manually' });
+        return;
+      }
       setVerifyEntry(account, 1, function () {
-        if (!domainCase) {
-          showToast('Save accepted — reloading to verify user status…');
-          log('Reloading to verify USER STATUS for ' + account);
-          setTimeout(function () { location.reload(); }, 800);
-          return;
-        }
-        var region = '';
-        try { region = new URLSearchParams(window.location.search).get('region') || ''; } catch (e) {}
-        showToast('Save accepted — opening a fresh tab to verify domain status…');
-        log('Requesting fresh verify tab for domain ' + account);
-        function fallbackToReload(why) {
-          log('Fresh verify tab unavailable (' + why + ') — falling back to reload');
-          setTimeout(function () { location.reload(); }, 800);
-        }
-        try {
-          chrome.runtime.sendMessage({ action: 'open-verify-tab', data: { account: account, region: region, requestId: requestId } }, function (resp) {
-            if (chrome.runtime.lastError || !resp || !resp.success) {
-              fallbackToReload((resp && resp.error) || (chrome.runtime.lastError && chrome.runtime.lastError.message) || 'no response');
-              return;
-            }
-            log('Fresh verify tab opened for ' + account + ' — verdict will arrive from there');
-          });
-        } catch (e) { fallbackToReload(e.message); }
+        showToast('Save accepted — reloading to verify user status…');
+        log('Reloading to verify USER STATUS for ' + account);
+        setTimeout(function () { location.reload(); }, 800);
       });
     });
   }

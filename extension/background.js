@@ -181,24 +181,6 @@ async function openAbuseDeskTabs(accounts, region, requestId) {
   return opened;
 }
 
-// Domain verdicts are read in a fresh tab (the AD page is janky on reload
-// for domain lookups). The sender tab already saved and has nothing left to
-// do, so it is swapped out: untracked and closed, verdict comes from the
-// fresh tab through the normal ad-tab-done path.
-async function openVerifyTabInBackground(account, region, requestId, senderTabId) {
-  const url = buildAbuseDeskUrl(account, region, requestId);
-  const tab = await new Promise(resolve => chrome.tabs.create({ url, active: false }, resolve));
-  if (!tab || tab.id == null) {
-    throw new Error((chrome.runtime.lastError && chrome.runtime.lastError.message) || 'Tab creation failed');
-  }
-  _openAdTabIds.add(tab.id);
-  if (typeof senderTabId === 'number') {
-    _openAdTabIds.delete(senderTabId);
-    chrome.tabs.remove(senderTabId).catch(() => {});
-  }
-  return tab.id;
-}
-
 const WEBAPP_TAB_MATCHES = [
   'https://arf-bounce-report-generator.vercel.app/*',
   'https://*.vercel.app/*',
@@ -331,19 +313,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     openAbuseDeskTabs(accounts, typeof d.region === 'string' ? d.region : '', d.requestId)
       .then(opened => sendResponse({ success: true, opened }))
-      .catch(e => sendResponse({ success: false, error: e.message }));
-    return true;
-  }
-
-  if (message.action === 'open-verify-tab') {
-    const d = message.data || {};
-    const tid = sender && sender.tab && sender.tab.id;
-    if (!areValidAccountList(d.account)) {
-      sendResponse({ success: false, error: 'Invalid account or email domain' });
-      return true;
-    }
-    openVerifyTabInBackground(d.account, typeof d.region === 'string' ? d.region : '', d.requestId, tid)
-      .then(tabId => sendResponse({ success: true, tabId }))
       .catch(e => sendResponse({ success: false, error: e.message }));
     return true;
   }
