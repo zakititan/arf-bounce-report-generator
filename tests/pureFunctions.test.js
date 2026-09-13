@@ -10,6 +10,11 @@ import {
   shouldFinishUnsuspendTracking,
   createUnsuspendRequestId,
   consumePendingRequest,
+  registerPendingRequest,
+  PENDING_REQUEST_TTL_MS,
+  screenshotAcceptCount,
+  isAcceptableScreenshotSize,
+  MAX_SCREENSHOT_BYTES,
   createRequestContextKey,
   svgMarkup,
   validateAccountIdentifier,
@@ -22,6 +27,8 @@ import {
   buildUnsuspendAccounts,
   cleanSheetReason,
   getSheetReportType,
+  getDirectSheetReportType,
+  truncateSheetText,
 } from '../scripts/report-actions.js';
 
 // ── escapeHtml ────────────────────────────────────────────────────────
@@ -296,6 +303,15 @@ describe('validateExtensionResult URL security', () => {
       cellUrl: 'https://docs.google.com/spreadsheets/d/abc/edit#gid=1&range=A1',
     }), true);
   });
+  it('accepts typed extension error replies with known codes', () => {
+    for (const code of ['INVALID_MESSAGE', 'STORAGE_UNAVAILABLE', 'UNKNOWN_TYPE']) {
+      assert.equal(validateExtensionResult({
+        type: 'REPORT_GENERATOR_ERROR', requestId: 'jira_1', code,
+      }), true);
+    }
+    assert.equal(validateExtensionResult({ type: 'REPORT_GENERATOR_ERROR', requestId: 'jira_1' }), false);
+    assert.equal(validateExtensionResult({ type: 'REPORT_GENERATOR_ERROR', requestId: 'jira_1', code: 42 }), false);
+  });
 });
 
 describe('svgMarkup', () => {
@@ -355,6 +371,31 @@ describe('concurrent request state', () => {
     assert.equal(consumePendingRequest(pending, 'jira-two'), null);
     assert.equal(consumePendingRequest(pending, 'unknown'), null);
     assert.equal(pending.size, 0);
+  });
+
+  it('evicts unanswered requests older than the TTL on register', () => {    const pending = new Map();
+    registerPendingRequest(pending, 'jira-old', { panel: 'arf' }, 1_000);
+    registerPendingRequest(pending, 'jira-new', { panel: 'bounce' }, 1_000 + PENDING_REQUEST_TTL_MS - 1);
+    assert.equal(pending.size, 2);
+    registerPendingRequest(pending, 'jira-now', { panel: 'arf' }, 1_000 + PENDING_REQUEST_TTL_MS + 1);
+    assert.equal(pending.has('jira-old'), false);
+    assert.equal(pending.has('jira-new'), true);
+    assert.equal(pending.has('jira-now'), true);
+  });
+
+  it('counts in-flight reads so rapid pastes cannot bypass the cap', () => {
+    assert.equal(screenshotAcceptCount(0, 0, 10, 10), 10);
+    assert.equal(screenshotAcceptCount(0, 10, 10, 10), 0);
+    assert.equal(screenshotAcceptCount(8, 0, 10, 10), 2);
+    assert.equal(screenshotAcceptCount(8, 5, 10, 10), 0);
+    assert.equal(screenshotAcceptCount(10, 0, 5, 10), 0);
+  });
+
+  it('rejects absurdly large single files', () => {
+    assert.equal(isAcceptableScreenshotSize(1024, MAX_SCREENSHOT_BYTES), true);
+    assert.equal(isAcceptableScreenshotSize(MAX_SCREENSHOT_BYTES, MAX_SCREENSHOT_BYTES), true);
+    assert.equal(isAcceptableScreenshotSize(MAX_SCREENSHOT_BYTES + 1, MAX_SCREENSHOT_BYTES), false);
+    assert.equal(isAcceptableScreenshotSize(-1, MAX_SCREENSHOT_BYTES), false);
   });
 
   it('creates distinct storage keys for each report and request context', () => {
@@ -452,6 +493,20 @@ describe('getSheetReportType', () => {
     assert.equal(getSheetReportType('arf'), 'ARF');
     assert.equal(getSheetReportType('smtpsuspend'), 'SMTP');
     assert.equal(getSheetReportType('bounce'), 'BOUNCE');
+    assert.equal(getSheetReportType('direct'), 'DIRECT');
+  });
+});
+
+describe('getDirectSheetReportType', () => {
+  it('maps the suspension-type dropdown to the Unsuspension Type column value', () => {
+    assert.equal(getDirectSheetReportType('Bounce'), 'BOUNCE');
+    assert.equal(getDirectSheetReportType('ARF'), 'ARF');
+  });
+
+  it('returns null for empty or unknown selections', () => {
+    assert.equal(getDirectSheetReportType(''), null);
+    assert.equal(getDirectSheetReportType(null), null);
+    assert.equal(getDirectSheetReportType('SMTP'), null);
   });
 });
 
@@ -461,5 +516,58 @@ describe('cleanSheetReason', () => {
       cleanSheetReason('#ARF\nReason line\n── Screenshots ──\n1. proof.PNG\n#Bounce'),
       'Reason line',
     );
+  });
+});
+
+describe('truncateSheetText', () => {
+  it('returns short text unchanged', () => {
+    assert.equal(truncateSheetText('hello'), 'hello');
+    assert.equal(truncateSheetText(''), '');
+  });
+
+  it('truncates over-long JIRA descriptions with an ellipsis marker', () => {
+    const long = 'x'.repeat(50000);
+    const out = truncateSheetText(long);
+    assert.ok(out.length < long.length);
+    assert.equal(out, 'x'.repeat(45000) + '…[truncated]');
+  });
+
+  it('tolerates non-string input', () => {
+    assert.equal(truncateSheetText(null), '');
+    assert.equal(truncateSheetText(undefined), '');
+  });
+});
+
+describe('validateExtensionResult JIRA description', () => {
+  it('accepts a successful description result with issue key and text', () => {
+    assert.equal(validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT',
+      requestId: 'desc-1',
+      success: true,
+      issueKey: 'TAE-123',
+      description: 'Some description',
+    }), true);
+  });
+
+  it('accepts a failed description result with an error string', () => {
+    assert.equal(validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT',
+      requestId: 'desc-1',
+      success: false,
+      error: 'Issue not found',
+    }), true);
+  });
+
+  it('rejects malformed description results', () => {
+    assert.equal(validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT',
+      requestId: 'desc-1',
+      success: true,
+      issueKey: 42,
+    }), false);
+    assert.equal(validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT',
+      requestId: 'desc-1',
+    }), false);
   });
 });

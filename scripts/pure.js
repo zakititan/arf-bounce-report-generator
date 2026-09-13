@@ -96,6 +96,10 @@ export function validateExtensionResult(message) {
     return Boolean(message.data) && typeof message.data === 'object' &&
       typeof message.data.success === 'boolean';
   }
+  if (message.type === 'REPORT_GENERATOR_ERROR') {
+    return typeof message.code === 'string' &&
+      (message.code === 'INVALID_MESSAGE' || message.code === 'STORAGE_UNAVAILABLE' || message.code === 'UNKNOWN_TYPE');
+  }
   if (typeof message.success !== 'boolean') return false;
   if (message.type === 'REPORT_GENERATOR_JIRA_RESULT') {
     return (!message.error || typeof message.error === 'string') &&
@@ -109,6 +113,11 @@ export function validateExtensionResult(message) {
   if (message.type === 'REPORT_GENERATOR_LOG_SHEET_RESULT') {
     return (!message.cellUrl || isSafeGoogleSheetsUrl(message.cellUrl)) &&
       (!message.unverified || typeof message.unverified === 'boolean') &&
+      (!message.error || typeof message.error === 'string');
+  }
+  if (message.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT') {
+    return (!message.issueKey || typeof message.issueKey === 'string') &&
+      (!message.description || typeof message.description === 'string') &&
       (!message.error || typeof message.error === 'string');
   }
   return false;
@@ -167,6 +176,33 @@ export function consumePendingRequest(pending, requestId) {
   const request = pending.get(requestId);
   pending.delete(requestId);
   return request;
+}
+
+// Pending extension requests must never outlive their safety timeout:
+// without the extension installed nothing consumes them, so unanswered
+// entries (which retain DOM button references) would grow the map forever.
+export const PENDING_REQUEST_TTL_MS = 90_000;
+
+export function registerPendingRequest(pending, requestId, value, now = Date.now()) {
+  const cutoff = now - PENDING_REQUEST_TTL_MS;
+  for (const [key, entry] of pending) {
+    if (!entry || typeof entry.createdAt !== 'number' || entry.createdAt <= cutoff) pending.delete(key);
+  }
+  pending.set(requestId, { ...value, createdAt: now });
+  return pending;
+}
+
+// Screenshot caps: FileReader pushes asynchronously, so the check must count
+// in-flight reads too — otherwise rapid pastes all see a stale length and
+// blow past MAX_SCREENSHOTS with multi-MB dataURLs each.
+export const MAX_SCREENSHOT_BYTES = 20 * 1024 * 1024;
+
+export function screenshotAcceptCount(currentCount, inFlightCount, incomingCount, max) {
+  return Math.max(0, Math.min(incomingCount, max - currentCount - inFlightCount));
+}
+
+export function isAcceptableScreenshotSize(fileBytes, maxBytes = MAX_SCREENSHOT_BYTES) {
+  return typeof fileBytes === 'number' && fileBytes >= 0 && fileBytes <= maxBytes;
 }
 
 export function createRequestContextKey(reportId, panel, requestId) {

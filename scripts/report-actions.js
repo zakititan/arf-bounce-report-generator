@@ -20,7 +20,18 @@ export function buildUnsuspendAccounts(account, prefix, otherBlocked, blockedDet
 }
 
 export function getSheetReportType(prefix) {
-  return prefix === 'arf' ? 'ARF' : prefix === 'smtpsuspend' ? 'SMTP' : 'BOUNCE';
+  if (prefix === 'arf') return 'ARF';
+  if (prefix === 'smtpsuspend') return 'SMTP';
+  if (prefix === 'direct') return 'DIRECT';
+  return 'BOUNCE';
+}
+
+// Direct panel suspension-type dropdown → Unsuspension Type column value.
+// Returns null for anything unselected so callers fail with a warning.
+export function getDirectSheetReportType(value) {
+  if (value === 'ARF') return 'ARF';
+  if (value === 'Bounce') return 'BOUNCE';
+  return null;
 }
 
 export function cleanSheetReason(reportText) {
@@ -31,4 +42,12 @@ export function cleanSheetReason(reportText) {
     .filter(line => !/^\d+\.\s+\S+\.(png|jpg|jpeg|gif|webp)$/i.test(line.trim()))
     .join('\n')
     .trim();
+}
+
+// Sheets cells cap at 50k chars — truncate fetched JIRA descriptions with a
+// visible marker instead of letting the log call fail server-side.
+export function truncateSheetText(value, maxLength = 45000) {
+  if (typeof value !== 'string' || !value) return '';
+  if (value.length <= maxLength) return value;
+  return value.slice(0, maxLength) + '…[truncated]';
 }
