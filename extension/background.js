@@ -289,16 +289,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     // Session-cookie auth, same as issue creation — the key comes from our
     // own allowlisted parser, never from raw caller input.
-    fetchWithTimeout('https://jira.directi.com/rest/api/2/issue/' + issueKey + '?fields=description', { credentials: 'include' })
+    fetchWithTimeout('https://jira.directi.com/rest/api/2/issue/' + issueKey + '?fields=description,summary', { credentials: 'include' })
       .then(r => {
         if (!r.ok) throw new Error('JIRA responded ' + r.status);
         return r.json();
       })
       .then(json => {
-        const description = json && json.fields && typeof json.fields.description === 'string'
-          ? json.fields.description
-          : '';
-        sendResponse({ success: true, issueKey, description });
+        const fields = (json && json.fields) || {};
+        const description = typeof fields.description === 'string' ? fields.description : '';
+        const summary = typeof fields.summary === 'string' ? fields.summary : '';
+        sendResponse({ success: true, issueKey, description, summary });
       })
       .catch(e => sendResponse({ success: false, error: e.message || 'Failed fetching JIRA issue' }));
     return true;
@@ -314,6 +314,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     openAbuseDeskTabs(accounts, typeof d.region === 'string' ? d.region : '', d.requestId)
       .then(opened => sendResponse({ success: true, opened }))
       .catch(e => sendResponse({ success: false, error: e.message }));
+    return true;
+  }
+
+  if (message.action === 'done-jira') {
+    const dd = message.data || {};
+    const doneKey = extractJiraIssueKey(dd.jiraUrl);
+    const doneAccounts = typeof dd.accounts === 'string' ? dd.accounts.trim() : '';
+    if (!doneKey) {
+      sendResponse({ success: false, error: 'Invalid JIRA link' });
+      return true;
+    }
+    if (!doneAccounts) {
+      sendResponse({ success: false, error: 'Empty accounts' });
+      return true;
+    }
+    // Same Done-transition + "Unsuspended" comment as create-and-unsuspend,
+    // applied to an existing issue. Session-cookie auth throughout.
+    markDone(doneKey, dd.requestId || 'legacy', doneAccounts)
+      .then(status => sendResponse({
+        success: status.done,
+        issueKey: doneKey,
+        done: status.done,
+        commented: status.commented,
+        error: status.error || null,
+      }))
+      .catch(e => sendResponse({ success: false, error: (e && e.message) || 'Failed updating JIRA' }));
     return true;
   }
 

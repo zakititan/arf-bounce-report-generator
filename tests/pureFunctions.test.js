@@ -25,6 +25,7 @@ import { describeReason, getCached, setCache } from '../scripts/api.js';
 import { parseAgeToDays } from '../scripts/ui.js';
 import {
   buildUnsuspendAccounts,
+  parseJiraSummaryAccounts,
   cleanSheetReason,
   getSheetReportType,
   getDirectSheetReportType,
@@ -538,6 +539,95 @@ describe('truncateSheetText', () => {
   });
 });
 
+describe('parseJiraSummaryAccounts', () => {
+  it('extracts type and accounts from tool-written summaries', () => {
+    assert.deepEqual(
+      parseJiraSummaryAccounts('ARF unsuspension request: user@example.com'),
+      { type: 'ARF', accounts: ['user@example.com'] }
+    );
+    assert.deepEqual(
+      parseJiraSummaryAccounts('Bounce unsuspension request: a@x.com, b@x.com'),
+      { type: 'Bounce', accounts: ['a@x.com', 'b@x.com'] }
+    );
+    assert.deepEqual(
+      parseJiraSummaryAccounts('SMTP Compromised unsuspension request: example.com'),
+      { type: 'SMTP Compromised', accounts: ['example.com'] }
+    );
+  });
+
+  it('finds accounts anywhere in free-form summaries', () => {
+    assert.deepEqual(
+      parseJiraSummaryAccounts('Suspension request- credeerp@cleanhandsaudit.com'),
+      { type: null, accounts: ['credeerp@cleanhandsaudit.com'] }
+    );
+    assert.deepEqual(
+      parseJiraSummaryAccounts('Please unsuspend user@example.com urgently (ARF)'),
+      { type: 'ARF', accounts: ['user@example.com'] }
+    );
+    assert.deepEqual(
+      parseJiraSummaryAccounts('Investigate example.com abuse'),
+      { type: null, accounts: ['example.com'] }
+    );
+  });
+
+  it('dedupes, strips trailing punctuation and drops invalid tokens', () => {
+    assert.deepEqual(
+      parseJiraSummaryAccounts('Unsuspend a@x.com. Also a@x.com, and b@x.com!'),
+      { type: null, accounts: ['a@x.com', 'b@x.com'] }
+    );
+  });
+
+  it('does not sniff types from inside account names', () => {
+    assert.deepEqual(
+      parseJiraSummaryAccounts('Suspension request- darf@example.com'),
+      { type: null, accounts: ['darf@example.com'] }
+    );
+  });
+
+  it('returns null when no valid account is present', () => {
+    assert.equal(parseJiraSummaryAccounts('Some manual ticket title'), null);
+    assert.equal(parseJiraSummaryAccounts('Need help with suspension please'), null);
+    assert.equal(parseJiraSummaryAccounts(''), null);
+    assert.equal(parseJiraSummaryAccounts(null), null);
+    assert.equal(parseJiraSummaryAccounts(undefined), null);
+  });
+});
+
+describe('validateExtensionResult JIRA done', () => {
+  it('accepts done results with done/commented flags', () => {
+    assert.equal(validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_DONE_RESULT',
+      requestId: 'done-1',
+      success: true,
+      issueKey: 'TAE-123',
+      done: true,
+      commented: true,
+    }), true);
+  });
+
+  it('accepts a failed done result with an error string', () => {
+    assert.equal(validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_DONE_RESULT',
+      requestId: 'done-1',
+      success: false,
+      error: 'Transition failed (400)',
+    }), true);
+  });
+
+  it('rejects malformed done results', () => {
+    assert.equal(validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_DONE_RESULT',
+      requestId: 'done-1',
+      success: true,
+      done: 'yes',
+    }), false);
+    assert.equal(validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_DONE_RESULT',
+      requestId: 'done-1',
+    }), false);
+  });
+});
+
 describe('validateExtensionResult JIRA description', () => {
   it('accepts a successful description result with issue key and text', () => {
     assert.equal(validateExtensionResult({
@@ -546,6 +636,7 @@ describe('validateExtensionResult JIRA description', () => {
       success: true,
       issueKey: 'TAE-123',
       description: 'Some description',
+      summary: 'ARF unsuspension request: user@example.com',
     }), true);
   });
 

@@ -751,6 +751,7 @@ describe('JIRA description message validation', () => {
       success: true,
       issueKey: 'TAE-1234',
       description: 'text',
+      summary: 'Bounce unsuspension request: a@x.com',
     }), true);
     assert.equal(rgLib.validateExtensionResult({
       type: 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT',
@@ -761,6 +762,75 @@ describe('JIRA description message validation', () => {
     assert.equal(rgLib.validateExtensionResult({
       type: 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT',
       requestId: 'desc-1',
+    }), false);
+  });
+});
+
+describe('JIRA done message validation', () => {
+  it('accepts a well-formed done request', () => {
+    assert.equal(rgLib.validateWebAppMessage({
+      type: 'REPORT_GENERATOR_JIRA_DONE',
+      requestId: 'done-1',
+      panel: 'direct',
+      jiraUrl: 'https://jira.directi.com/browse/TAE-1234',
+      accounts: 'a@x.com, b@x.com',
+    }), true);
+  });
+
+  it('rejects done requests with bad requestId or missing fields', () => {
+    assert.equal(rgLib.validateWebAppMessage({
+      type: 'REPORT_GENERATOR_JIRA_DONE',
+      requestId: '!!!',
+      panel: 'direct',
+      jiraUrl: 'https://jira.directi.com/browse/TAE-1234',
+      accounts: 'a@x.com',
+    }), false);
+    assert.equal(rgLib.validateWebAppMessage({
+      type: 'REPORT_GENERATOR_JIRA_DONE',
+      requestId: 'done-1',
+      panel: 'direct',
+      jiraUrl: 'https://jira.directi.com/browse/TAE-1234',
+    }), false);
+    assert.equal(rgLib.validateWebAppMessage({
+      type: 'REPORT_GENERATOR_JIRA_DONE',
+      requestId: 'done-1',
+      panel: 'direct',
+      accounts: 'a@x.com',
+    }), false);
+  });
+
+  it('accepts done results with done/commented flags', () => {
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_DONE_RESULT',
+      requestId: 'done-1',
+      success: true,
+      issueKey: 'TAE-1234',
+      done: true,
+      commented: true,
+    }), true);
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_DONE_RESULT',
+      requestId: 'done-1',
+      success: true,
+      issueKey: 'TAE-1234',
+      done: true,
+      commented: false,
+    }), true);
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_DONE_RESULT',
+      requestId: 'done-1',
+      success: false,
+      error: 'nope',
+    }), true);
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_DONE_RESULT',
+      requestId: 'done-1',
+    }), false);
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_DONE_RESULT',
+      requestId: 'done-1',
+      success: true,
+      done: 'yes',
     }), false);
   });
 });

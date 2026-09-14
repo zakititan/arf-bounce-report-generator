@@ -81,13 +81,15 @@
         data.type === 'REPORT_GENERATOR_JIRA_RESULT' || data.type === 'REPORT_GENERATOR_UNSUSPEND_RESULT' ||
         data.type === 'REPORT_GENERATOR_LOG_SHEET_RESULT' || data.type === 'PARTNER_PANEL_RESULT' ||
         data.type === 'REPORT_GENERATOR_UNSUSPEND_OUTCOME' ||
-        data.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT') return null;
+        data.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT' ||
+        data.type === 'REPORT_GENERATOR_JIRA_DONE_RESULT') return null;
     if (!storageAvailable) return helperBuildError('STORAGE_UNAVAILABLE', helperExtractRequestId(data));
     var known = data.type === 'REPORT_GENERATOR_JIRA' ||
       data.type === 'REPORT_GENERATOR_UNSUSPEND' ||
       data.type === 'REPORT_GENERATOR_UNSUSPEND_NO_JIRA' ||
       data.type === 'REPORT_GENERATOR_LOG_SHEET' ||
       data.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION' ||
+      data.type === 'REPORT_GENERATOR_JIRA_DONE' ||
       data.type === 'REPORT_GENERATOR_PARTNER_PANEL_LOOKUP';
     if (known) {
       return messageValid(data) ? null : helperBuildError('INVALID_MESSAGE', helperExtractRequestId(data));
@@ -175,6 +177,10 @@
     }
     if (data.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION') {
       return requestId && typeof data.panel === 'string' && typeof data.jiraUrl === 'string';
+    }
+    if (data.type === 'REPORT_GENERATOR_JIRA_DONE') {
+      return requestId && typeof data.panel === 'string' &&
+        typeof data.jiraUrl === 'string' && typeof data.accounts === 'string';
     }
     return false;
   }
@@ -357,7 +363,21 @@
             window.postMessage({ type: 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT', requestId: descData.requestId, success: false, error: (chrome.runtime.lastError && chrome.runtime.lastError.message) || 'Failed fetching JIRA description' }, replyOrigin);
             return;
           }
-          window.postMessage({ type: 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT', requestId: descData.requestId, success: descResponse.success === true, issueKey: descResponse.issueKey || null, description: typeof descResponse.description === 'string' ? descResponse.description : null, error: descResponse.error || null }, replyOrigin);
+          window.postMessage({ type: 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT', requestId: descData.requestId, success: descResponse.success === true, issueKey: descResponse.issueKey || null, description: typeof descResponse.description === 'string' ? descResponse.description : null, summary: typeof descResponse.summary === 'string' ? descResponse.summary : null, error: descResponse.error || null }, replyOrigin);
+        }
+      );
+    }
+
+    if (event.data.type === 'REPORT_GENERATOR_JIRA_DONE') {
+      var doneData = event.data;
+      chrome.runtime.sendMessage(
+        { action: 'done-jira', data: { jiraUrl: doneData.jiraUrl, accounts: doneData.accounts, requestId: doneData.requestId } },
+        function (doneResponse) {
+          if (chrome.runtime.lastError || !doneResponse) {
+            window.postMessage({ type: 'REPORT_GENERATOR_JIRA_DONE_RESULT', requestId: doneData.requestId, success: false, error: (chrome.runtime.lastError && chrome.runtime.lastError.message) || 'Failed updating JIRA' }, replyOrigin);
+            return;
+          }
+          window.postMessage({ type: 'REPORT_GENERATOR_JIRA_DONE_RESULT', requestId: doneData.requestId, success: doneResponse.success === true, issueKey: doneResponse.issueKey || null, done: doneResponse.done === true, commented: doneResponse.commented === true, error: doneResponse.error || null }, replyOrigin);
         }
       );
     }
