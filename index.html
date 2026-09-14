@@ -631,14 +631,14 @@
       </div>
       <div class="panel-body">
         <div class="field">
-          <label for="direct-account">Account<span class="req">*</span><span class="region-chip" id="direct-region-chip" hidden></span></label>
-          <input type="text" id="direct-account" aria-required="true" placeholder="e.g. user@example.com, other@example.com">
-          <span class="hint">Single or comma-separated accounts — no report needed</span>
-        </div>
-        <div class="field">
           <label for="direct-jira-link">JIRA Link<span class="req">*</span></label>
           <input type="url" id="direct-jira-link" aria-required="true" placeholder="e.g. https://jira.directi.com/browse/TAE-12345">
           <span class="hint">Used as the Abuse Desk unblock reason, and its description is logged to the sheet</span>
+        </div>
+        <div class="field">
+          <label for="direct-account">Account<span class="req">*</span><span class="region-chip" id="direct-region-chip" hidden></span></label>
+          <input type="text" id="direct-account" aria-required="true" placeholder="e.g. user@example.com, other@example.com">
+          <span class="hint">Single or comma-separated accounts — auto-filled from the JIRA above</span>
         </div>
         <div class="field">
           <label for="direct-susp-type">Suspension type<span class="req">*</span></label>
