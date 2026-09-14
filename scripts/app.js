@@ -16,7 +16,7 @@
 import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx,
          fetchLaravelCheck, fetchXmlrpcCheck, fetchWordPressCheck } from './api.js';
 import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, matchesRequest,   consumePendingRequest, registerPendingRequest, screenshotAcceptCount, isAcceptableScreenshotSize, MAX_SCREENSHOT_BYTES, createUnsuspendRequestId, createRequestId, createRequestContextKey, isAllowedWebAppOrigin, validateExtensionResult, validateUnsuspendOutcome, validateAccountIdentifier, parseAccountList, isSafeJiraUrl } from './pure.js';
-import { buildUnsuspendAccounts, buildUnsuspendComment, cleanSheetReason, getSheetReportType, getDirectSheetReportType, truncateSheetText } from './report-actions.js';
+import { buildUnsuspendAccounts, cleanSheetReason, getSheetReportType, getDirectSheetReportType, parseJiraSummaryAccounts, truncateSheetText } from './report-actions.js';
 import {
   showToast, showToastLink, initThemeToggle,
   clearFieldErrors, showValidationErrors,
@@ -361,9 +361,9 @@ function finishUnsuspendTracking() {
   _activeUnsuspendRequestId = null;
   if (!session) return;
   clearTimeout(session.timer);
-  // Direct panel: comment "Unsuspended <accounts>" on the JIRA once the run
-  // completes — verdicts ignored by design, failure only warns (non-blocking).
-  if (session.panel === 'direct') commentDirectJira(session.accounts);
+  // Direct panel: mark the JIRA Done + comment "Unsuspended <accounts>" once
+  // the run completes — verdicts ignored by design, failures only warn.
+  if (session.panel === 'direct') markDirectJiraDone(session.accounts);
   const r = completeUnsuspendResults(session.accounts, session.results);
   // Legacy extensions never send verdicts; current runs mark those accounts
   // unverified so they remain visible and retryable.
@@ -578,6 +578,47 @@ function initDomainInputs() {
     const domain = sanitiseDomainInput(first);
     if (domain) detectRegion('direct', domain);
   });
+})();
+
+// Direct panel JIRA link → auto-fill account (always overwrites) from the
+// issue summary, debounced so mid-typing doesn't fire fetches.
+(function initDirectJiraAutofill() {
+  const jiraInput = document.getElementById('direct-jira-link');
+  if (!jiraInput) return;
+  let timer = null;
+  let lastFetched = '';
+  const schedule = () => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      const jiraUrl = jiraInput.value.trim();
+      if (!jiraUrl || jiraUrl === lastFetched || !isSafeJiraUrl(jiraUrl)) return;
+      lastFetched = jiraUrl;
+      const fetched = await fetchJiraDescription(jiraUrl);
+      if (!fetched.ok) {
+        showToast('JIRA fetch failed — ' + fetched.error, 'warning', { durationMs: 5000 });
+        return;
+      }
+      const parsed = parseJiraSummaryAccounts(fetched.summary || '');
+      if (!parsed) {
+        showToast("Couldn't find an account in the JIRA summary — enter it manually.", 'warning');
+        return;
+      }
+      const accountInput = document.getElementById('direct-account');
+      if (accountInput) {
+        accountInput.value = parsed.accounts.join(', ');
+        accountInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (parsed.type === 'ARF' || parsed.type === 'Bounce') {
+        const typeEl = document.getElementById('direct-susp-type');
+        if (typeEl) typeEl.value = parsed.type;
+      }
+      const domain = sanitiseDomainInput(parsed.accounts[0] || '');
+      if (domain) detectRegion('direct', domain);
+      showToast('Account filled from JIRA ✓ (' + fetched.issueKey + ')', 'success');
+    }, 600);
+  };
+  jiraInput.addEventListener('paste', () => setTimeout(schedule, 0));
+  jiraInput.addEventListener('input', schedule);
 })();
 
 // ── Mailboards link href updater ─────────────────────────────────────
@@ -2106,7 +2147,7 @@ function fetchJiraDescription(jiraUrl) {
         resolve({ ok: false, error: e.data.error || 'Failed fetching JIRA description' });
         return;
       }
-      resolve({ ok: true, issueKey: e.data.issueKey || '', description: e.data.description || '' });
+      resolve({ ok: true, issueKey: e.data.issueKey || '', description: e.data.description || '', summary: e.data.summary || '' });
     };
     window.addEventListener('message', listener);
     const timeout = setTimeout(() => {
@@ -2191,32 +2232,37 @@ async function logDirectToSheet(btn) {
   });
 }
 
-// Posts "Unsuspended <accounts>" to the direct panel's JIRA once a run
-// completes. Fire-and-forget: failures warn, successes stay silent.
-function commentDirectJira(accounts) {
+// Marks the direct panel's JIRA Done with an "Unsuspended <accounts>" comment
+// once a run completes. Fire-and-forget: failures warn, successes stay silent.
+function markDirectJiraDone(accounts) {
   const jiraUrl = document.getElementById('direct-jira-link')?.value.trim() || '';
   if (!jiraUrl) return;
-  const comment = buildUnsuspendComment(accounts);
-  if (!comment) return;
-  const requestId = createRequestId('comment');
+  const accountList = (Array.isArray(accounts) ? accounts : [accounts])
+    .map(entry => String(entry == null ? '' : entry).trim())
+    .filter(Boolean)
+    .join(', ');
+  if (!accountList) return;
+  const requestId = createRequestId('done');
   const listener = (e) => {
     if (e.source !== window || !isAllowedWebAppOrigin(e.origin) ||
         !validateExtensionResult(e.data) ||
-        (e.data.type !== 'REPORT_GENERATOR_JIRA_COMMENT_RESULT' && e.data.type !== 'REPORT_GENERATOR_ERROR') ||
+        (e.data.type !== 'REPORT_GENERATOR_JIRA_DONE_RESULT' && e.data.type !== 'REPORT_GENERATOR_ERROR') ||
         !matchesRequest(requestId, e.data.requestId)) return;
     window.removeEventListener('message', listener);
     clearTimeout(timeout);
     if (e.data.type === 'REPORT_GENERATOR_ERROR') {
-      showToast('Unsuspension ran, but JIRA comment failed: ' + describeExtensionError(e.data.code), 'warning', { durationMs: 6000 });
+      showToast('Unsuspension ran, but JIRA update failed: ' + describeExtensionError(e.data.code), 'warning', { durationMs: 6000 });
       return;
     }
-    if (!e.data.success) {
-      showToast('Unsuspension ran, but JIRA comment failed' + (e.data.error ? ' — ' + e.data.error : ''), 'warning', { durationMs: 6000 });
+    if (!e.data.success || !e.data.done) {
+      showToast('Unsuspension ran, but marking JIRA Done failed' + (e.data.error ? ' — ' + e.data.error : ''), 'warning', { durationMs: 6000 });
+    } else if (!e.data.commented) {
+      showToast('JIRA marked Done, but the "Unsuspended" comment failed' + (e.data.error ? ' — ' + e.data.error : ''), 'warning', { durationMs: 6000 });
     }
   };
   window.addEventListener('message', listener);
   const timeout = setTimeout(() => window.removeEventListener('message', listener), 15000);
-  window.postMessage({ type: 'REPORT_GENERATOR_JIRA_COMMENT', panel: 'direct', jiraUrl, comment, requestId }, '*');
+  window.postMessage({ type: 'REPORT_GENERATOR_JIRA_DONE', panel: 'direct', jiraUrl, accounts: accountList, requestId }, '*');
 }
 
 function clearDirect(opts) {

@@ -34,15 +34,16 @@ export function getDirectSheetReportType(value) {
   return null;
 }
 
-// "Unsuspended a@x, b@y" comment posted to the JIRA when a direct run
-// completes. Empty string when there is nothing truthful to write.
-export function buildUnsuspendComment(accounts) {
-  const list = (Array.isArray(accounts) ? accounts : [accounts])
-    .map(entry => String(entry == null ? '' : entry).trim())
-    .filter(Boolean);
-  const unique = [...new Set(list)];
-  if (unique.length === 0) return '';
-  return 'Unsuspended ' + unique.join(', ');
+// Parses tool-written JIRA summaries ("<Type> unsuspension request: <accounts>")
+// back into their suspension type and account list. Returns null for foreign
+// summaries or when no valid account remains.
+export function parseJiraSummaryAccounts(summary) {
+  if (typeof summary !== 'string' || !summary) return null;
+  const match = /^(ARF|Bounce|SMTP Compromised) unsuspension request:\s*(.+)$/i.exec(summary.trim());
+  if (!match) return null;
+  const accounts = match[2].split(',').map(entry => entry.trim()).filter(validateAccountIdentifier);
+  if (accounts.length === 0) return null;
+  return { type: match[1], accounts };
 }
 
 export function cleanSheetReason(reportText) {

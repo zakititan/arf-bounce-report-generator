@@ -109,7 +109,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
     - **Typed bridge errors** — invalid payloads, missing storage, and unknown message types get a `REPORT_GENERATOR_ERROR` reply (consumed by the matching pending action with an explanatory toast) instead of hanging until the button safety timeout
     - **Green banner** — extension detected and up to date (`Extension vX.X.X detected.`); auto-dismisses after 3 seconds and stays dismissed for that minimum version
     - **Yellow banner** — extension outdated, with direct download link for the latest version
-    - **Red banner** — extension not installed or is outdated (pre-v4.12), with direct zip install link
+    - **Red banner** — extension not installed or is outdated (pre-v4.13), with direct zip install link
     - Dismiss persists per `MIN_VERSION` in `localStorage`; reappears when min version is bumped
 
 ### Log to Sheet (Google Sheets Integration)
@@ -183,7 +183,8 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ### Direct Unsuspend Panel
 - **No report needed** — three fields only: Account (single or comma-separated), JIRA link, and Suspension type (Bounce/ARF); no stepper, domain lookup, or output section
 - **Unsuspend via AD** — posts the JIRA link as the Abuse Desk unblock reason through the no-JIRA extension flow (empty report text/HTML); per-account verdict chips + Retry Failed work exactly like the other panels
-- **JIRA comment on completion** — when a run completes, `Unsuspended <accounts>` is posted to the pasted JIRA issue via the extension (session-cookie auth); verdicts ignored by design, failures warn without touching verdicts
+- **JIRA Done + comment on completion** — when a run completes, the pasted issue is transitioned to Done (discovered transition, fallback `71`) with an `Unsuspended <accounts>` comment, via the extension's session auth; unconditional by design (any verdicts), failures warn without touching verdicts
+- **Account auto-fill from JIRA** — entering a valid JIRA link auto-fills the Account field (always overwrites) from the issue summary (`<Type> unsuspension request: <accounts>`), sets Suspension type when it maps (ARF/Bounce), and runs region detection; foreign summaries toast and leave the field alone
 - **Region chip** — MX-based region detection runs on account blur (first account wins for multi-account runs)
 - **Log from JIRA** — "Log to Sheet" fetches the issue description via the extension (`GET /rest/api/2/issue/{key}?fields=description`, session-cookie auth, key parsed from the pasted link — browse path or `selectedIssue` param), strips report markers, truncates to 45k chars (Sheets cell limit), and logs one row per account with the selected suspension type (BOUNCE/ARF) in the Unsuspension Type column
 - **Draft persistence** — inputs survive refresh like the other panels; included in Clear-all
@@ -298,7 +299,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ├── styles/
 │   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, extension modal, responsive)
 ├── extension/                      # Chrome extension (Manifest V3) for JIRA integration, Abuse Desk automation, and Google Sheets logging
-  │   ├── manifest.json               # Extension config: v4.12, permissions, ES-module service worker, content scripts for webapp, JIRA, Abuse Desk, and Partner Panel
+  │   ├── manifest.json               # Extension config: v4.13, permissions, ES-module service worker, content scripts for webapp, JIRA, Abuse Desk, and Partner Panel
  │   ├── rg-lib.js                   # Shared pure logic (ESM): history analysis, JIRA body builder, image extraction + caps, fallback URL builder, reason-TTL check, per-account reason keys, transition discovery, pending-map, storage janitor — imported by the service worker and unit-tested
  │   ├── background.js               # Module service worker: create-jira with payload validation (+optional markDone with discovered transition), log-to-sheet with verified response and URL allowlist, keyed partner-panel-lookup (closes its tab, analyzes raw events), open-abusedesk-tabs, startup storage janitor
  │   ├── webapp-helpers.js           # Classic-script pure helpers for the webapp bridge: origin rules, reply routing, message validation, error replies, outbound-type guard, PONG throttle

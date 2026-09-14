@@ -145,8 +145,8 @@ export function validateWebAppMessage(message) {
   if (message.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION') {
     return hasRequestId && hasStrings(['panel', 'jiraUrl']);
   }
-  if (message.type === 'REPORT_GENERATOR_JIRA_COMMENT') {
-    return hasRequestId && hasStrings(['panel', 'jiraUrl', 'comment']);
+  if (message.type === 'REPORT_GENERATOR_JIRA_DONE') {
+    return hasRequestId && hasStrings(['panel', 'jiraUrl', 'accounts']);
   }
   return false;
 }
@@ -174,10 +174,13 @@ export function validateExtensionResult(message) {
   if (message.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT') {
     return (!message.issueKey || typeof message.issueKey === 'string') &&
       (!message.description || typeof message.description === 'string') &&
+      (!message.summary || typeof message.summary === 'string') &&
       (!message.error || typeof message.error === 'string');
   }
-  if (message.type === 'REPORT_GENERATOR_JIRA_COMMENT_RESULT') {
+  if (message.type === 'REPORT_GENERATOR_JIRA_DONE_RESULT') {
     return (!message.issueKey || typeof message.issueKey === 'string') &&
+      (!message.done || typeof message.done === 'boolean') &&
+      (!message.commented || typeof message.commented === 'boolean') &&
       (!message.error || typeof message.error === 'string');
   }
   if (message.type === 'PARTNER_PANEL_RESULT') {

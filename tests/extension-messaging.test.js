@@ -104,7 +104,7 @@ describe('isOutboundReportGeneratorType', () => {
       'PARTNER_PANEL_RESULT',
       'REPORT_GENERATOR_UNSUSPEND_OUTCOME',
       'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT',
-      'REPORT_GENERATOR_JIRA_COMMENT_RESULT',
+      'REPORT_GENERATOR_JIRA_DONE_RESULT',
     ]) {
       assert.equal(isOutboundReportGeneratorType(type), true, type);
     }
@@ -116,7 +116,7 @@ describe('isOutboundReportGeneratorType', () => {
       'REPORT_GENERATOR_JIRA',
       'REPORT_GENERATOR_UNSUSPEND',
       'REPORT_GENERATOR_JIRA_DESCRIPTION',
-      'REPORT_GENERATOR_JIRA_COMMENT',
+      'REPORT_GENERATOR_JIRA_DONE',
       'REPORT_GENERATOR_NOPE',
       null,
       undefined,
@@ -131,7 +131,7 @@ describe('decideEarlyErrorReply echo immunity', () => {
     assert.equal(decideEarlyErrorReply({ type: 'REPORT_GENERATOR_PONG', version: '4.7' }, true), null);
     assert.equal(decideEarlyErrorReply({ type: 'REPORT_GENERATOR_JIRA_RESULT', requestId: 'jira_1', success: true }, true), null);
     assert.equal(decideEarlyErrorReply({ type: 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT', requestId: 'desc_1', success: true }, true), null);
-    assert.equal(decideEarlyErrorReply({ type: 'REPORT_GENERATOR_JIRA_COMMENT_RESULT', requestId: 'comment_1', success: true }, true), null);
+    assert.equal(decideEarlyErrorReply({ type: 'REPORT_GENERATOR_JIRA_DONE_RESULT', requestId: 'done_1', success: true }, true), null);
     assert.equal(decideEarlyErrorReply({ type: 'REPORT_GENERATOR_ERROR', code: 'UNKNOWN_TYPE' }, true), null);
   });
 });
@@ -157,7 +157,7 @@ describe('isKnownReportGeneratorType', () => {
       'REPORT_GENERATOR_LOG_SHEET',
       'REPORT_GENERATOR_PARTNER_PANEL_LOOKUP',
       'REPORT_GENERATOR_JIRA_DESCRIPTION',
-      'REPORT_GENERATOR_JIRA_COMMENT',
+      'REPORT_GENERATOR_JIRA_DONE',
     ]) {
       assert.equal(isKnownReportGeneratorType(type), true, type);
     }
@@ -167,7 +167,7 @@ describe('isKnownReportGeneratorType', () => {
     assert.equal(isKnownReportGeneratorType('REPORT_GENERATOR_NOPE'), false);
     assert.equal(isKnownReportGeneratorType('REPORT_GENERATOR_JIRA_RESULT'), false);
     assert.equal(isKnownReportGeneratorType('REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT'), false);
-    assert.equal(isKnownReportGeneratorType('REPORT_GENERATOR_JIRA_COMMENT_RESULT'), false);
+    assert.equal(isKnownReportGeneratorType('REPORT_GENERATOR_JIRA_DONE_RESULT'), false);
     assert.equal(isKnownReportGeneratorType('PARTNER_PANEL_RESULT'), false);
     assert.equal(isKnownReportGeneratorType(''), false);
     assert.equal(isKnownReportGeneratorType(null), false);
@@ -290,27 +290,27 @@ describe('isValidWebAppMessage', () => {
     );
   });
 
-  it('validates JIRA comment shapes', () => {
+  it('validates JIRA done shapes', () => {
     assert.equal(
       isValidWebAppMessage({
-        type: 'REPORT_GENERATOR_JIRA_COMMENT', panel: 'direct',
+        type: 'REPORT_GENERATOR_JIRA_DONE', panel: 'direct',
         jiraUrl: 'https://jira.directi.com/browse/TAE-123',
-        comment: 'Unsuspended a@x.com', requestId: 'comment_1',
+        accounts: 'a@x.com, b@x.com', requestId: 'done_1',
       }),
       true
     );
     assert.equal(
       isValidWebAppMessage({
-        type: 'REPORT_GENERATOR_JIRA_COMMENT', panel: 'direct',
+        type: 'REPORT_GENERATOR_JIRA_DONE', panel: 'direct',
         jiraUrl: 'https://jira.directi.com/browse/TAE-123',
-        comment: 'Unsuspended a@x.com',
+        accounts: 'a@x.com, b@x.com',
       }),
       false
     );
     assert.equal(
       isValidWebAppMessage({
-        type: 'REPORT_GENERATOR_JIRA_COMMENT', panel: 'direct',
-        jiraUrl: 'https://jira.directi.com/browse/TAE-123', requestId: 'comment_1',
+        type: 'REPORT_GENERATOR_JIRA_DONE', panel: 'direct',
+        jiraUrl: 'https://jira.directi.com/browse/TAE-123', requestId: 'done_1',
       }),
       false
     );

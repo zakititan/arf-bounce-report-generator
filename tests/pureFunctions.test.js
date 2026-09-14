@@ -25,7 +25,7 @@ import { describeReason, getCached, setCache } from '../scripts/api.js';
 import { parseAgeToDays } from '../scripts/ui.js';
 import {
   buildUnsuspendAccounts,
-  buildUnsuspendComment,
+  parseJiraSummaryAccounts,
   cleanSheetReason,
   getSheetReportType,
   getDirectSheetReportType,
@@ -539,58 +539,69 @@ describe('truncateSheetText', () => {
   });
 });
 
-describe('buildUnsuspendComment', () => {
-  it('builds an Unsuspended comment listing the accounts', () => {
-    assert.equal(buildUnsuspendComment(['a@x.com']), 'Unsuspended a@x.com');
-    assert.equal(
-      buildUnsuspendComment(['a@x.com', 'b@x.com']),
-      'Unsuspended a@x.com, b@x.com'
+describe('parseJiraSummaryAccounts', () => {
+  it('extracts type and accounts from tool-written summaries', () => {
+    assert.deepEqual(
+      parseJiraSummaryAccounts('ARF unsuspension request: user@example.com'),
+      { type: 'ARF', accounts: ['user@example.com'] }
+    );
+    assert.deepEqual(
+      parseJiraSummaryAccounts('Bounce unsuspension request: a@x.com, b@x.com'),
+      { type: 'Bounce', accounts: ['a@x.com', 'b@x.com'] }
+    );
+    assert.deepEqual(
+      parseJiraSummaryAccounts('SMTP Compromised unsuspension request: example.com'),
+      { type: 'SMTP Compromised', accounts: ['example.com'] }
     );
   });
 
-  it('trims, dedupes and drops blanks', () => {
-    assert.equal(
-      buildUnsuspendComment([' a@x.com ', 'a@x.com', '', 'b@x.com']),
-      'Unsuspended a@x.com, b@x.com'
+  it('drops invalid accounts and returns null when none remain', () => {
+    assert.deepEqual(
+      parseJiraSummaryAccounts('Bounce unsuspension request: a@x.com, not an account'),
+      { type: 'Bounce', accounts: ['a@x.com'] }
     );
+    assert.equal(parseJiraSummaryAccounts('Bounce unsuspension request: not an account'), null);
   });
 
-  it('returns empty string when there is nothing to list', () => {
-    assert.equal(buildUnsuspendComment([]), '');
-    assert.equal(buildUnsuspendComment(['  ']), '');
-    assert.equal(buildUnsuspendComment(null), '');
+  it('returns null for foreign summaries and non-strings', () => {
+    assert.equal(parseJiraSummaryAccounts('Some manual ticket title'), null);
+    assert.equal(parseJiraSummaryAccounts(''), null);
+    assert.equal(parseJiraSummaryAccounts(null), null);
+    assert.equal(parseJiraSummaryAccounts(undefined), null);
   });
 });
 
-describe('validateExtensionResult JIRA comment', () => {
-  it('accepts a successful comment result with issue key', () => {
+describe('validateExtensionResult JIRA done', () => {
+  it('accepts done results with done/commented flags', () => {
     assert.equal(validateExtensionResult({
-      type: 'REPORT_GENERATOR_JIRA_COMMENT_RESULT',
-      requestId: 'comment-1',
+      type: 'REPORT_GENERATOR_JIRA_DONE_RESULT',
+      requestId: 'done-1',
       success: true,
       issueKey: 'TAE-123',
+      done: true,
+      commented: true,
     }), true);
   });
 
-  it('accepts a failed comment result with an error string', () => {
+  it('accepts a failed done result with an error string', () => {
     assert.equal(validateExtensionResult({
-      type: 'REPORT_GENERATOR_JIRA_COMMENT_RESULT',
-      requestId: 'comment-1',
+      type: 'REPORT_GENERATOR_JIRA_DONE_RESULT',
+      requestId: 'done-1',
       success: false,
-      error: 'Permission denied',
+      error: 'Transition failed (400)',
     }), true);
   });
 
-  it('rejects malformed comment results', () => {
+  it('rejects malformed done results', () => {
     assert.equal(validateExtensionResult({
-      type: 'REPORT_GENERATOR_JIRA_COMMENT_RESULT',
-      requestId: 'comment-1',
+      type: 'REPORT_GENERATOR_JIRA_DONE_RESULT',
+      requestId: 'done-1',
       success: true,
-      issueKey: 42,
+      done: 'yes',
     }), false);
     assert.equal(validateExtensionResult({
-      type: 'REPORT_GENERATOR_JIRA_COMMENT_RESULT',
-      requestId: 'comment-1',
+      type: 'REPORT_GENERATOR_JIRA_DONE_RESULT',
+      requestId: 'done-1',
     }), false);
   });
 });
@@ -603,6 +614,7 @@ describe('validateExtensionResult JIRA description', () => {
       success: true,
       issueKey: 'TAE-123',
       description: 'Some description',
+      summary: 'ARF unsuspension request: user@example.com',
     }), true);
   });
 

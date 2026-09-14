@@ -751,6 +751,7 @@ describe('JIRA description message validation', () => {
       success: true,
       issueKey: 'TAE-1234',
       description: 'text',
+      summary: 'Bounce unsuspension request: a@x.com',
     }), true);
     assert.equal(rgLib.validateExtensionResult({
       type: 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT',
@@ -765,61 +766,71 @@ describe('JIRA description message validation', () => {
   });
 });
 
-describe('JIRA comment message validation', () => {
-  it('accepts a well-formed comment request', () => {
+describe('JIRA done message validation', () => {
+  it('accepts a well-formed done request', () => {
     assert.equal(rgLib.validateWebAppMessage({
-      type: 'REPORT_GENERATOR_JIRA_COMMENT',
-      requestId: 'comment-1',
+      type: 'REPORT_GENERATOR_JIRA_DONE',
+      requestId: 'done-1',
       panel: 'direct',
       jiraUrl: 'https://jira.directi.com/browse/TAE-1234',
-      comment: 'Unsuspended a@x.com',
+      accounts: 'a@x.com, b@x.com',
     }), true);
   });
 
-  it('rejects comment requests with bad requestId or missing fields', () => {
+  it('rejects done requests with bad requestId or missing fields', () => {
     assert.equal(rgLib.validateWebAppMessage({
-      type: 'REPORT_GENERATOR_JIRA_COMMENT',
+      type: 'REPORT_GENERATOR_JIRA_DONE',
       requestId: '!!!',
       panel: 'direct',
       jiraUrl: 'https://jira.directi.com/browse/TAE-1234',
-      comment: 'Unsuspended a@x.com',
+      accounts: 'a@x.com',
     }), false);
     assert.equal(rgLib.validateWebAppMessage({
-      type: 'REPORT_GENERATOR_JIRA_COMMENT',
-      requestId: 'comment-1',
+      type: 'REPORT_GENERATOR_JIRA_DONE',
+      requestId: 'done-1',
       panel: 'direct',
       jiraUrl: 'https://jira.directi.com/browse/TAE-1234',
     }), false);
     assert.equal(rgLib.validateWebAppMessage({
-      type: 'REPORT_GENERATOR_JIRA_COMMENT',
-      requestId: 'comment-1',
+      type: 'REPORT_GENERATOR_JIRA_DONE',
+      requestId: 'done-1',
       panel: 'direct',
-      comment: 'Unsuspended a@x.com',
+      accounts: 'a@x.com',
     }), false);
   });
 
-  it('accepts successful and failed comment results', () => {
+  it('accepts done results with done/commented flags', () => {
     assert.equal(rgLib.validateExtensionResult({
-      type: 'REPORT_GENERATOR_JIRA_COMMENT_RESULT',
-      requestId: 'comment-1',
+      type: 'REPORT_GENERATOR_JIRA_DONE_RESULT',
+      requestId: 'done-1',
       success: true,
       issueKey: 'TAE-1234',
+      done: true,
+      commented: true,
     }), true);
     assert.equal(rgLib.validateExtensionResult({
-      type: 'REPORT_GENERATOR_JIRA_COMMENT_RESULT',
-      requestId: 'comment-1',
+      type: 'REPORT_GENERATOR_JIRA_DONE_RESULT',
+      requestId: 'done-1',
+      success: true,
+      issueKey: 'TAE-1234',
+      done: true,
+      commented: false,
+    }), true);
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_DONE_RESULT',
+      requestId: 'done-1',
       success: false,
       error: 'nope',
     }), true);
     assert.equal(rgLib.validateExtensionResult({
-      type: 'REPORT_GENERATOR_JIRA_COMMENT_RESULT',
-      requestId: 'comment-1',
+      type: 'REPORT_GENERATOR_JIRA_DONE_RESULT',
+      requestId: 'done-1',
     }), false);
     assert.equal(rgLib.validateExtensionResult({
-      type: 'REPORT_GENERATOR_JIRA_COMMENT_RESULT',
-      requestId: 'comment-1',
+      type: 'REPORT_GENERATOR_JIRA_DONE_RESULT',
+      requestId: 'done-1',
       success: true,
-      issueKey: 42,
+      done: 'yes',
     }), false);
   });
 });
