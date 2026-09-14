@@ -555,35 +555,41 @@ describe('parseJiraSummaryAccounts', () => {
     );
   });
 
-  it('drops invalid accounts and returns null when none remain', () => {
-    assert.deepEqual(
-      parseJiraSummaryAccounts('Bounce unsuspension request: a@x.com, not an account'),
-      { type: 'Bounce', accounts: ['a@x.com'] }
-    );
-    assert.equal(parseJiraSummaryAccounts('Bounce unsuspension request: not an account'), null);
-  });
-
-  it('returns null for foreign summaries and non-strings', () => {
-    assert.equal(parseJiraSummaryAccounts('Some manual ticket title'), null);
-    assert.equal(parseJiraSummaryAccounts('Need help with suspension please'), null);
-    assert.equal(parseJiraSummaryAccounts(''), null);
-    assert.equal(parseJiraSummaryAccounts(null), null);
-    assert.equal(parseJiraSummaryAccounts(undefined), null);
-  });
-
-  it('accepts the loose human format without type prefix or colon', () => {
+  it('finds accounts anywhere in free-form summaries', () => {
     assert.deepEqual(
       parseJiraSummaryAccounts('Suspension request- credeerp@cleanhandsaudit.com'),
       { type: null, accounts: ['credeerp@cleanhandsaudit.com'] }
     );
     assert.deepEqual(
-      parseJiraSummaryAccounts('suspension request : a@x.com, b@x.com'),
-      { type: null, accounts: ['a@x.com', 'b@x.com'] }
-    );
-    assert.deepEqual(
-      parseJiraSummaryAccounts('ARF suspension request - user@example.com'),
+      parseJiraSummaryAccounts('Please unsuspend user@example.com urgently (ARF)'),
       { type: 'ARF', accounts: ['user@example.com'] }
     );
+    assert.deepEqual(
+      parseJiraSummaryAccounts('Investigate example.com abuse'),
+      { type: null, accounts: ['example.com'] }
+    );
+  });
+
+  it('dedupes, strips trailing punctuation and drops invalid tokens', () => {
+    assert.deepEqual(
+      parseJiraSummaryAccounts('Unsuspend a@x.com. Also a@x.com, and b@x.com!'),
+      { type: null, accounts: ['a@x.com', 'b@x.com'] }
+    );
+  });
+
+  it('does not sniff types from inside account names', () => {
+    assert.deepEqual(
+      parseJiraSummaryAccounts('Suspension request- darf@example.com'),
+      { type: null, accounts: ['darf@example.com'] }
+    );
+  });
+
+  it('returns null when no valid account is present', () => {
+    assert.equal(parseJiraSummaryAccounts('Some manual ticket title'), null);
+    assert.equal(parseJiraSummaryAccounts('Need help with suspension please'), null);
+    assert.equal(parseJiraSummaryAccounts(''), null);
+    assert.equal(parseJiraSummaryAccounts(null), null);
+    assert.equal(parseJiraSummaryAccounts(undefined), null);
   });
 });
 

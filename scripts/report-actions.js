@@ -34,21 +34,35 @@ export function getDirectSheetReportType(value) {
   return null;
 }
 
-// Parses JIRA summaries back into their suspension type and account list.
-// Strict tool format ("<Type> unsuspension request: <accounts>") plus the
-// loose human format ("Suspension request- <account>", type prefix and colon
-// optional, hyphen/dash separators allowed). Account validation is the
-// backstop: remainders without a valid account return null. Type is null
-// when the summary carries no recognizable prefix.
+// Extracts every email/domain mentioned anywhere in a JIRA summary — TAE
+// tickets always name the account, whatever the surrounding wording.
+// Candidates are filtered through validateAccountIdentifier, so prose never
+// produces false accounts. Also sniffs a suspension-type prefix for the
+// dropdown (null when absent).
+const SUMMARY_ACCOUNT_RE = /[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,}/g;
+
 export function parseJiraSummaryAccounts(summary) {
   if (typeof summary !== 'string' || !summary) return null;
-  const match = /^(?:(ARF|Bounce|SMTP Compromised)\s+)?(?:un)?suspension\s+request\s*[:\-–—]\s*(.+)$/i.exec(summary.trim());
-  if (!match) return null;
-  const accounts = match[2].split(',').map(entry => entry.trim()).filter(validateAccountIdentifier);
+  const seen = new Set();
+  const accounts = [];
+  for (const candidate of summary.match(SUMMARY_ACCOUNT_RE) || []) {
+    const clean = candidate.replace(/[.,;:!?)\]]+$/, '');
+    if (!validateAccountIdentifier(clean) || seen.has(clean)) continue;
+    seen.add(clean);
+    accounts.push(clean);
+  }
   if (accounts.length === 0) return null;
-  const rawType = (match[1] || '').toLowerCase();
-  const type = rawType === 'arf' ? 'ARF' : rawType === 'bounce' ? 'Bounce'
-    : rawType === 'smtp compromised' ? 'SMTP Compromised' : null;
+  const typePatterns = [
+    ['ARF', /\barf\b/i],
+    ['Bounce', /\bbounce\b/i],
+    ['SMTP Compromised', /\bsmtp compromised\b/i],
+  ];
+  let type = null;
+  let typeIdx = Infinity;
+  for (const [name, pattern] of typePatterns) {
+    const idx = summary.search(pattern);
+    if (idx !== -1 && idx < typeIdx) { typeIdx = idx; type = name; }
+  }
   return { type, accounts };
 }
 
