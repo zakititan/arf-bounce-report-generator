@@ -34,6 +34,17 @@ export function getDirectSheetReportType(value) {
   return null;
 }
 
+// "Unsuspended a@x, b@y" comment posted to the JIRA when a direct run
+// completes. Empty string when there is nothing truthful to write.
+export function buildUnsuspendComment(accounts) {
+  const list = (Array.isArray(accounts) ? accounts : [accounts])
+    .map(entry => String(entry == null ? '' : entry).trim())
+    .filter(Boolean);
+  const unique = [...new Set(list)];
+  if (unique.length === 0) return '';
+  return 'Unsuspended ' + unique.join(', ');
+}
+
 export function cleanSheetReason(reportText) {
   return reportText
     .split('\n')

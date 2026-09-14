@@ -764,3 +764,62 @@ describe('JIRA description message validation', () => {
     }), false);
   });
 });
+
+describe('JIRA comment message validation', () => {
+  it('accepts a well-formed comment request', () => {
+    assert.equal(rgLib.validateWebAppMessage({
+      type: 'REPORT_GENERATOR_JIRA_COMMENT',
+      requestId: 'comment-1',
+      panel: 'direct',
+      jiraUrl: 'https://jira.directi.com/browse/TAE-1234',
+      comment: 'Unsuspended a@x.com',
+    }), true);
+  });
+
+  it('rejects comment requests with bad requestId or missing fields', () => {
+    assert.equal(rgLib.validateWebAppMessage({
+      type: 'REPORT_GENERATOR_JIRA_COMMENT',
+      requestId: '!!!',
+      panel: 'direct',
+      jiraUrl: 'https://jira.directi.com/browse/TAE-1234',
+      comment: 'Unsuspended a@x.com',
+    }), false);
+    assert.equal(rgLib.validateWebAppMessage({
+      type: 'REPORT_GENERATOR_JIRA_COMMENT',
+      requestId: 'comment-1',
+      panel: 'direct',
+      jiraUrl: 'https://jira.directi.com/browse/TAE-1234',
+    }), false);
+    assert.equal(rgLib.validateWebAppMessage({
+      type: 'REPORT_GENERATOR_JIRA_COMMENT',
+      requestId: 'comment-1',
+      panel: 'direct',
+      comment: 'Unsuspended a@x.com',
+    }), false);
+  });
+
+  it('accepts successful and failed comment results', () => {
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_COMMENT_RESULT',
+      requestId: 'comment-1',
+      success: true,
+      issueKey: 'TAE-1234',
+    }), true);
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_COMMENT_RESULT',
+      requestId: 'comment-1',
+      success: false,
+      error: 'nope',
+    }), true);
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_COMMENT_RESULT',
+      requestId: 'comment-1',
+    }), false);
+    assert.equal(rgLib.validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_COMMENT_RESULT',
+      requestId: 'comment-1',
+      success: true,
+      issueKey: 42,
+    }), false);
+  });
+});

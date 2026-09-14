@@ -25,6 +25,7 @@ import { describeReason, getCached, setCache } from '../scripts/api.js';
 import { parseAgeToDays } from '../scripts/ui.js';
 import {
   buildUnsuspendAccounts,
+  buildUnsuspendComment,
   cleanSheetReason,
   getSheetReportType,
   getDirectSheetReportType,
@@ -535,6 +536,62 @@ describe('truncateSheetText', () => {
   it('tolerates non-string input', () => {
     assert.equal(truncateSheetText(null), '');
     assert.equal(truncateSheetText(undefined), '');
+  });
+});
+
+describe('buildUnsuspendComment', () => {
+  it('builds an Unsuspended comment listing the accounts', () => {
+    assert.equal(buildUnsuspendComment(['a@x.com']), 'Unsuspended a@x.com');
+    assert.equal(
+      buildUnsuspendComment(['a@x.com', 'b@x.com']),
+      'Unsuspended a@x.com, b@x.com'
+    );
+  });
+
+  it('trims, dedupes and drops blanks', () => {
+    assert.equal(
+      buildUnsuspendComment([' a@x.com ', 'a@x.com', '', 'b@x.com']),
+      'Unsuspended a@x.com, b@x.com'
+    );
+  });
+
+  it('returns empty string when there is nothing to list', () => {
+    assert.equal(buildUnsuspendComment([]), '');
+    assert.equal(buildUnsuspendComment(['  ']), '');
+    assert.equal(buildUnsuspendComment(null), '');
+  });
+});
+
+describe('validateExtensionResult JIRA comment', () => {
+  it('accepts a successful comment result with issue key', () => {
+    assert.equal(validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_COMMENT_RESULT',
+      requestId: 'comment-1',
+      success: true,
+      issueKey: 'TAE-123',
+    }), true);
+  });
+
+  it('accepts a failed comment result with an error string', () => {
+    assert.equal(validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_COMMENT_RESULT',
+      requestId: 'comment-1',
+      success: false,
+      error: 'Permission denied',
+    }), true);
+  });
+
+  it('rejects malformed comment results', () => {
+    assert.equal(validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_COMMENT_RESULT',
+      requestId: 'comment-1',
+      success: true,
+      issueKey: 42,
+    }), false);
+    assert.equal(validateExtensionResult({
+      type: 'REPORT_GENERATOR_JIRA_COMMENT_RESULT',
+      requestId: 'comment-1',
+    }), false);
   });
 });
 

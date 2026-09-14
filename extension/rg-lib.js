@@ -145,6 +145,9 @@ export function validateWebAppMessage(message) {
   if (message.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION') {
     return hasRequestId && hasStrings(['panel', 'jiraUrl']);
   }
+  if (message.type === 'REPORT_GENERATOR_JIRA_COMMENT') {
+    return hasRequestId && hasStrings(['panel', 'jiraUrl', 'comment']);
+  }
   return false;
 }
 
@@ -171,6 +174,10 @@ export function validateExtensionResult(message) {
   if (message.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT') {
     return (!message.issueKey || typeof message.issueKey === 'string') &&
       (!message.description || typeof message.description === 'string') &&
+      (!message.error || typeof message.error === 'string');
+  }
+  if (message.type === 'REPORT_GENERATOR_JIRA_COMMENT_RESULT') {
+    return (!message.issueKey || typeof message.issueKey === 'string') &&
       (!message.error || typeof message.error === 'string');
   }
   if (message.type === 'PARTNER_PANEL_RESULT') {

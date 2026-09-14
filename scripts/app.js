@@ -16,7 +16,7 @@
 import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx,
          fetchLaravelCheck, fetchXmlrpcCheck, fetchWordPressCheck } from './api.js';
 import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, matchesRequest,   consumePendingRequest, registerPendingRequest, screenshotAcceptCount, isAcceptableScreenshotSize, MAX_SCREENSHOT_BYTES, createUnsuspendRequestId, createRequestId, createRequestContextKey, isAllowedWebAppOrigin, validateExtensionResult, validateUnsuspendOutcome, validateAccountIdentifier, parseAccountList, isSafeJiraUrl } from './pure.js';
-import { buildUnsuspendAccounts, cleanSheetReason, getSheetReportType, getDirectSheetReportType, truncateSheetText } from './report-actions.js';
+import { buildUnsuspendAccounts, buildUnsuspendComment, cleanSheetReason, getSheetReportType, getDirectSheetReportType, truncateSheetText } from './report-actions.js';
 import {
   showToast, showToastLink, initThemeToggle,
   clearFieldErrors, showValidationErrors,
@@ -361,6 +361,9 @@ function finishUnsuspendTracking() {
   _activeUnsuspendRequestId = null;
   if (!session) return;
   clearTimeout(session.timer);
+  // Direct panel: comment "Unsuspended <accounts>" on the JIRA once the run
+  // completes — verdicts ignored by design, failure only warns (non-blocking).
+  if (session.panel === 'direct') commentDirectJira(session.accounts);
   const r = completeUnsuspendResults(session.accounts, session.results);
   // Legacy extensions never send verdicts; current runs mark those accounts
   // unverified so they remain visible and retryable.
@@ -2186,6 +2189,34 @@ async function logDirectToSheet(btn) {
       requestId,
     }, '*');
   });
+}
+
+// Posts "Unsuspended <accounts>" to the direct panel's JIRA once a run
+// completes. Fire-and-forget: failures warn, successes stay silent.
+function commentDirectJira(accounts) {
+  const jiraUrl = document.getElementById('direct-jira-link')?.value.trim() || '';
+  if (!jiraUrl) return;
+  const comment = buildUnsuspendComment(accounts);
+  if (!comment) return;
+  const requestId = createRequestId('comment');
+  const listener = (e) => {
+    if (e.source !== window || !isAllowedWebAppOrigin(e.origin) ||
+        !validateExtensionResult(e.data) ||
+        (e.data.type !== 'REPORT_GENERATOR_JIRA_COMMENT_RESULT' && e.data.type !== 'REPORT_GENERATOR_ERROR') ||
+        !matchesRequest(requestId, e.data.requestId)) return;
+    window.removeEventListener('message', listener);
+    clearTimeout(timeout);
+    if (e.data.type === 'REPORT_GENERATOR_ERROR') {
+      showToast('Unsuspension ran, but JIRA comment failed: ' + describeExtensionError(e.data.code), 'warning', { durationMs: 6000 });
+      return;
+    }
+    if (!e.data.success) {
+      showToast('Unsuspension ran, but JIRA comment failed' + (e.data.error ? ' — ' + e.data.error : ''), 'warning', { durationMs: 6000 });
+    }
+  };
+  window.addEventListener('message', listener);
+  const timeout = setTimeout(() => window.removeEventListener('message', listener), 15000);
+  window.postMessage({ type: 'REPORT_GENERATOR_JIRA_COMMENT', panel: 'direct', jiraUrl, comment, requestId }, '*');
 }
 
 function clearDirect(opts) {

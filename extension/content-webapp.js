@@ -81,13 +81,15 @@
         data.type === 'REPORT_GENERATOR_JIRA_RESULT' || data.type === 'REPORT_GENERATOR_UNSUSPEND_RESULT' ||
         data.type === 'REPORT_GENERATOR_LOG_SHEET_RESULT' || data.type === 'PARTNER_PANEL_RESULT' ||
         data.type === 'REPORT_GENERATOR_UNSUSPEND_OUTCOME' ||
-        data.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT') return null;
+        data.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT' ||
+        data.type === 'REPORT_GENERATOR_JIRA_COMMENT_RESULT') return null;
     if (!storageAvailable) return helperBuildError('STORAGE_UNAVAILABLE', helperExtractRequestId(data));
     var known = data.type === 'REPORT_GENERATOR_JIRA' ||
       data.type === 'REPORT_GENERATOR_UNSUSPEND' ||
       data.type === 'REPORT_GENERATOR_UNSUSPEND_NO_JIRA' ||
       data.type === 'REPORT_GENERATOR_LOG_SHEET' ||
       data.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION' ||
+      data.type === 'REPORT_GENERATOR_JIRA_COMMENT' ||
       data.type === 'REPORT_GENERATOR_PARTNER_PANEL_LOOKUP';
     if (known) {
       return messageValid(data) ? null : helperBuildError('INVALID_MESSAGE', helperExtractRequestId(data));
@@ -175,6 +177,10 @@
     }
     if (data.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION') {
       return requestId && typeof data.panel === 'string' && typeof data.jiraUrl === 'string';
+    }
+    if (data.type === 'REPORT_GENERATOR_JIRA_COMMENT') {
+      return requestId && typeof data.panel === 'string' &&
+        typeof data.jiraUrl === 'string' && typeof data.comment === 'string';
     }
     return false;
   }
@@ -358,6 +364,20 @@
             return;
           }
           window.postMessage({ type: 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT', requestId: descData.requestId, success: descResponse.success === true, issueKey: descResponse.issueKey || null, description: typeof descResponse.description === 'string' ? descResponse.description : null, error: descResponse.error || null }, replyOrigin);
+        }
+      );
+    }
+
+    if (event.data.type === 'REPORT_GENERATOR_JIRA_COMMENT') {
+      var commentData = event.data;
+      chrome.runtime.sendMessage(
+        { action: 'comment-jira', data: { jiraUrl: commentData.jiraUrl, comment: commentData.comment, requestId: commentData.requestId } },
+        function (commentResponse) {
+          if (chrome.runtime.lastError || !commentResponse) {
+            window.postMessage({ type: 'REPORT_GENERATOR_JIRA_COMMENT_RESULT', requestId: commentData.requestId, success: false, error: (chrome.runtime.lastError && chrome.runtime.lastError.message) || 'Failed commenting on JIRA' }, replyOrigin);
+            return;
+          }
+          window.postMessage({ type: 'REPORT_GENERATOR_JIRA_COMMENT_RESULT', requestId: commentData.requestId, success: commentResponse.success === true, issueKey: commentResponse.issueKey || null, error: commentResponse.error || null }, replyOrigin);
         }
       );
     }

@@ -15,6 +15,7 @@
     'REPORT_GENERATOR_LOG_SHEET',
     'REPORT_GENERATOR_PARTNER_PANEL_LOOKUP',
     'REPORT_GENERATOR_JIRA_DESCRIPTION',
+    'REPORT_GENERATOR_JIRA_COMMENT',
   ];
 
   var WEBAPP_ERROR_TYPE = 'REPORT_GENERATOR_ERROR';
@@ -31,6 +32,7 @@
     'PARTNER_PANEL_RESULT',
     'REPORT_GENERATOR_UNSUSPEND_OUTCOME',
     'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT',
+    'REPORT_GENERATOR_JIRA_COMMENT_RESULT',
   ];
 
   function isOutboundReportGeneratorType(type) {
@@ -109,6 +111,10 @@
     }
     if (data.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION') {
       return requestId && typeof data.panel === 'string' && typeof data.jiraUrl === 'string';
+    }
+    if (data.type === 'REPORT_GENERATOR_JIRA_COMMENT') {
+      return requestId && typeof data.panel === 'string' &&
+        typeof data.jiraUrl === 'string' && typeof data.comment === 'string';
     }
     return false;
   }

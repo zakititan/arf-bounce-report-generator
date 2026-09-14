@@ -317,6 +317,38 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === 'comment-jira') {
+    const cd = message.data || {};
+    const commentKey = extractJiraIssueKey(cd.jiraUrl);
+    const commentBody = typeof cd.comment === 'string' ? cd.comment.trim() : '';
+    if (!commentKey) {
+      sendResponse({ success: false, error: 'Invalid JIRA link' });
+      return true;
+    }
+    if (!commentBody) {
+      sendResponse({ success: false, error: 'Empty comment' });
+      return true;
+    }
+    // Session-cookie auth, same as issue creation — the key comes from our
+    // own allowlisted parser, never from raw caller input.
+    fetchWithTimeout('https://jira.directi.com/rest/api/2/issue/' + commentKey + '/comment', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body: commentBody })
+    })
+      .then(async r => {
+        if (!r.ok) {
+          const errText = await r.text().catch(() => '');
+          return { success: false, issueKey: commentKey, error: 'JIRA responded ' + r.status + (errText ? ': ' + errText.slice(0, 200) : '') };
+        }
+        return { success: true, issueKey: commentKey };
+      })
+      .then(sendResponse)
+      .catch(e => sendResponse({ success: false, error: (e && e.message) || 'Failed commenting on JIRA' }));
+    return true;
+  }
+
   if (message.action === 'partner-panel-lookup') {
     handlePartnerPanelLookup(message.data, sendResponse);
     return true;

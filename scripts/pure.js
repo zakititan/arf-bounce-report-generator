@@ -120,6 +120,10 @@ export function validateExtensionResult(message) {
       (!message.description || typeof message.description === 'string') &&
       (!message.error || typeof message.error === 'string');
   }
+  if (message.type === 'REPORT_GENERATOR_JIRA_COMMENT_RESULT') {
+    return (!message.issueKey || typeof message.issueKey === 'string') &&
+      (!message.error || typeof message.error === 'string');
+  }
   return false;
 }
 
