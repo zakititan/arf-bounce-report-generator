@@ -34,16 +34,22 @@ export function getDirectSheetReportType(value) {
   return null;
 }
 
-// Parses tool-written JIRA summaries ("<Type> unsuspension request: <accounts>")
-// back into their suspension type and account list. Returns null for foreign
-// summaries or when no valid account remains.
+// Parses JIRA summaries back into their suspension type and account list.
+// Strict tool format ("<Type> unsuspension request: <accounts>") plus the
+// loose human format ("Suspension request- <account>", type prefix and colon
+// optional, hyphen/dash separators allowed). Account validation is the
+// backstop: remainders without a valid account return null. Type is null
+// when the summary carries no recognizable prefix.
 export function parseJiraSummaryAccounts(summary) {
   if (typeof summary !== 'string' || !summary) return null;
-  const match = /^(ARF|Bounce|SMTP Compromised) unsuspension request:\s*(.+)$/i.exec(summary.trim());
+  const match = /^(?:(ARF|Bounce|SMTP Compromised)\s+)?(?:un)?suspension\s+request\s*[:\-–—]\s*(.+)$/i.exec(summary.trim());
   if (!match) return null;
   const accounts = match[2].split(',').map(entry => entry.trim()).filter(validateAccountIdentifier);
   if (accounts.length === 0) return null;
-  return { type: match[1], accounts };
+  const rawType = (match[1] || '').toLowerCase();
+  const type = rawType === 'arf' ? 'ARF' : rawType === 'bounce' ? 'Bounce'
+    : rawType === 'smtp compromised' ? 'SMTP Compromised' : null;
+  return { type, accounts };
 }
 
 export function cleanSheetReason(reportText) {

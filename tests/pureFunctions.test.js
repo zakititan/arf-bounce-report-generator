@@ -565,9 +565,25 @@ describe('parseJiraSummaryAccounts', () => {
 
   it('returns null for foreign summaries and non-strings', () => {
     assert.equal(parseJiraSummaryAccounts('Some manual ticket title'), null);
+    assert.equal(parseJiraSummaryAccounts('Need help with suspension please'), null);
     assert.equal(parseJiraSummaryAccounts(''), null);
     assert.equal(parseJiraSummaryAccounts(null), null);
     assert.equal(parseJiraSummaryAccounts(undefined), null);
+  });
+
+  it('accepts the loose human format without type prefix or colon', () => {
+    assert.deepEqual(
+      parseJiraSummaryAccounts('Suspension request- credeerp@cleanhandsaudit.com'),
+      { type: null, accounts: ['credeerp@cleanhandsaudit.com'] }
+    );
+    assert.deepEqual(
+      parseJiraSummaryAccounts('suspension request : a@x.com, b@x.com'),
+      { type: null, accounts: ['a@x.com', 'b@x.com'] }
+    );
+    assert.deepEqual(
+      parseJiraSummaryAccounts('ARF suspension request - user@example.com'),
+      { type: 'ARF', accounts: ['user@example.com'] }
+    );
   });
 });
 
