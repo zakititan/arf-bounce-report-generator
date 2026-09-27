@@ -86,6 +86,8 @@ const state = {
   },
   direct: {
     region: 'na',
+    whois: null,
+    lookupInFlight: false,
   },
 };
 let lastActivePanel = null; // tracks which panel the user last interacted with (for Ctrl/Cmd+Enter)
@@ -491,7 +493,7 @@ async function detectRegion(prefix, domain) {
 }
 
 function initDomainInputs() {
-  ['arf', 'bounce', 'ipspike', 'smtpsuspend'].forEach(prefix => {
+  ['arf', 'bounce', 'ipspike', 'smtpsuspend', 'direct'].forEach(prefix => {
     const input = document.getElementById(prefix + '-domain-input');
     if (!input) return;
     input.addEventListener('paste', (e) => {
@@ -572,7 +574,20 @@ function initDomainInputs() {
     sanitise();
     accountInput.dispatchEvent(new Event('input', { bubbles: true }));
   });
-  accountInput.addEventListener('input', sanitise);
+  accountInput.addEventListener('input', () => {
+    sanitise();
+    // Same as Bounce: first account's domain auto-fills the lookup input.
+    const first = (accountInput.value.split(',')[0] || '').trim();
+    const domainInput = document.getElementById('direct-domain-input');
+    if (domainInput) {
+      const syncDomain = sanitiseDomainInput(first);
+      if (syncDomain && domainInput.value !== syncDomain) {
+        domainInput.value = syncDomain;
+        resetWhoisState('direct');
+      }
+    }
+    lookupDomain('direct');
+  });
   accountInput.addEventListener('blur', () => {
     const first = (accountInput.value.split(',')[0] || '').trim();
     const domain = sanitiseDomainInput(first);
@@ -2273,6 +2288,20 @@ function clearDirect(opts) {
   if (accountEl) accountEl.value = '';
   if (jiraEl) jiraEl.value = '';
   if (typeEl) typeEl.value = '';
+  // Reset the domain lookup card.
+  state.direct.whois = null;
+  state.direct.lookupInFlight = false;
+  resetWhoisState('direct');
+  const domainInput = document.getElementById('direct-domain-input');
+  if (domainInput) domainInput.value = '';
+  ['result-summary', 'result-created', 'result-age', 'result-source'].forEach(s => {
+    const el = document.getElementById('direct-' + s);
+    if (el) el.textContent = '—';
+  });
+  ['result-website', 'result-dkim'].forEach(s => {
+    const el = document.getElementById('direct-' + s);
+    if (el) el.innerHTML = '<div class="skeleton skeleton-sm"></div>';
+  });
   if (_cancelUnsuspendTracking) _cancelUnsuspendTracking('direct');
   const actionResults = document.getElementById('direct-action-results');
   if (actionResults) actionResults.hidden = true;

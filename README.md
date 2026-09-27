@@ -186,6 +186,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **JIRA Done + comment on completion** — when a run completes, the pasted issue is transitioned to Done (discovered transition, fallback `71`) with an `Unsuspended <accounts>` comment, via the extension's session auth; unconditional by design (any verdicts), failures warn without touching verdicts
 - **Account auto-fill from JIRA** — entering a valid JIRA link auto-fills the Account field (always overwrites) with every email/domain found anywhere in the issue summary (validated, deduped); sniffs a suspension-type prefix for the dropdown when present
 - **Region chip** — MX-based region detection runs on account blur (first account wins for multi-account runs)
+- **Domain Lookup** — same WHOIS/Website/DKIM widget as Bounce; auto-fills from the first account and looks up as you type, with its own Lookup button and collapsible result card
 - **Log from JIRA** — "Log to Sheet" fetches the issue description via the extension (`GET /rest/api/2/issue/{key}?fields=description`, session-cookie auth, key parsed from the pasted link — browse path or `selectedIssue` param), strips report markers, truncates to 45k chars (Sheets cell limit), and logs one row per account with the selected suspension type (BOUNCE/ARF) in the Unsuspension Type column
 - **Draft persistence** — inputs survive refresh like the other panels; included in Clear-all
 
