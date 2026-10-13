@@ -834,3 +834,114 @@ describe('JIRA done message validation', () => {
     }), false);
   });
 });
+
+// ── extractAdUserStatus ───────────────────────────────────────────────
+describe('extractAdUserStatus', () => {
+  it('reads the top-level user_status and userStatus keys', () => {
+    assert.equal(rgLib.extractAdUserStatus({ user_status: 'Active' }), 'Active');
+    assert.equal(rgLib.extractAdUserStatus({ userStatus: 'Suspended' }), 'Suspended');
+    assert.equal(rgLib.extractAdUserStatus({ user_status: 'active', userStatus: 'Suspended' }), 'active');
+  });
+
+  it('reads one level of nesting under data and result, both casings', () => {
+    assert.equal(rgLib.extractAdUserStatus({ data: { user_status: 'Active' } }), 'Active');
+    assert.equal(rgLib.extractAdUserStatus({ data: { userStatus: 'Active' } }), 'Active');
+    assert.equal(rgLib.extractAdUserStatus({ result: { user_status: 'Suspended' } }), 'Suspended');
+    assert.equal(rgLib.extractAdUserStatus({ result: { userStatus: 'Suspended' } }), 'Suspended');
+  });
+
+  it('prefers top-level user_status over userStatus and every nested form', () => {
+    const nested = {
+      user_status: 'top-snake',
+      userStatus: 'top-camel',
+      data: { user_status: 'data-snake', userStatus: 'data-camel' },
+      result: { user_status: 'result-snake', userStatus: 'result-camel' },
+    };
+    assert.equal(rgLib.extractAdUserStatus(nested), 'top-snake');
+    // …then userStatus, then data.*, then result.*
+    assert.equal(rgLib.extractAdUserStatus({ ...nested, user_status: undefined }), 'top-camel');
+    assert.equal(
+      rgLib.extractAdUserStatus({ data: nested.data, result: nested.result }),
+      'data-snake'
+    );
+    assert.equal(rgLib.extractAdUserStatus({ result: nested.result }), 'result-snake');
+  });
+
+  it('ignores non-string values at every level and returns an empty string', () => {
+    for (const bad of [42, null, undefined, true, { nested: 'Active' }, ['Active'], '']) {
+      assert.equal(rgLib.extractAdUserStatus({ user_status: bad }), '', String(bad));
+      assert.equal(rgLib.extractAdUserStatus({ userStatus: bad }), '', String(bad));
+      assert.equal(rgLib.extractAdUserStatus({ data: { user_status: bad } }), '', String(bad));
+      assert.equal(rgLib.extractAdUserStatus({ data: { userStatus: bad } }), '', String(bad));
+      assert.equal(rgLib.extractAdUserStatus({ result: { user_status: bad } }), '', String(bad));
+      assert.equal(rgLib.extractAdUserStatus({ result: { userStatus: bad } }), '', String(bad));
+    }
+    // A non-object container hides the nested keys entirely.
+    assert.equal(rgLib.extractAdUserStatus({ data: 'Active', result: 7 }), '');
+  });
+
+  it('does not throw for hostile top-level inputs', () => {
+    for (const bad of [null, undefined, 'a string', 42, [], {}, { data: 7 }, NaN, true]) {
+      assert.doesNotThrow(() => rgLib.extractAdUserStatus(bad), String(bad));
+      assert.equal(rgLib.extractAdUserStatus(bad), '', String(bad));
+    }
+  });
+
+  it('trims the value it returns and treats whitespace-only as absent', () => {
+    assert.equal(rgLib.extractAdUserStatus({ user_status: '  Active  ' }), 'Active');
+    assert.equal(rgLib.extractAdUserStatus({ data: { userStatus: '\tSuspended\n' } }), 'Suspended');
+    assert.equal(rgLib.extractAdUserStatus({ user_status: '   ' }), '');
+    assert.equal(rgLib.extractAdUserStatus({ result: { user_status: '\n\t' } }), '');
+  });
+});
+
+// ── resolveVerifiedOutcome ────────────────────────────────────────────
+describe('resolveVerifiedOutcome', () => {
+  it('covers every row of the badge × api decision table', () => {
+    const v = rgLib.resolveVerifiedOutcome;
+    // badge active → confirmed, whatever the API says
+    assert.equal(v({ badgeStatus: 'Active', apiStatus: 'active' }), 'confirmed');
+    assert.equal(v({ badgeStatus: 'Active', apiStatus: 'suspended' }), 'confirmed');
+    assert.equal(v({ badgeStatus: 'Active', apiStatus: '' }), 'confirmed');
+    // badge suspended → API rescues an active user, otherwise failed
+    assert.equal(v({ badgeStatus: 'Suspended', apiStatus: 'active' }), 'confirmed');
+    assert.equal(v({ badgeStatus: 'Suspended', apiStatus: 'suspended' }), 'failed');
+    assert.equal(v({ badgeStatus: 'Suspended', apiStatus: '' }), 'failed');
+    // badge neither → the API decides, unknown when it says nothing
+    assert.equal(v({ badgeStatus: '', apiStatus: 'active' }), 'confirmed');
+    assert.equal(v({ badgeStatus: '', apiStatus: 'suspended' }), 'failed');
+    assert.equal(v({ badgeStatus: '', apiStatus: '' }), 'unknown');
+  });
+
+  it('compares both inputs case-insensitively and ignores surrounding whitespace', () => {
+    const v = rgLib.resolveVerifiedOutcome;
+    assert.equal(v({ badgeStatus: ' ACTIVE ', apiStatus: 'suspended' }), 'confirmed');
+    assert.equal(v({ badgeStatus: 'suspended', apiStatus: '\tACTIVE\n' }), 'confirmed');
+    assert.equal(v({ badgeStatus: 'SUSPENDED', apiStatus: 'Suspended' }), 'failed');
+    assert.equal(v({ badgeStatus: '   ', apiStatus: '  ACTIVE  ' }), 'confirmed');
+    assert.equal(v({ badgeStatus: 'status: ACTIVE (verified)', apiStatus: 'garbage' }), 'confirmed');
+  });
+
+  it('never treats "inactive" as active', () => {
+    const v = rgLib.resolveVerifiedOutcome;
+    assert.equal(v({ badgeStatus: 'inactive', apiStatus: '' }), 'unknown');
+    assert.equal(v({ badgeStatus: 'INACTIVE', apiStatus: 'suspended' }), 'failed');
+    assert.equal(v({ badgeStatus: 'inactive', apiStatus: 'active' }), 'confirmed');
+    assert.equal(v({ badgeStatus: 'reactivated', apiStatus: 'hyperactive' }), 'unknown');
+  });
+
+  it('returns unknown for missing, non-object or garbage input without throwing', () => {
+    const v = rgLib.resolveVerifiedOutcome;
+    assert.equal(v(), 'unknown');
+    assert.equal(v(null), 'unknown');
+    assert.equal(v(undefined), 'unknown');
+    assert.equal(v('Active'), 'unknown');
+    assert.equal(v(42), 'unknown');
+    assert.equal(v([]), 'unknown');
+    assert.equal(v({}), 'unknown');
+    assert.equal(v({ badgeStatus: 'Active' }), 'confirmed');   // apiStatus simply absent
+    assert.equal(v({ apiStatus: 'active' }), 'confirmed');
+    assert.equal(v({ badgeStatus: null, apiStatus: 42 }), 'unknown');
+    assert.doesNotThrow(() => v());
+  });
+});

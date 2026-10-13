@@ -1,4 +1,4 @@
-import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList, createUnsuspendReasonKey, createPerAccountUnsuspendReasonKey, persistUnsuspendReason, isSafeJiraUrl, isSafeGoogleSheetsUrl, isSafeAppsScriptUrl, createPendingMap, capInlineImages, isValidJiraCreatePayload, discoverDoneTransitionId, buildBulkSummary, findStaleStorageKeys, buildAbuseDeskUrl, extractJiraIssueKey } from './rg-lib.js';
+import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList, createUnsuspendReasonKey, createPerAccountUnsuspendReasonKey, persistUnsuspendReason, isSafeJiraUrl, isSafeGoogleSheetsUrl, isSafeAppsScriptUrl, createPendingMap, capInlineImages, isValidJiraCreatePayload, discoverDoneTransitionId, buildBulkSummary, findStaleStorageKeys, buildAbuseDeskUrl, extractJiraIssueKey, extractAdUserStatus, resolveVerifiedOutcome } from './rg-lib.js';
 import { fetchWithTimeout } from './timeout.js';
 
 const EXPIRY_MS = 10 * 60 * 1000;
@@ -349,19 +349,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === 'ad-user-status') {
-    // Fallback verification path: the Abuse Desk page renders its status
-    // badge from this API; fetch it directly (host permission granted).
+    // Cross-check path: the Abuse Desk page renders its status badge from
+    // this API, so fetch it directly (host permission granted). Proper key
+    // reads, not a blob scan — and the response is checked before parsing.
     const account = message.data && message.data.account;
     if (!areValidAccountList(account)) { sendResponse({ success: false, error: 'Invalid account or email domain' }); return true; }
+    // The caller passes its settled badge read so the cross-check decision
+    // (badge-primary, API rescues a Suspended badge) is made in one place.
+    const badgeStatus = typeof message.data.badgeStatus === 'string' ? message.data.badgeStatus : '';
     fetchWithTimeout('https://api-abusedesk.ops.titan.email/api/v1/users/status/?email=' + encodeURIComponent(account), { credentials: 'include' })
-      .then(r => r.json())
-      .then(json => {
-        const flat = JSON.stringify(json || {});
-        const m = flat.match(/"user_?status"\s*:\s*"([^"]+)"/i);
-        const status = m ? m[1] : '';
-        sendResponse({ success: !!status, status });
+      .then(r => {
+        if (!r.ok) throw new Error('AD status API responded ' + r.status);
+        return r.json();
       })
-      .catch(e => sendResponse({ success: false, error: e.message }));
+      .then(json => {
+        const status = extractAdUserStatus(json);
+        sendResponse({ success: true, status, outcome: resolveVerifiedOutcome({ badgeStatus, apiStatus: status }) });
+      })
+      .catch(e => sendResponse({
+        success: false,
+        error: e.message,
+        // API unreachable: fall back to the badge alone so an Active badge
+        // still confirms and only an unreadable badge degrades to unknown.
+        outcome: resolveVerifiedOutcome({ badgeStatus, apiStatus: '' }),
+      }));
     return true;
   }
 

@@ -437,3 +437,58 @@ export function buildBulkSummary(accounts) {
   }
   return out.join(', ');
 }
+
+// Reads a status off an already-parsed AbuseDesk payload. Only non-blank
+// strings count, and we look one nesting level deep because the API returns
+// either the user object itself or a data/result envelope around it.
+function readStatusString(holder, key) {
+  if (!holder || typeof holder !== 'object') return '';
+  const value = holder[key];
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+export function extractAdUserStatus(json) {
+  // Guarded: the payload comes from an external API, so a hostile shape (or a
+  // throwing getter) must degrade to '' instead of breaking the caller.
+  try {
+    if (!json || typeof json !== 'object') return '';
+    const candidates = [
+      [json, 'user_status'],
+      [json, 'userStatus'],
+      [json.data, 'user_status'],
+      [json.data, 'userStatus'],
+      [json.result, 'user_status'],
+      [json.result, 'userStatus'],
+    ];
+    for (const [holder, key] of candidates) {
+      const value = readStatusString(holder, key);
+      if (value) return value;
+    }
+    return '';
+  } catch (_) {
+    return '';
+  }
+}
+
+// Single status signal → 'active' | 'suspended' | 'neither'. Reuses
+// matchesActiveStatus so 'inactive' (and friends) never count as active here.
+function classifyStatusSignal(value) {
+  if (matchesActiveStatus(value)) return 'active';
+  return typeof value === 'string' && value.trim().toLowerCase().indexOf('suspend') !== -1
+    ? 'suspended'
+    : 'neither';
+}
+
+// Cross-checks the AbuseDesk DOM badge against the status API string. An
+// active badge wins outright; a suspended badge is only overturned by an
+// explicitly active API reading; anything else is unknown.
+export function resolveVerifiedOutcome(input = {}) {
+  if (!input || typeof input !== 'object') return 'unknown';
+  const badge = classifyStatusSignal(input.badgeStatus);
+  const api = classifyStatusSignal(input.apiStatus);
+  if (badge === 'active') return 'confirmed';
+  if (badge === 'suspended') return api === 'active' ? 'confirmed' : 'failed';
+  if (api === 'active') return 'confirmed';
+  if (api === 'suspended') return 'failed';
+  return 'unknown';
+}

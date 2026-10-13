@@ -132,16 +132,38 @@
   //          └─ span.bu-badge.bu-badge-active → "active"   (lowercase)
   function readUserStatus() { return readBadgeStatus('user status'); }
 
-  // Plan B: the AD page renders the badge from this API — ask the service
-  // worker (which has host permission) to fetch it directly.
-  function fetchStatusViaApi(account) {
+  // The DOM badge stays authoritative, but it renders progressively — a first
+  // non-empty read can be a stale pre-save value. Require it to settle on the
+  // same value twice before trusting it.
+  var BADGE_SETTLE_TIMEOUT_MS = 10000;
+  var BADGE_SETTLE_GAP_MS = 800;
+  // A settled Suspended gets a short grace window before we call it a failure,
+  // so an eventually-consistent re-render can't produce a false negative.
+  var SUSPENDED_GRACE_TIMEOUT_MS = 5000;
+
+  function stableBadgeReadNow(timeoutMs) {
+    var h = adHelpers();
+    var read = h && typeof h.stableBadgeRead === 'function' ? h.stableBadgeRead : null;
+    if (!read) return Promise.resolve(readUserStatus());
+    return read(readUserStatus, { timeoutMs: timeoutMs, gapMs: BADGE_SETTLE_GAP_MS, consecutive: 2 })
+      .then(function (value) { return value || ''; }, function () { return ''; });
+  }
+
+  // Cross-check the settled badge against the status API. The badge is primary:
+  // the API can only rescue a failure, never invent a success the page didn't
+  // show. The verdict is decided in the worker (rg-lib) so there is one rule.
+  function fetchStatusViaApi(account, badgeStatus) {
     return new Promise(function (resolve) {
+      function fail(error) {
+        resolve({ ok: false, status: '', outcome: '', error: error });
+      }
       try {
-        chrome.runtime.sendMessage({ action: 'ad-user-status', data: { account: account } }, function (resp) {
-          if (chrome.runtime.lastError) { void chrome.runtime.lastError; resolve(''); return; }
-          resolve(resp && resp.success ? (resp.status || '') : '');
+        chrome.runtime.sendMessage({ action: 'ad-user-status', data: { account: account, badgeStatus: badgeStatus || '' } }, function (resp) {
+          if (chrome.runtime.lastError) { void chrome.runtime.lastError; fail(chrome.runtime.lastError.message); return; }
+          if (!resp || resp.success !== true) { fail((resp && resp.error) || 'No response'); return; }
+          resolve({ ok: true, status: resp.status || '', outcome: resp.outcome || '' });
         });
-      } catch (e) { resolve(''); }
+      } catch (e) { fail(e.message); }
     });
   }
 
@@ -216,29 +238,50 @@
   }
 
   async function verifyByReload(account, attempt) {
-    var status = await waitFor(readUserStatus, 10000);
-    if (!status) status = await fetchStatusViaApi(account);
-    var outcome;
+    var badge = await stableBadgeReadNow(BADGE_SETTLE_TIMEOUT_MS);
+    var rescued = false;
 
-    if (status === 'Active') {
-      outcome = 'confirmed';
-      showToast('\u2705 Unsuspension verified for ' + account + ' — user status: Active');
-    } else if (status === 'Suspended') {
-      outcome = 'failed';
-      showToast('\u274C Unsuspension failed for ' + account + ' — user status still Suspended');
-    } else if (!status && (!attempt || attempt < 2)) {
-      log('Could not read status for ' + account + ' on attempt ' + (attempt || 1) + ' — retrying');
-      setVerifyEntry(account, 2, function () {
-        showToast('Retrying verification for ' + account + '…');
-        setTimeout(function () { location.reload(); }, 1500);
-      });
-      return;
-    } else {
-      outcome = 'unknown';
-      showToast('\u26A0\uFE0F Could not read user status for ' + account + ' — please check manually');
+    if (badge === 'Suspended') {
+      log('Badge settled on Suspended for ' + account + ' — re-polling ' + SUSPENDED_GRACE_TIMEOUT_MS + 'ms before failing');
+      var grace = await stableBadgeReadNow(SUSPENDED_GRACE_TIMEOUT_MS);
+      if (grace && grace !== 'Suspended') {
+        badge = grace;
+        rescued = true;
+      } else if (grace === 'Suspended') {
+        badge = 'Suspended';
+      } else {
+        badge = 'Suspended';
+      }
     }
 
-    log('Verification for ' + account + ': ' + outcome + (status ? ' (customer:' + status + ')' : ''));
+    var outcome;
+    if (badge === 'Active') {
+      outcome = 'confirmed';
+      showToast('\u2705 Unsuspension verified for ' + account + ' — user status: Active');
+    } else {
+      // Unreadable or Suspended: cross-check against the status API, which can
+      // rescue a Suspended read but never overrides a settled Active one.
+      var api = await fetchStatusViaApi(account, badge);
+      outcome = api.outcome || 'unknown';
+      if (outcome === 'confirmed') {
+        rescued = true;
+        showToast('\u2705 Unsuspension verified for ' + account + ' — status API confirms active');
+      } else if (outcome === 'failed') {
+        showToast('\u274C Unsuspension failed for ' + account + ' — user status still Suspended');
+      } else if (!attempt || attempt < 2) {
+        log('Could not read status for ' + account + ' on attempt ' + (attempt || 1) + ' — retrying');
+        setVerifyEntry(account, 2, function () {
+          showToast('Retrying verification for ' + account + '…');
+          setTimeout(function () { location.reload(); }, 1500);
+        });
+        return;
+      } else {
+        outcome = 'unknown';
+        showToast('\u26A0\uFE0F Could not read user status for ' + account + ' — please check manually');
+      }
+    }
+
+    log('Verification for ' + account + ': ' + outcome + (badge ? ' (badge:' + badge + ')' : '') + (rescued ? ' (rescued)' : ''));
     reportDone({ outcome: outcome, account: account });
   }
 

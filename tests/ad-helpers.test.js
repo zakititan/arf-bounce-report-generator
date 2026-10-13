@@ -20,6 +20,7 @@ const {
   isVisibleErrorRecord,
   selectPreferredTextarea,
   isDomainEntity,
+  stableBadgeRead,
 } = globalThis.AD_HELPERS;
 
 // ── tolerant unblock matching ─────────────────────────────────────────
@@ -242,5 +243,109 @@ describe('isDomainEntity', () => {
     assert.equal(isDomainEntity(''), false);
     assert.equal(isDomainEntity(null), false);
     assert.equal(isDomainEntity(undefined), false);
+  });
+});
+
+// ── settling badge reads ──────────────────────────────────────────────
+// The Abuse Desk renders its table progressively, so the first non-empty
+// badge read can be a stale pre-save value. stableBadgeRead polls until the
+// same non-empty value shows up `consecutive` times in a row.
+describe('stableBadgeRead', () => {
+  // Virtual clock: sleep() advances time instead of really waiting.
+  function makeClock() {
+    const clock = { t: 0 };
+    clock.now = () => clock.t;
+    clock.sleep = async (ms) => { clock.t += ms; };
+    return clock;
+  }
+
+  // Reader replays `values` in order, then keeps returning the last one.
+  function makeReader(values) {
+    const reader = { calls: 0 };
+    reader.read = () => {
+      const i = Math.min(reader.calls, values.length - 1);
+      reader.calls += 1;
+      return values[i];
+    };
+    return reader;
+  }
+
+  // Alternates forever, so the reads never agree.
+  function makeAlternatingReader(a, b) {
+    const reader = { calls: 0 };
+    reader.read = () => {
+      const value = reader.calls % 2 === 0 ? a : b;
+      reader.calls += 1;
+      return value;
+    };
+    return reader;
+  }
+
+  it('resolves once two consecutive identical non-empty reads agree', async () => {
+    const clock = makeClock();
+    const reader = makeReader(['Active', 'Active']);
+    const value = await stableBadgeRead(reader.read, { now: clock.now, sleep: clock.sleep });
+    assert.equal(value, 'Active');
+    assert.equal(reader.calls, 2);
+  });
+
+  it('honours a custom consecutive count', async () => {
+    const clock = makeClock();
+    const reader = makeReader(['Active', 'Active', 'Active']);
+    const value = await stableBadgeRead(reader.read, { consecutive: 3, now: clock.now, sleep: clock.sleep });
+    assert.equal(value, 'Active');
+    assert.equal(reader.calls, 3);
+  });
+
+  it('resets the streak when the value flips mid-window', async () => {
+    const clock = makeClock();
+    const reader = makeReader(['Suspended', 'Active', 'Active']);
+    const value = await stableBadgeRead(reader.read, { now: clock.now, sleep: clock.sleep });
+    assert.equal(value, 'Active');
+    assert.equal(reader.calls, 3);
+  });
+
+  it('never counts an empty read as agreement', async () => {
+    const clock = makeClock();
+    const reader = makeReader(['', 'Active', '', 'Active']);
+    const value = await stableBadgeRead(reader.read, { now: clock.now, sleep: clock.sleep });
+    assert.equal(value, 'Active');
+    // Two agreeing non-empty reads come after two disagreeing empty reads.
+    assert.equal(reader.calls, 5);
+  });
+
+  it('resolves empty on timeout when the value never settles', async () => {
+    const clock = makeClock();
+    const reader = makeAlternatingReader('Suspended', 'Active');
+    const value = await stableBadgeRead(reader.read, { now: clock.now, sleep: clock.sleep });
+    assert.equal(value, '');
+    assert.ok(reader.calls > 1 && reader.calls <= 50);
+  });
+
+  it('resolves empty when read is not a function', async () => {
+    assert.equal(await stableBadgeRead(null), '');
+    assert.equal(await stableBadgeRead('nope'), '');
+    assert.equal(await stableBadgeRead(), '');
+  });
+
+  it('terminates even when the injected clock never advances', async () => {
+    const reader = makeAlternatingReader('Suspended', 'Active');
+    let timer = null;
+    const guard = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('stableBadgeRead never settled')), 2000);
+    });
+    let value;
+    try {
+      value = await Promise.race([
+        stableBadgeRead(reader.read, { timeoutMs: 50, gapMs: 10, now: () => 0, sleep: async () => {} }),
+        guard,
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+    assert.equal(value, '');
+    // A frozen clock can only be stopped by the iteration cap, so the read
+    // count must stay bounded rather than spin forever.
+    assert.ok(reader.calls > 0 && reader.calls <= 20);
   });
 });
