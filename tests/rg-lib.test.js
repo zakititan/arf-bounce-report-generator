@@ -945,3 +945,200 @@ describe('resolveVerifiedOutcome', () => {
     assert.doesNotThrow(() => v());
   });
 });
+
+// ── buildAdStatusUrl ──────────────────────────────────────────────────
+describe('buildAdStatusUrl', () => {
+  it('builds the user and domain status URLs, both carrying the region param', () => {
+    assert.equal(
+      rgLib.buildAdStatusUrl('user', 'user@example.com', 'us-east-1'),
+      'https://api-abusedesk.ops.titan.email/api/v1/users/status/?email=user%40example.com&region=us-east-1'
+    );
+    assert.equal(
+      rgLib.buildAdStatusUrl('domain', 'example.com', 'eu-central-1'),
+      'https://api-abusedesk.ops.titan.email/api/v1/domains/status/?domain=example.com&region=eu-central-1'
+    );
+  });
+
+  it('falls back to the user URL for an unknown or absent kind', () => {
+    const userUrl = 'https://api-abusedesk.ops.titan.email/api/v1/users/status/?email=a%40x.com&region=us-east-1';
+    assert.equal(rgLib.buildAdStatusUrl('nonsense', 'a@x.com', 'us-east-1'), userUrl);
+    assert.equal(rgLib.buildAdStatusUrl(undefined, 'a@x.com', 'us-east-1'), userUrl);
+    assert.equal(rgLib.buildAdStatusUrl(null, 'a@x.com', 'us-east-1'), userUrl);
+    assert.equal(rgLib.buildAdStatusUrl('', 'a@x.com', 'us-east-1'), userUrl);
+    assert.equal(rgLib.buildAdStatusUrl('DOMAIN', 'a@x.com', 'us-east-1'), userUrl);   // case-sensitive
+    assert.equal(rgLib.buildAdStatusUrl('users', 'a@x.com', 'us-east-1'), userUrl);
+  });
+
+  it('defaults the region to us-east-1 when absent, empty or not a string', () => {
+    const expected = 'https://api-abusedesk.ops.titan.email/api/v1/domains/status/?domain=a%40x.com&region=us-east-1';
+    assert.equal(rgLib.buildAdStatusUrl('domain', 'a@x.com'), expected);
+    assert.equal(rgLib.buildAdStatusUrl('domain', 'a@x.com', ''), expected);
+    assert.equal(rgLib.buildAdStatusUrl('domain', 'a@x.com', null), expected);
+    assert.equal(rgLib.buildAdStatusUrl('domain', 'a@x.com', 42), expected);
+    assert.equal(
+      rgLib.buildAdStatusUrl('user', 'a@x.com', undefined),
+      'https://api-abusedesk.ops.titan.email/api/v1/users/status/?email=a%40x.com&region=us-east-1'
+    );
+  });
+
+  it('URI-encodes the account', () => {
+    assert.equal(
+      rgLib.buildAdStatusUrl('user', 'first.last+tag@sub.example.com', 'us-east-1'),
+      'https://api-abusedesk.ops.titan.email/api/v1/users/status/?email=first.last%2Btag%40sub.example.com&region=us-east-1'
+    );
+    assert.equal(
+      rgLib.buildAdStatusUrl('user', 'a b@x.com', 'us-east-1'),
+      'https://api-abusedesk.ops.titan.email/api/v1/users/status/?email=a%20b%40x.com&region=us-east-1'
+    );
+    // A caller-owned region is encoded too.
+    assert.equal(
+      rgLib.buildAdStatusUrl('domain', 'example.com', 'a b&c'),
+      'https://api-abusedesk.ops.titan.email/api/v1/domains/status/?domain=example.com&region=a%20b%26c'
+    );
+  });
+
+  it('throws a TypeError for a non-string account but allows an empty one', () => {
+    for (const bad of [null, undefined, 42, true, {}, [], Symbol('x')]) {
+      assert.throws(() => rgLib.buildAdStatusUrl('user', bad, 'us-east-1'), TypeError, String(bad));
+    }
+    // Validation belongs to callers — an empty account still yields a URL.
+    assert.equal(
+      rgLib.buildAdStatusUrl('domain', '', 'us-east-1'),
+      'https://api-abusedesk.ops.titan.email/api/v1/domains/status/?domain=&region=us-east-1'
+    );
+  });
+});
+
+// ── extractAdDomainStatus ─────────────────────────────────────────────
+describe('extractAdDomainStatus', () => {
+  it('reads the top-level domain_status and domainStatus keys', () => {
+    assert.equal(rgLib.extractAdDomainStatus({ domain_status: 'Active' }), 'Active');
+    assert.equal(rgLib.extractAdDomainStatus({ domainStatus: 'Suspended' }), 'Suspended');
+    assert.equal(rgLib.extractAdDomainStatus({ domain_status: 'active', domainStatus: 'Suspended' }), 'active');
+  });
+
+  it('reads one level of nesting under data and result, both casings', () => {
+    assert.equal(rgLib.extractAdDomainStatus({ data: { domain_status: 'Active' } }), 'Active');
+    assert.equal(rgLib.extractAdDomainStatus({ data: { domainStatus: 'Active' } }), 'Active');
+    assert.equal(rgLib.extractAdDomainStatus({ result: { domain_status: 'Suspended' } }), 'Suspended');
+    assert.equal(rgLib.extractAdDomainStatus({ result: { domainStatus: 'Suspended' } }), 'Suspended');
+  });
+
+  it('prefers top-level domain_status over domainStatus and every nested form', () => {
+    const nested = {
+      domain_status: 'top-snake',
+      domainStatus: 'top-camel',
+      data: { domain_status: 'data-snake', domainStatus: 'data-camel' },
+      result: { domain_status: 'result-snake', domainStatus: 'result-camel' },
+    };
+    assert.equal(rgLib.extractAdDomainStatus(nested), 'top-snake');
+    // …then domainStatus, then data.*, then result.*
+    assert.equal(rgLib.extractAdDomainStatus({ ...nested, domain_status: undefined }), 'top-camel');
+    assert.equal(
+      rgLib.extractAdDomainStatus({ data: nested.data, result: nested.result }),
+      'data-snake'
+    );
+    assert.equal(
+      rgLib.extractAdDomainStatus({ data: { domainStatus: 'data-camel' }, result: nested.result }),
+      'data-camel'
+    );
+    assert.equal(rgLib.extractAdDomainStatus({ result: nested.result }), 'result-snake');
+  });
+
+  it('ignores non-string values at every level and returns an empty string', () => {
+    for (const bad of [42, null, undefined, true, { nested: 'Active' }, ['Active'], '']) {
+      assert.equal(rgLib.extractAdDomainStatus({ domain_status: bad }), '', String(bad));
+      assert.equal(rgLib.extractAdDomainStatus({ domainStatus: bad }), '', String(bad));
+      assert.equal(rgLib.extractAdDomainStatus({ data: { domain_status: bad } }), '', String(bad));
+      assert.equal(rgLib.extractAdDomainStatus({ data: { domainStatus: bad } }), '', String(bad));
+      assert.equal(rgLib.extractAdDomainStatus({ result: { domain_status: bad } }), '', String(bad));
+      assert.equal(rgLib.extractAdDomainStatus({ result: { domainStatus: bad } }), '', String(bad));
+    }
+    // A non-object container hides the nested keys entirely.
+    assert.equal(rgLib.extractAdDomainStatus({ data: 'Active', result: 7 }), '');
+    // The user endpoint's keys are not domain keys.
+    assert.equal(rgLib.extractAdDomainStatus({ user_status: 'Active', userStatus: 'Active' }), '');
+  });
+
+  it('does not throw for hostile top-level inputs', () => {
+    for (const bad of [null, undefined, 'a string', 42, [], {}, { data: 7 }, NaN, true]) {
+      assert.doesNotThrow(() => rgLib.extractAdDomainStatus(bad), String(bad));
+      assert.equal(rgLib.extractAdDomainStatus(bad), '', String(bad));
+    }
+    const throwing = { get domain_status() { throw new Error('boom'); } };
+    assert.doesNotThrow(() => rgLib.extractAdDomainStatus(throwing));
+    assert.equal(rgLib.extractAdDomainStatus(throwing), '');
+  });
+
+  it('trims the value it returns and treats whitespace-only as absent', () => {
+    assert.equal(rgLib.extractAdDomainStatus({ domain_status: '  Active  ' }), 'Active');
+    assert.equal(rgLib.extractAdDomainStatus({ data: { domainStatus: '\tSuspended\n' } }), 'Suspended');
+    assert.equal(rgLib.extractAdDomainStatus({ domain_status: '   ' }), '');
+    assert.equal(rgLib.extractAdDomainStatus({ result: { domain_status: '\n\t' } }), '');
+  });
+});
+
+// ── resolveDomainOutcome ──────────────────────────────────────────────
+describe('resolveDomainOutcome', () => {
+  it('covers every row of the customer × domain decision table', () => {
+    const v = rgLib.resolveDomainOutcome;
+    // Both sides must be Active to confirm.
+    assert.equal(v({ customerStatus: 'Active', domainStatus: 'active' }), 'confirmed');
+    assert.equal(v({ customerStatus: 'active', domainStatus: 'Active' }), 'confirmed');
+    // A suspension on either side fails.
+    assert.equal(v({ customerStatus: 'Suspended', domainStatus: 'Suspended' }), 'failed');
+    assert.equal(v({ customerStatus: 'Suspended', domainStatus: 'active' }), 'failed');
+    assert.equal(v({ customerStatus: 'active', domainStatus: 'Suspended' }), 'failed');
+    // Anything short of both-active on both-suspended is unknown.
+    assert.equal(v({ customerStatus: 'active', domainStatus: '' }), 'unknown');
+    assert.equal(v({ customerStatus: '', domainStatus: 'active' }), 'unknown');
+    assert.equal(v({ customerStatus: '', domainStatus: '' }), 'unknown');
+    assert.equal(v({ customerStatus: 'garbage', domainStatus: 'active' }), 'unknown');
+  });
+
+  it('lets a suspension fail the pair even when the other side is unreadable', () => {
+    const v = rgLib.resolveDomainOutcome;
+    // Regression: 'failed' must win over 'unknown' — a known suspension is a
+    // definitive verdict, not a gap in our knowledge.
+    assert.equal(v({ customerStatus: 'Suspended', domainStatus: '' }), 'failed');
+    assert.equal(v({ customerStatus: 'Suspended', domainStatus: undefined }), 'failed');
+    assert.equal(v({ customerStatus: 'Suspended' }), 'failed');
+    assert.equal(v({ customerStatus: '', domainStatus: 'Suspended' }), 'failed');
+    assert.equal(v({ domainStatus: 'suspended' }), 'failed');
+    assert.equal(v({ customerStatus: 'Suspended', domainStatus: 'garbage' }), 'failed');
+  });
+
+  it('compares both inputs case-insensitively and ignores surrounding whitespace', () => {
+    const v = rgLib.resolveDomainOutcome;
+    assert.equal(v({ customerStatus: ' ACTIVE ', domainStatus: '\tactive\n' }), 'confirmed');
+    assert.equal(v({ customerStatus: 'ACTIVE', domainStatus: ' Active ' }), 'confirmed');
+    assert.equal(v({ customerStatus: 'SUSPENDED', domainStatus: 'Active' }), 'failed');
+    assert.equal(v({ customerStatus: '  active ', domainStatus: ' suspended ' }), 'failed');
+    assert.equal(v({ customerStatus: 'status: ACTIVE (verified)', domainStatus: ' Active ' }), 'confirmed');
+  });
+
+  it('never treats "inactive" as active', () => {
+    const v = rgLib.resolveDomainOutcome;
+    assert.equal(v({ customerStatus: 'inactive', domainStatus: 'active' }), 'unknown');
+    assert.equal(v({ customerStatus: 'active', domainStatus: 'INACTIVE' }), 'unknown');
+    assert.equal(v({ customerStatus: 'inactive', domainStatus: 'inactive' }), 'unknown');
+    assert.equal(v({ customerStatus: 'reactivated', domainStatus: 'active' }), 'unknown');
+    assert.equal(v({ customerStatus: 'hyperactive', domainStatus: 'Active' }), 'unknown');
+    // …but an inactive customer plus a suspended domain still fails outright.
+    assert.equal(v({ customerStatus: 'inactive', domainStatus: 'suspended' }), 'failed');
+  });
+
+  it('returns unknown for missing, non-object or garbage input without throwing', () => {
+    const v = rgLib.resolveDomainOutcome;
+    assert.equal(v(), 'unknown');
+    assert.equal(v(null), 'unknown');
+    assert.equal(v(undefined), 'unknown');
+    assert.equal(v('Active'), 'unknown');
+    assert.equal(v(42), 'unknown');
+    assert.equal(v([]), 'unknown');
+    assert.equal(v({}), 'unknown');
+    assert.equal(v({ customerStatus: null, domainStatus: 42 }), 'unknown');
+    assert.equal(v({ customerStatus: {} }), 'unknown');
+    assert.doesNotThrow(() => v());
+  });
+});

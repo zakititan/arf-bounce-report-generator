@@ -1,4 +1,4 @@
-import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList, createUnsuspendReasonKey, createPerAccountUnsuspendReasonKey, persistUnsuspendReason, isSafeJiraUrl, isSafeGoogleSheetsUrl, isSafeAppsScriptUrl, createPendingMap, capInlineImages, isValidJiraCreatePayload, discoverDoneTransitionId, buildBulkSummary, findStaleStorageKeys, buildAbuseDeskUrl, extractJiraIssueKey, extractAdUserStatus, resolveVerifiedOutcome } from './rg-lib.js';
+import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList, createUnsuspendReasonKey, createPerAccountUnsuspendReasonKey, persistUnsuspendReason, isSafeJiraUrl, isSafeGoogleSheetsUrl, isSafeAppsScriptUrl, createPendingMap, capInlineImages, isValidJiraCreatePayload, discoverDoneTransitionId, buildBulkSummary, findStaleStorageKeys, buildAbuseDeskUrl, extractJiraIssueKey, extractAdUserStatus, extractAdDomainStatus, resolveVerifiedOutcome, resolveDomainOutcome, buildAdStatusUrl } from './rg-lib.js';
 import { fetchWithTimeout } from './timeout.js';
 
 const EXPIRY_MS = 10 * 60 * 1000;
@@ -348,31 +348,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message.action === 'ad-user-status') {
-    // Cross-check path: the Abuse Desk page renders its status badge from
-    // this API, so fetch it directly (host permission granted). Proper key
-    // reads, not a blob scan — and the response is checked before parsing.
+  if (message.action === 'ad-status') {
+    // Primary verification path: read status straight from the Abuse Desk
+    // status APIs (host permission granted) instead of scraping the DOM badge.
+    // The badge remains the fallback in the content script, so a partial or
+    // failed read here just reports 'unconfirmed' and lets that take over.
     const account = message.data && message.data.account;
     if (!areValidAccountList(account)) { sendResponse({ success: false, error: 'Invalid account or email domain' }); return true; }
-    // The caller passes its settled badge read so the cross-check decision
-    // (badge-primary, API rescues a Suspended badge) is made in one place.
-    const badgeStatus = typeof message.data.badgeStatus === 'string' ? message.data.badgeStatus : '';
-    fetchWithTimeout('https://api-abusedesk.ops.titan.email/api/v1/users/status/?email=' + encodeURIComponent(account), { credentials: 'include' })
-      .then(r => {
-        if (!r.ok) throw new Error('AD status API responded ' + r.status);
-        return r.json();
-      })
-      .then(json => {
-        const status = extractAdUserStatus(json);
-        sendResponse({ success: true, status, outcome: resolveVerifiedOutcome({ badgeStatus, apiStatus: status }) });
-      })
-      .catch(e => sendResponse({
-        success: false,
-        error: e.message,
-        // API unreachable: fall back to the badge alone so an Active badge
-        // still confirms and only an unreadable badge degrades to unknown.
-        outcome: resolveVerifiedOutcome({ badgeStatus, apiStatus: '' }),
-      }));
+    const region = typeof message.data.region === 'string' ? message.data.region : '';
+    const domainEntity = account.indexOf('@') === -1;
+
+    // Domains need both readings: AD considers a domain unsuspended only when
+    // the customer AND the domain record are active.
+    const wanted = domainEntity ? ['domain', 'user'] : ['user'];
+    Promise.all(wanted.map(kind => (
+      fetchWithTimeout(buildAdStatusUrl(kind, account, region), { credentials: 'include' })
+        .then(r => {
+          if (!r.ok) throw new Error('AD ' + kind + ' status responded ' + r.status);
+          return r.json();
+        })
+        .then(json => (kind === 'domain' ? extractAdDomainStatus(json) : extractAdUserStatus(json)))
+        .catch(() => '') // one unreadable side must not void the other
+    ))).then(statuses => {
+      const domainStatus = domainEntity ? statuses[0] : '';
+      const customerStatus = domainEntity ? statuses[1] : statuses[0];
+      const outcome = domainEntity
+        ? resolveDomainOutcome({ customerStatus, domainStatus })
+        : resolveVerifiedOutcome({ badgeStatus: '', apiStatus: customerStatus });
+      sendResponse({ success: true, customerStatus, domainStatus, outcome });
+    });
     return true;
   }
 

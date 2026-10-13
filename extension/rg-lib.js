@@ -17,6 +17,19 @@ export function buildAbuseDeskUrl(account, region, requestId) {
     (requestId ? '&rgRequestId=' + encodeURIComponent(requestId) : '');
 }
 
+// AbuseDesk status API URL for either entity type. `kind` is coerced rather
+// than validated: anything that is not 'domain' falls back to the user
+// endpoint so a mislabelled lookup still returns a usable reading instead of
+// throwing. Accounts are validated upstream, so a non-string here is a
+// programming error, while an empty one is left for the caller to reject.
+export function buildAdStatusUrl(kind, account, region) {
+  if (typeof account !== 'string') throw new TypeError('account must be a string');
+  const scope = kind === 'domain' ? 'domains/status/?domain=' : 'users/status/?email=';
+  const effectiveRegion = typeof region === 'string' && region ? region : 'us-east-1';
+  return 'https://api-abusedesk.ops.titan.email/api/v1/' + scope + encodeURIComponent(account) +
+    '&region=' + encodeURIComponent(effectiveRegion);
+}
+
 export function createPerAccountUnsuspendReasonKey(requestId, account) {
   return createUnsuspendReasonKey(requestId) + ':' + String(account == null ? '' : account).trim().toLowerCase();
 }
@@ -470,6 +483,30 @@ export function extractAdUserStatus(json) {
   }
 }
 
+// Same reader as extractAdUserStatus, pointed at the domain endpoint.
+export function extractAdDomainStatus(json) {
+  // Guarded: the payload comes from an external API, so a hostile shape (or a
+  // throwing getter) must degrade to '' instead of breaking the caller.
+  try {
+    if (!json || typeof json !== 'object') return '';
+    const candidates = [
+      [json, 'domain_status'],
+      [json, 'domainStatus'],
+      [json.data, 'domain_status'],
+      [json.data, 'domainStatus'],
+      [json.result, 'domain_status'],
+      [json.result, 'domainStatus'],
+    ];
+    for (const [holder, key] of candidates) {
+      const value = readStatusString(holder, key);
+      if (value) return value;
+    }
+    return '';
+  } catch (_) {
+    return '';
+  }
+}
+
 // Single status signal → 'active' | 'suspended' | 'neither'. Reuses
 // matchesActiveStatus so 'inactive' (and friends) never count as active here.
 function classifyStatusSignal(value) {
@@ -491,4 +528,16 @@ export function resolveVerifiedOutcome(input = {}) {
   if (api === 'active') return 'confirmed';
   if (api === 'suspended') return 'failed';
   return 'unknown';
+}
+
+// A domain is only healthy when BOTH the customer record and the domain
+// record read Active, so any explicit suspension on either side is a
+// definitive failure — it outranks the unknown an unreadable counterpart would
+// otherwise produce. Anything short of both-active is unknown, never a guess.
+export function resolveDomainOutcome(input = {}) {
+  if (!input || typeof input !== 'object') return 'unknown';
+  const customer = classifyStatusSignal(input.customerStatus);
+  const domain = classifyStatusSignal(input.domainStatus);
+  if (customer === 'suspended' || domain === 'suspended') return 'failed';
+  return customer === 'active' && domain === 'active' ? 'confirmed' : 'unknown';
 }
