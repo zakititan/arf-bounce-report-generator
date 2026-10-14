@@ -109,7 +109,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
     - **Typed bridge errors** — invalid payloads, missing storage, and unknown message types get a `REPORT_GENERATOR_ERROR` reply (consumed by the matching pending action with an explanatory toast) instead of hanging until the button safety timeout
     - **Green banner** — extension detected and up to date (`Extension vX.X.X detected.`); auto-dismisses after 3 seconds and stays dismissed for that minimum version
     - **Yellow banner** — extension outdated, with direct download link for the latest version
-    - **Red banner** — extension not installed or is outdated (pre-v4.16), with direct zip install link
+    - **Red banner** — extension not installed or is outdated (pre-v4.17), with direct zip install link
     - Dismiss persists per `MIN_VERSION` in `localStorage`; reappears when min version is bumped
 
 ### Log to Sheet (Google Sheets Integration)
@@ -191,6 +191,14 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Log from JIRA** — "Log to Sheet" fetches the issue description via the extension (`GET /rest/api/2/issue/{key}?fields=description`, session-cookie auth, key parsed from the pasted link — browse path or `selectedIssue` param), strips report markers, truncates to 45k chars (Sheets cell limit), and logs one row per account with the selected suspension type (BOUNCE/ARF) in the Unsuspension Type column
 - **Draft persistence** — inputs survive refresh like the other panels; included in Clear-all
 
+### Status Check Panel (TEMPORARY — diagnostic)
+- **Purpose** — a single-field panel for confirming what the Abuse Desk status APIs actually return, so the production key extraction can be verified against a live response
+- **Flow** — enter an email or bare domain, click Check status; region is auto-detected via MX (same machinery as the other panels), then the extension calls the status endpoints directly
+- **Output** — verdict (Active / Suspended / Unknown, using the same resolvers as production), the extracted customer and domain status strings, any error, the exact endpoint URLs (openable in a browser), and the **raw JSON response from each endpoint** in collapsible blocks
+- **Deliberately diagnostic** — when an expected key is missing the panel still renders the raw body rather than erroring, which is how the real response shape gets confirmed; a missing key shows `(not returned)` next to the body that explains why
+- **Scope** — read-only: never unsuspends, never touches the sheet or JIRA, and resets only its own card on Clear
+- **Removal** — temporary. Delete this panel and the `ad-status-raw` worker action once the domain endpoint's response key is confirmed
+
 ### Mailboards Integration
 - **Check on Mailboards** — a "Check on Mailboards" link sits below the Account field in both ARF and Bounce panels, linking to [mailboards.ops.titan.email](https://mailboards.ops.titan.email)
 - **Smart parameter selection** — if the Account field contains an email address (`@` present), the URL uses `?email=`; otherwise it uses `?domain=`; falls back to bare `?env=prod` when the Account field is empty
@@ -216,7 +224,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Custom event architecture** — region detection dispatches a `regionchange` event on the account input to re-trigger link updaters without causing infinite loops
 
 ### Testing
-- **580 unit tests across 22 files** — covers `sanitiseDomain` (39 edge cases), `checkRateLimit`/`classifyFetchError`/token helpers, website-check helpers, `withMiddleware` CORS/rate-limit middleware, `safeEqual` (10 cases), `createCache` (8 cases including TTL expiry and pruning), `getClientIp` (6 cases), `rateLimitInMemory` (6 cases), pure functions `escapeHtml`/`parseCsvRow`/`sanitiseDomainInput`/`sanitiseAccountInput`/`describeReason`/`parseAgeToDays` plus pending-request TTL eviction, screenshot cap arithmetic, and typed extension-error validation, website-check-helpers (10 cases), RDAP response parsing (12 cases), DKIM lookup and config (18 cases), API fetch wrappers (15 cases), MX region detection (11 cases), extension `rg-lib` (~100 assertions), background timeout/unsuspend flows, auth redirects, extension-package verification, bridge messaging, Abuse Desk helpers, and Partner Panel helpers
+- **588 unit tests across 22 files** — covers `sanitiseDomain` (39 edge cases), `checkRateLimit`/`classifyFetchError`/token helpers, website-check helpers, `withMiddleware` CORS/rate-limit middleware, `safeEqual` (10 cases), `createCache` (8 cases including TTL expiry and pruning), `getClientIp` (6 cases), `rateLimitInMemory` (6 cases), pure functions `escapeHtml`/`parseCsvRow`/`sanitiseDomainInput`/`sanitiseAccountInput`/`describeReason`/`parseAgeToDays` plus pending-request TTL eviction, screenshot cap arithmetic, and typed extension-error validation, website-check-helpers (10 cases), RDAP response parsing (12 cases), DKIM lookup and config (18 cases), API fetch wrappers (15 cases), MX region detection (11 cases), extension `rg-lib` (~100 assertions), background timeout/unsuspend flows, auth redirects, extension-package verification, bridge messaging, Abuse Desk helpers, and Partner Panel helpers
 - **rg-lib.test.js** — unit tests for the extension's shared logic module: `analyzeHistory` (suspension/password-change matching incl. "Unsuspended" exclusion and case-insensitivity), `buildJiraIssueBody` (project/type/priority IDs, per-panel labels, conditional Zendesk field), `extractImagesRegex` (base64 extraction, alt-derived filenames, fallbacks), `buildFallbackJiraUrl` (param correctness + 2000-char description truncation), `isReasonFresh` (90s TTL boundary conditions), plus `capInlineImages` (count/per-image/total caps), `matchesActiveStatus` (word-boundary, rejects `inactive`), `createPendingMap` (request-keyed async slots), `discoverDoneTransitionId` (Done-over-Closed preference), `isValidJiraCreatePayload`, `buildBulkSummary` (dedupe), per-account reason keys, Apps Script URL allowlisting, storage janitor (`findStaleStorageKeys`), the fallback-HTML size gate, JIRA issue-key extraction (`extractJiraIssueKey`) and description message validation
 - **Config integrity checks** — all keyword/pattern arrays are verified at test time for empty strings and lowercase consistency
 - **Pure function extraction** — `escapeHtml`, `parseCsvRow`, `sanitiseDomainInput`, `sanitiseAccountInput` extracted to `scripts/pure.js` for testability; `app.js` re-exports from there; the extension equivalent lives in `extension/rg-lib.js`
@@ -301,7 +309,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ├── styles/
 │   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, extension modal, responsive)
 ├── extension/                      # Chrome extension (Manifest V3) for JIRA integration, Abuse Desk automation, and Google Sheets logging
-  │   ├── manifest.json               # Extension config: v4.16, permissions, ES-module service worker, content scripts for webapp, JIRA, Abuse Desk, and Partner Panel
+  │   ├── manifest.json               # Extension config: v4.17, permissions, ES-module service worker, content scripts for webapp, JIRA, Abuse Desk, and Partner Panel
  │   ├── rg-lib.js                   # Shared pure logic (ESM): history analysis, JIRA body builder, image extraction + caps, fallback URL builder, reason-TTL check, per-account reason keys, transition discovery, pending-map, storage janitor — imported by the service worker and unit-tested
  │   ├── background.js               # Module service worker: create-jira with payload validation (+optional markDone with discovered transition), log-to-sheet with verified response and URL allowlist, keyed partner-panel-lookup (closes its tab, analyzes raw events), open-abusedesk-tabs, startup storage janitor
  │   ├── webapp-helpers.js           # Classic-script pure helpers for the webapp bridge: origin rules, reply routing, message validation, error replies, outbound-type guard, PONG throttle

@@ -164,6 +164,9 @@ export function validateWebAppMessage(message) {
   if (message.type === 'REPORT_GENERATOR_RECHECK') {
     return hasRequestId && hasStrings(['panel', 'account', 'region']);
   }
+  if (message.type === 'REPORT_GENERATOR_STATUS_CHECK') {
+    return hasRequestId && hasStrings(['panel', 'account', 'region']);
+  }
   return false;
 }
 
@@ -203,6 +206,14 @@ export function validateExtensionResult(message) {
     return (!message.account || typeof message.account === 'string') &&
       (!message.outcome || typeof message.outcome === 'string') &&
       (!message.error || typeof message.error === 'string');
+  }
+  if (message.type === 'REPORT_GENERATOR_STATUS_CHECK_RESULT') {
+    const isSafe = (key) => !message[key] ||
+      typeof message[key] === 'string' || typeof message[key] === 'object';
+    return hasRequestId && isSafe('customerStatus') && isSafe('domainStatus') &&
+      isSafe('customerUrl') && isSafe('domainUrl') &&
+      isSafe('customerRaw') && isSafe('domainRaw') &&
+      isSafe('outcome') && isSafe('error');
   }
   if (message.type === 'PARTNER_PANEL_RESULT') {
     return Boolean(message.data) && typeof message.data === 'object' &&
@@ -510,6 +521,27 @@ export function extractAdDomainStatus(json) {
       if (value) return value;
     }
     return '';
+  } catch (_) {
+    return '';
+  }
+}
+
+// Diagnostic counterpart to the two extractors above: they answer '' whenever
+// the key they expect is absent, which hides the body the endpoint really sent.
+// This hands the parsed payload itself to the panel so a developer can see the
+// actual shape. Objects and arrays come back by reference, primitives are
+// stringified, and nullish becomes '' so the result is never undefined. Because
+// the panel JSON.stringify's the result and postMessage's it, anything that
+// would blow up there (throwing getter, cycle, hostile Proxy) degrades to ''
+// instead of escaping the call. The probe below is the guard that detects those:
+// it serialises once purely to prove the value is safe, and the discarded output
+// costs nothing at the tiny payload sizes a diagnostic panel ever sees.
+export function captureRawAdPayload(json) {
+  try {
+    if (json === null || json === undefined) return '';
+    if (typeof json !== 'object') return String(json);
+    JSON.stringify(json);
+    return json;
   } catch (_) {
     return '';
   }

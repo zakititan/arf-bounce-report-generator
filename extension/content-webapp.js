@@ -83,7 +83,8 @@
         data.type === 'REPORT_GENERATOR_UNSUSPEND_OUTCOME' ||
         data.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT' ||
         data.type === 'REPORT_GENERATOR_JIRA_DONE_RESULT' ||
-        data.type === 'REPORT_GENERATOR_RECHECK_RESULT') return null;
+        data.type === 'REPORT_GENERATOR_RECHECK_RESULT' ||
+        data.type === 'REPORT_GENERATOR_STATUS_CHECK_RESULT') return null;
     if (!storageAvailable) return helperBuildError('STORAGE_UNAVAILABLE', helperExtractRequestId(data));
     var known = data.type === 'REPORT_GENERATOR_JIRA' ||
       data.type === 'REPORT_GENERATOR_UNSUSPEND' ||
@@ -92,6 +93,7 @@
       data.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION' ||
       data.type === 'REPORT_GENERATOR_JIRA_DONE' ||
       data.type === 'REPORT_GENERATOR_RECHECK' ||
+      data.type === 'REPORT_GENERATOR_STATUS_CHECK' ||
       data.type === 'REPORT_GENERATOR_PARTNER_PANEL_LOOKUP';
     if (known) {
       return messageValid(data) ? null : helperBuildError('INVALID_MESSAGE', helperExtractRequestId(data));
@@ -185,6 +187,10 @@
         typeof data.jiraUrl === 'string' && typeof data.accounts === 'string';
     }
     if (data.type === 'REPORT_GENERATOR_RECHECK') {
+      return requestId && typeof data.panel === 'string' &&
+        typeof data.account === 'string' && typeof data.region === 'string';
+    }
+    if (data.type === 'REPORT_GENERATOR_STATUS_CHECK') {
       return requestId && typeof data.panel === 'string' &&
         typeof data.account === 'string' && typeof data.region === 'string';
     }
@@ -388,6 +394,30 @@
             account: recheckData.account,
             outcome: ok ? 'confirmed' : (recheckResponse && recheckResponse.outcome) || 'unknown',
             error: (recheckResponse && recheckResponse.error) || (chrome.runtime.lastError && chrome.runtime.lastError.message) || null,
+          }, replyOrigin);
+        }
+      );
+    }
+
+    if (event.data.type === 'REPORT_GENERATOR_STATUS_CHECK') {
+      // Diagnostic: returns the raw endpoint payloads alongside the extracted
+      // statuses so the real response shape can be inspected.
+      var checkData = event.data;
+      chrome.runtime.sendMessage(
+        { action: 'ad-status-raw', data: { account: checkData.account, region: checkData.region } },
+        function (checkResponse) {
+          var payload = checkResponse && checkResponse.success === true ? checkResponse : null;
+          window.postMessage({
+            type: 'REPORT_GENERATOR_STATUS_CHECK_RESULT',
+            requestId: checkData.requestId,
+            customerStatus: payload ? payload.customerStatus : '',
+            domainStatus: payload ? payload.domainStatus : '',
+            customerUrl: payload ? payload.customerUrl : '',
+            domainUrl: payload ? payload.domainUrl : '',
+            customerRaw: payload ? payload.customerRaw : '',
+            domainRaw: payload ? payload.domainRaw : '',
+            outcome: payload ? payload.outcome : '',
+            error: payload ? (payload.error || '') : (checkResponse && checkResponse.error) || 'No response',
           }, replyOrigin);
         }
       );

@@ -1142,3 +1142,92 @@ describe('resolveDomainOutcome', () => {
     assert.doesNotThrow(() => v());
   });
 });
+
+// ── captureRawAdPayload ───────────────────────────────────────────────
+describe('captureRawAdPayload', () => {
+  it('returns a plain payload object unchanged', () => {
+    const payload = { user_status: 'Active', data: { userStatus: 'Suspended' }, rows: [1, 2, 3] };
+    const captured = rgLib.captureRawAdPayload(payload);
+    // Same reference: the diagnostic panel shows the body the API actually sent,
+    // so a lossy copy here would defeat the point.
+    assert.equal(captured, payload);
+    assert.deepEqual(captured, { user_status: 'Active', data: { userStatus: 'Suspended' }, rows: [1, 2, 3] });
+    // …and what comes back is safe to hand to JSON.stringify.
+    assert.doesNotThrow(() => JSON.stringify(captured));
+  });
+
+  it('returns an array unchanged', () => {
+    const rows = [{ user_status: 'Active' }, { domain_status: 'Suspended' }];
+    const captured = rgLib.captureRawAdPayload(rows);
+    assert.equal(captured, rows);
+    assert.deepEqual(captured, rows);
+    // An empty array is a payload too, not an absent one.
+    const empty = [];
+    assert.equal(rgLib.captureRawAdPayload(empty), empty);
+  });
+
+  it('returns an empty string for null and undefined', () => {
+    assert.equal(rgLib.captureRawAdPayload(null), '');
+    assert.equal(rgLib.captureRawAdPayload(undefined), '');
+    assert.equal(rgLib.captureRawAdPayload(), '');
+  });
+
+  it('stringifies string, number and boolean primitives', () => {
+    assert.equal(rgLib.captureRawAdPayload('oops'), 'oops');
+    assert.equal(rgLib.captureRawAdPayload(''), '');
+    assert.equal(rgLib.captureRawAdPayload(42), '42');
+    assert.equal(rgLib.captureRawAdPayload(0), '0');
+    assert.equal(rgLib.captureRawAdPayload(NaN), 'NaN');
+    assert.equal(rgLib.captureRawAdPayload(true), 'true');
+    assert.equal(rgLib.captureRawAdPayload(false), 'false');
+    // A non-JSON body (an HTML gateway error page, say) still shows up instead
+    // of vanishing the way a missing status key does.
+    assert.equal(rgLib.captureRawAdPayload('<html>502</html>'), '<html>502</html>');
+  });
+
+  it('does not throw for a circular payload', () => {
+    const cyclic = { user_status: 'Active' };
+    cyclic.self = cyclic;
+    assert.doesNotThrow(() => rgLib.captureRawAdPayload(cyclic));
+    assert.notEqual(rgLib.captureRawAdPayload(cyclic), undefined);
+  });
+
+  it('returns an empty string for an object whose property getter throws', () => {
+    const hostile = {};
+    Object.defineProperty(hostile, 'user_status', {
+      enumerable: true,
+      get() { throw new Error('boom'); },
+    });
+    assert.doesNotThrow(() => rgLib.captureRawAdPayload(hostile));
+    assert.equal(rgLib.captureRawAdPayload(hostile), '');
+
+    // A throwing toJSON and a throwing Proxy are the same hazard, one layer over.
+    const withToJson = { toJSON() { throw new Error('nope'); } };
+    assert.doesNotThrow(() => rgLib.captureRawAdPayload(withToJson));
+    assert.equal(rgLib.captureRawAdPayload(withToJson), '');
+
+    const proxy = new Proxy({}, { get() { throw new Error('nope'); } });
+    assert.doesNotThrow(() => rgLib.captureRawAdPayload(proxy));
+    assert.equal(rgLib.captureRawAdPayload(proxy), '');
+  });
+
+  it('stringifies a function without throwing', () => {
+    const probe = function adStatusProbe() { return 'Active'; };
+    assert.doesNotThrow(() => rgLib.captureRawAdPayload(probe));
+    assert.equal(rgLib.captureRawAdPayload(probe), String(probe));
+    assert.equal(typeof rgLib.captureRawAdPayload(probe), 'string');
+  });
+
+  it('never returns undefined for hostile inputs', () => {
+    const cyclic = { user_status: 'Active' };
+    cyclic.self = cyclic;
+    const throwingGetter = {};
+    Object.defineProperty(throwingGetter, 'user_status', { get() { throw new Error('boom'); } });
+    const hostile = [null, undefined, {}, [], () => {}, cyclic, throwingGetter, 'text', 42, true, NaN];
+    for (const input of hostile) {
+      const captured = rgLib.captureRawAdPayload(input);
+      assert.notEqual(captured, undefined, String(input));
+      assert.doesNotThrow(() => JSON.stringify(captured), String(input));
+    }
+  });
+});

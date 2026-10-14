@@ -1,4 +1,4 @@
-import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList, createUnsuspendReasonKey, createPerAccountUnsuspendReasonKey, persistUnsuspendReason, isSafeJiraUrl, isSafeGoogleSheetsUrl, isSafeAppsScriptUrl, createPendingMap, capInlineImages, isValidJiraCreatePayload, discoverDoneTransitionId, buildBulkSummary, findStaleStorageKeys, buildAbuseDeskUrl, extractJiraIssueKey, extractAdUserStatus, extractAdDomainStatus, resolveVerifiedOutcome, resolveDomainOutcome, buildAdStatusUrl } from './rg-lib.js';
+import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList, createUnsuspendReasonKey, createPerAccountUnsuspendReasonKey, persistUnsuspendReason, isSafeJiraUrl, isSafeGoogleSheetsUrl, isSafeAppsScriptUrl, createPendingMap, capInlineImages, isValidJiraCreatePayload, discoverDoneTransitionId, buildBulkSummary, findStaleStorageKeys, buildAbuseDeskUrl, extractJiraIssueKey, extractAdUserStatus, extractAdDomainStatus, resolveVerifiedOutcome, resolveDomainOutcome, buildAdStatusUrl, captureRawAdPayload } from './rg-lib.js';
 import { fetchWithTimeout } from './timeout.js';
 
 const EXPIRY_MS = 10 * 60 * 1000;
@@ -345,6 +345,52 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === 'partner-panel-lookup') {
     handlePartnerPanelLookup(message.data, sendResponse);
+    return true;
+  }
+
+  if (message.action === 'ad-status-raw') {
+    // TEMPORARY diagnostic action for the Status Check panel: returns the raw
+    // endpoint payloads and the exact URLs alongside the extracted statuses,
+    // so the real response shape can be confirmed. Safe to delete with the panel.
+    const account = message.data && message.data.account;
+    if (!areValidAccountList(account)) { sendResponse({ success: false, error: 'Invalid account or email domain' }); return true; }
+    const region = typeof message.data.region === 'string' ? message.data.region : '';
+    const domainEntity = account.indexOf('@') === -1;
+    const wanted = domainEntity ? ['domain', 'user'] : ['user'];
+
+    Promise.all(wanted.map(kind => {
+      const url = buildAdStatusUrl(kind, account, region);
+      return fetchWithTimeout(url, { credentials: 'include' })
+        .then(r => {
+          if (!r.ok) throw new Error('AD ' + kind + ' status responded ' + r.status);
+          return r.json();
+        })
+        .then(json => ({
+          url,
+          status: kind === 'domain' ? extractAdDomainStatus(json) : extractAdUserStatus(json),
+          raw: captureRawAdPayload(json),
+        }))
+        .catch(e => ({ url, status: '', raw: '', error: e.message }));
+    })).then(results => {
+      const domain = domainEntity ? results[0] : { url: '', status: '', raw: '' };
+      const customer = domainEntity ? results[1] : results[0];
+      const customerStatus = customer.status || '';
+      const domainStatus = domain.status || '';
+      const outcome = domainEntity
+        ? resolveDomainOutcome({ customerStatus, domainStatus })
+        : resolveVerifiedOutcome({ badgeStatus: '', apiStatus: customerStatus });
+      sendResponse({
+        success: true,
+        customerStatus,
+        domainStatus,
+        outcome,
+        customerUrl: customer.url || '',
+        domainUrl: domain.url || '',
+        customerRaw: customer.raw || '',
+        domainRaw: domain.raw || '',
+        error: (customer.error || domain.error || '') + '',
+      });
+    });
     return true;
   }
 

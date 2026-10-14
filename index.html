@@ -78,6 +78,7 @@
       <button class="tab-btn"        role="tab" data-tab="ip-spike"        aria-controls="panel-ip-spike"   aria-selected="false">IP Spike</button>
       <button class="tab-btn"        role="tab" data-tab="smtp-suspension" aria-controls="panel-smtp-suspension"       aria-selected="false">SMTP Suspension</button>
       <button class="tab-btn"        role="tab" data-tab="direct" aria-controls="panel-direct"       aria-selected="false">Direct Unsuspend</button>
+      <button class="tab-btn"        role="tab" data-tab="statuscheck" aria-controls="panel-statuscheck" aria-selected="false">Status Check</button>
     </nav>
     <div class="tab-content">
 
@@ -687,6 +688,58 @@
     </div>
 
     </div>
+
+    <!-- STATUS CHECK PANEL (temporary diagnostic — remove after API key confirmed) -->
+    <div id="panel-statuscheck" class="tab-panel" role="tabpanel" aria-labelledby="statuscheck-title" tabindex="0">
+      <div class="panel-header">
+        <h2 class="panel-title" id="statuscheck-title">Status Check</h2>
+      </div>
+      <div class="panel-body">
+        <div class="field">
+          <label for="statuscheck-account">Account<span class="req">*</span><span class="region-chip" id="statuscheck-region-chip" hidden></span></label>
+          <input type="text" id="statuscheck-account" aria-required="true" placeholder="e.g. user@example.com or example.com">
+          <span class="hint">Calls the Abuse Desk status APIs and shows the raw responses</span>
+        </div>
+        <div class="statuscheck-result" id="statuscheck-result" hidden>
+          <div class="statuscheck-verdict-row">
+            <span class="statuscheck-label">Verdict</span>
+            <span class="statuscheck-verdict" id="statuscheck-verdict">—</span>
+          </div>
+          <div class="statuscheck-verdict-row">
+            <span class="statuscheck-label">Customer status</span>
+            <span class="statuscheck-value" id="statuscheck-customer">—</span>
+          </div>
+          <div class="statuscheck-verdict-row">
+            <span class="statuscheck-label">Domain status</span>
+            <span class="statuscheck-value" id="statuscheck-domain">—</span>
+          </div>
+          <div class="statuscheck-verdict-row">
+            <span class="statuscheck-label">Error</span>
+            <span class="statuscheck-value" id="statuscheck-error">—</span>
+          </div>
+          <div class="statuscheck-url-row">
+            <span class="statuscheck-label">Endpoints called</span>
+            <a class="statuscheck-url" id="statuscheck-customer-url" target="_blank" rel="noopener noreferrer"></a>
+            <a class="statuscheck-url" id="statuscheck-domain-url" target="_blank" rel="noopener noreferrer"></a>
+          </div>
+          <details class="statuscheck-raw">
+            <summary>Raw response — customer endpoint</summary>
+            <pre id="statuscheck-customer-raw" class="statuscheck-pre"></pre>
+          </details>
+          <details class="statuscheck-raw">
+            <summary>Raw response — domain endpoint</summary>
+            <pre id="statuscheck-domain-raw" class="statuscheck-pre"></pre>
+          </details>
+        </div>
+      </div>
+      <div class="panel-actions sticky">
+        <button class="btn btn-primary" id="statuscheck-run-btn" data-action="status-check" data-panel="statuscheck">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Check status
+        </button>
+        <button class="btn btn-secondary" data-action="clear" data-panel="statuscheck">Clear</button>
+      </div>
+    </div>
+
     </section>
 
   </main>
@@ -696,7 +749,7 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.604-3.369-1.342-3.369-1.342-.454-1.154-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836a9.59 9.59 0 0 1 2.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.202 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/></svg>
       View on GitHub
     </a>
-    <span class="version-chip" title="App version">v4.16</span>
+    <span class="version-chip" title="App version">v4.17</span>
   </footer>
 
   <!-- Extension Install Modal -->
@@ -792,7 +845,7 @@
 
 <script>
 (function () {
-  var MIN_VERSION = '4.16';
+  var MIN_VERSION = '4.17';
   var DISMISS_KEY = 'ext_banner_dismissed_for';
 
   function compareVersions(a, b) {
