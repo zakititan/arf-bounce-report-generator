@@ -472,26 +472,42 @@ export function buildBulkSummary(accounts) {
 }
 
 // Reads a status off an already-parsed AbuseDesk payload. Only non-blank
-// strings count, and we look one nesting level deep because the API returns
-// either the user object itself or a data/result envelope around it.
+// strings count. Where the status sits inside that payload is decided by
+// readAdStatusFromPayload below, which unwraps the data/result envelopes.
 function readStatusString(holder, key) {
   if (!holder || typeof holder !== 'object') return '';
   const value = holder[key];
   return typeof value === 'string' ? value.trim() : '';
 }
 
-export function extractAdUserStatus(json) {
-  // Guarded: the payload comes from an external API, so a hostile shape (or a
-  // throwing getter) must degrade to '' instead of breaking the caller.
+// Shared candidate walk for the three AbuseDesk status extractors below.
+//
+// The endpoints do not agree on how they wrap the record, and the difference is
+// not cosmetic: the user endpoint returns `data` as a single object, while
+// /api/v1/domains/status/ returns `data` as an ARRAY of rows. Reading
+// `json.data.domain_status` on an array is always undefined, which is why every
+// domain status used to extract as '' even though the API had sent it. So when
+// `data` is an array we address its first element — the endpoint returns a
+// single row for the one domain asked about, and a later row is a different
+// record, not a better answer.
+//
+// Precedence, highest first: top-level snake, top-level camel, data snake,
+// data camel, result snake, result camel. Top level still wins over anything
+// nested, and the whole walk is guarded so a hostile shape (or a throwing
+// getter) degrades to '' instead of breaking the caller.
+function readAdStatusFromPayload(json, snakeKey, camelKey) {
   try {
     if (!json || typeof json !== 'object') return '';
+    const data = json.data;
+    const dataFirst = Array.isArray(data) ? data[0] : data;
+    const result = json.result;
     const candidates = [
-      [json, 'user_status'],
-      [json, 'userStatus'],
-      [json.data, 'user_status'],
-      [json.data, 'userStatus'],
-      [json.result, 'user_status'],
-      [json.result, 'userStatus'],
+      [json, snakeKey],
+      [json, camelKey],
+      [dataFirst, snakeKey],
+      [dataFirst, camelKey],
+      [result, snakeKey],
+      [result, camelKey],
     ];
     for (const [holder, key] of candidates) {
       const value = readStatusString(holder, key);
@@ -503,28 +519,22 @@ export function extractAdUserStatus(json) {
   }
 }
 
-// Same reader as extractAdUserStatus, pointed at the domain endpoint.
+// Email-entity status from the user endpoint's `user_status`.
+export function extractAdUserStatus(json) {
+  return readAdStatusFromPayload(json, 'user_status', 'userStatus');
+}
+
+// Domain status from the domain endpoint's `domain_status`.
 export function extractAdDomainStatus(json) {
-  // Guarded: the payload comes from an external API, so a hostile shape (or a
-  // throwing getter) must degrade to '' instead of breaking the caller.
-  try {
-    if (!json || typeof json !== 'object') return '';
-    const candidates = [
-      [json, 'domain_status'],
-      [json, 'domainStatus'],
-      [json.data, 'domain_status'],
-      [json.data, 'domainStatus'],
-      [json.result, 'domain_status'],
-      [json.result, 'domainStatus'],
-    ];
-    for (const [holder, key] of candidates) {
-      const value = readStatusString(holder, key);
-      if (value) return value;
-    }
-    return '';
-  } catch (_) {
-    return '';
-  }
+  return readAdStatusFromPayload(json, 'domain_status', 'domainStatus');
+}
+
+// Owner status for the domain. This is NOT the same key as the user
+// endpoint's `user_status`: the domain row carries its own `customer_status`
+// describing the domain owner's customer entity, and that row is the only place
+// the domain endpoint ever reports it.
+export function extractAdCustomerStatus(json) {
+  return readAdStatusFromPayload(json, 'customer_status', 'customerStatus');
 }
 
 // Diagnostic counterpart to the two extractors above: they answer '' whenever
