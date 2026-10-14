@@ -386,6 +386,16 @@ function finishUnsuspendTracking() {
   // the run completes — verdicts ignored by design, failures only warn.
   if (session.panel === 'direct') markDirectJiraDone(session.accounts);
   const r = completeUnsuspendResults(session.accounts, session.results);
+  // Recheck is a POST-RUN action, so its snapshot can only be taken here, once
+  // the run's final verdicts — including accounts that never answered — are
+  // known. This has to happen before every early return below.
+  //
+  // When this was missing, _lastRunVerdicts stayed undefined forever:
+  // recheckStatus() bails on `if (!snapshot) return`, so its own write-back was
+  // unreachable dead code, and the Recheck button could never appear for anyone
+  // — on any panel, for any failed run.
+  _lastRunVerdicts[session.panel] = { accounts: session.accounts, results: r };
+  setRecheckButtonState(session.panel, r, false);
   // Legacy extensions never send verdicts; current runs mark those accounts
   // unverified so they remain visible and retryable.
   if (r.length === 0) {
@@ -425,6 +435,12 @@ _cancelUnsuspendTracking = function (prefix) {
     clearTimeout(_unsuspendConfirm.timer);
     _activeUnsuspendRequestId = null;
     _unsuspendConfirm = null;
+    // An abandoned run has nothing to recheck. Leaving the previous run's
+    // snapshot behind would strand it: beginUnsuspendTracking already hid the
+    // button, so the stale targets could never be refreshed or cleared from the
+    // UI.
+    delete _lastRunVerdicts[prefix];
+    setRecheckButtonState(prefix, [], false);
     hideUnsuspendSection(prefix);
   }
 };
