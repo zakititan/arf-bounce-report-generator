@@ -6,6 +6,8 @@ import {
   sanitiseDomainInput,
   sanitiseAccountInput,
   completeUnsuspendResults,
+  selectRecheckAccounts,
+  shouldShowRecheckButton,
   matchesUnsuspendRequest,
   shouldFinishUnsuspendTracking,
   createUnsuspendRequestId,
@@ -436,6 +438,133 @@ describe('completeUnsuspendResults', () => {
         { account: 'two@example.com', outcome: 'unverified' },
       ],
     );
+  });
+});
+
+// ── selectRecheckAccounts ────────────────────────────────────────────
+describe('selectRecheckAccounts', () => {
+  it('selects nothing when every account is confirmed', () => {
+    assert.deepEqual(
+      selectRecheckAccounts(['one@example.com', 'two@example.com'], [
+        { account: 'one@example.com', outcome: 'confirmed' },
+        { account: 'two@example.com', outcome: 'confirmed' },
+      ]),
+      [],
+    );
+  });
+
+  it('selects only the failed accounts from a mixed run', () => {
+    assert.deepEqual(
+      selectRecheckAccounts(['one@example.com', 'two@example.com', 'three@example.com'], [
+        { account: 'one@example.com', outcome: 'confirmed' },
+        { account: 'two@example.com', outcome: 'failed', cause: 'still suspended' },
+        { account: 'three@example.com', outcome: 'confirmed' },
+      ]),
+      ['two@example.com'],
+    );
+  });
+
+  it('treats every outcome other than confirmed as needing a recheck', () => {
+    assert.deepEqual(
+      selectRecheckAccounts(['one@example.com', 'two@example.com', 'three@example.com'], [
+        { account: 'one@example.com', outcome: 'confirmed' },
+        { account: 'two@example.com', outcome: 'failed' },
+        { account: 'three@example.com', outcome: 'unknown' },
+      ]),
+      ['two@example.com', 'three@example.com'],
+    );
+  });
+
+  it('selects an account that never reported and matches results on the trimmed string', () => {
+    assert.deepEqual(
+      selectRecheckAccounts(['one@example.com', 'two@example.com'], [
+        { account: '  one@example.com  ', outcome: 'confirmed' },
+        { account: 'two@example.com', outcome: 'Confirmed' },
+      ]),
+      ['two@example.com'],
+    );
+  });
+
+  it('collapses duplicate accounts and keeps first-occurrence order', () => {
+    assert.deepEqual(
+      selectRecheckAccounts(
+        ['two@example.com', 'one@example.com', 'two@example.com', 'three@example.com'],
+        [
+          { account: 'one@example.com', outcome: 'confirmed' },
+          { account: 'three@example.com', outcome: 'failed' },
+        ],
+      ),
+      ['two@example.com', 'three@example.com'],
+    );
+  });
+
+  it('ignores results without an account instead of matching them to every account', () => {
+    assert.deepEqual(
+      selectRecheckAccounts(['one@example.com'], [
+        null,
+        { outcome: 'confirmed' },
+        { account: '   ', outcome: 'confirmed' },
+        { account: 'one@example.com', outcome: 'failed' },
+      ]),
+      ['one@example.com'],
+    );
+  });
+
+  it('drops blank and whitespace-only accounts', () => {
+    assert.deepEqual(
+      selectRecheckAccounts(['', '   ', 'one@example.com'], []),
+      ['one@example.com'],
+    );
+  });
+
+  it('returns an empty list for missing or non-array input', () => {
+    assert.deepEqual(selectRecheckAccounts(null, null), []);
+    assert.deepEqual(selectRecheckAccounts(undefined, undefined), []);
+    assert.deepEqual(selectRecheckAccounts('one@example.com', [{ account: 'one@example.com', outcome: 'failed' }]), []);
+    assert.deepEqual(selectRecheckAccounts([{ account: 'one@example.com' }], []), []);
+    assert.deepEqual(selectRecheckAccounts(['one@example.com'], 'failed'), []);
+  });
+});
+
+// ── shouldShowRecheckButton ──────────────────────────────────────────
+describe('shouldShowRecheckButton', () => {
+  it('hides the button when every account is confirmed', () => {
+    assert.equal(shouldShowRecheckButton([
+      { account: 'one@example.com', outcome: 'confirmed' },
+      { account: 'two@example.com', outcome: 'confirmed' },
+    ]), false);
+  });
+
+  it('shows the button when an account failed', () => {
+    assert.equal(shouldShowRecheckButton([
+      { account: 'one@example.com', outcome: 'confirmed' },
+      { account: 'two@example.com', outcome: 'failed' },
+    ]), true);
+  });
+
+  it('shows the button for unverified or unknown outcomes', () => {
+    assert.equal(shouldShowRecheckButton([
+      { account: 'one@example.com', outcome: 'unverified' },
+    ]), true);
+    assert.equal(shouldShowRecheckButton([
+      { account: 'one@example.com', outcome: 'confirmed' },
+      { account: 'two@example.com', outcome: 'unknown' },
+    ]), true);
+  });
+
+  it('hides the button when there are no results to recheck', () => {
+    assert.equal(shouldShowRecheckButton([]), false);
+    assert.equal(shouldShowRecheckButton(null), false);
+    assert.equal(shouldShowRecheckButton(undefined), false);
+    assert.equal(shouldShowRecheckButton('confirmed'), false);
+  });
+
+  it('shows the button when a result entry is missing', () => {
+    assert.equal(shouldShowRecheckButton([null]), true);
+    assert.equal(shouldShowRecheckButton([
+      { account: 'one@example.com', outcome: 'confirmed' },
+      undefined,
+    ]), true);
   });
 });
 

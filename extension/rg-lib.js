@@ -161,6 +161,9 @@ export function validateWebAppMessage(message) {
   if (message.type === 'REPORT_GENERATOR_JIRA_DONE') {
     return hasRequestId && hasStrings(['panel', 'jiraUrl', 'accounts']);
   }
+  if (message.type === 'REPORT_GENERATOR_RECHECK') {
+    return hasRequestId && hasStrings(['panel', 'account', 'region']);
+  }
   return false;
 }
 
@@ -194,6 +197,11 @@ export function validateExtensionResult(message) {
     return (!message.issueKey || typeof message.issueKey === 'string') &&
       (!message.done || typeof message.done === 'boolean') &&
       (!message.commented || typeof message.commented === 'boolean') &&
+      (!message.error || typeof message.error === 'string');
+  }
+  if (message.type === 'REPORT_GENERATOR_RECHECK_RESULT') {
+    return (!message.account || typeof message.account === 'string') &&
+      (!message.outcome || typeof message.outcome === 'string') &&
       (!message.error || typeof message.error === 'string');
   }
   if (message.type === 'PARTNER_PANEL_RESULT') {
