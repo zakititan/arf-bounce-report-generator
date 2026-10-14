@@ -385,6 +385,14 @@
           window.postMessage({
             type: 'REPORT_GENERATOR_RECHECK_RESULT',
             requestId: recheckData.requestId,
+            // Not optional. validateExtensionResult() applies a shared
+            // `typeof success === 'boolean'` gate to every reply BEFORE it
+            // reaches the RECHECK_RESULT branch, so a payload without this
+            // flag is discarded outright: requestRecheck()'s listener never
+            // resolves, the UI hangs for the full 15s timeout, and the user is
+            // then told to "check Abuse Desk manually" for what was purely a
+            // bridge-formatting fault.
+            success: !!(recheckResponse && recheckResponse.success === true),
             account: recheckData.account,
             outcome: ok ? 'confirmed' : (recheckResponse && recheckResponse.outcome) || 'unknown',
             error: (recheckResponse && recheckResponse.error) || (chrome.runtime.lastError && chrome.runtime.lastError.message) || null,
