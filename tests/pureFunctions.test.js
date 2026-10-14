@@ -757,55 +757,6 @@ describe('validateExtensionResult JIRA done', () => {
   });
 });
 
-describe('validateExtensionResult status-check result', () => {
-  // Regression: the STATUS_CHECK_RESULT payload initially carried only extra
-  // fields, but every result type must carry a boolean `success` or the shared
-  // validator rejects it and the caller times out. This pins the real shape the
-  // content script posts.
-  const realPayload = {
-    type: 'REPORT_GENERATOR_STATUS_CHECK_RESULT',
-    requestId: 'statuscheck-1',
-    success: true,
-    customerStatus: 'Active',
-    domainStatus: 'Active',
-    customerUrl: 'https://api-abusedesk.ops.titan.email/api/v1/users/status/?email=a%40x.com&region=us-east-1',
-    domainUrl: 'https://api-abusedesk.ops.titan.email/api/v1/domains/status/?domain=x.com&region=us-east-1',
-    customerRaw: { user_status: 'Active' },
-    domainRaw: { domain_status: 'Active' },
-    outcome: 'confirmed',
-    error: '',
-  };
-
-  it('accepts the payload the content script actually posts', () => {
-    assert.equal(validateExtensionResult(realPayload), true);
-  });
-
-  it('rejects the same payload when success is missing', () => {
-    const { success, ...withoutSuccess } = realPayload;
-    assert.equal(validateExtensionResult(withoutSuccess), false);
-  });
-
-  it('rejects a payload whose raw body is a non-object, non-string value', () => {
-    assert.equal(validateExtensionResult({ ...realPayload, customerRaw: 42 }), false);
-  });
-
-  it('accepts the failure shape with empty fields', () => {
-    assert.equal(validateExtensionResult({
-      type: 'REPORT_GENERATOR_STATUS_CHECK_RESULT',
-      requestId: 'statuscheck-1',
-      success: false,
-      customerStatus: '',
-      domainStatus: '',
-      customerUrl: '',
-      domainUrl: '',
-      customerRaw: '',
-      domainRaw: '',
-      outcome: '',
-      error: 'AD domain status responded 404',
-    }), true);
-  });
-});
-
 describe('validateExtensionResult JIRA description', () => {
   it('accepts a successful description result with issue key and text', () => {
     assert.equal(validateExtensionResult({

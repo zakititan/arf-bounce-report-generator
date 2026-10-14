@@ -17,7 +17,6 @@
     'REPORT_GENERATOR_JIRA_DESCRIPTION',
     'REPORT_GENERATOR_JIRA_DONE',
     'REPORT_GENERATOR_RECHECK',
-    'REPORT_GENERATOR_STATUS_CHECK',
   ];
 
   var WEBAPP_ERROR_TYPE = 'REPORT_GENERATOR_ERROR';
@@ -36,7 +35,6 @@
     'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT',
     'REPORT_GENERATOR_JIRA_DONE_RESULT',
     'REPORT_GENERATOR_RECHECK_RESULT',
-    'REPORT_GENERATOR_STATUS_CHECK_RESULT',
   ];
 
   function isOutboundReportGeneratorType(type) {
@@ -121,10 +119,6 @@
         typeof data.jiraUrl === 'string' && typeof data.accounts === 'string';
     }
     if (data.type === 'REPORT_GENERATOR_RECHECK') {
-      return requestId && typeof data.panel === 'string' &&
-        typeof data.account === 'string' && typeof data.region === 'string';
-    }
-    if (data.type === 'REPORT_GENERATOR_STATUS_CHECK') {
       return requestId && typeof data.panel === 'string' &&
         typeof data.account === 'string' && typeof data.region === 'string';
     }

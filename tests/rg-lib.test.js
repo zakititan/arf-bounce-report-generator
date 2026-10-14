@@ -1078,6 +1078,271 @@ describe('extractAdDomainStatus', () => {
   });
 });
 
+// ── captured /api/v1/domains/status/ response ──────────────────────────
+// Verbatim body from the live endpoint. Two facts here are invisible from any
+// synthetic fixture and are the whole reason the extractors were broken:
+//   1. `data` is an ARRAY of rows, not a single object, so `json.data.domain_status`
+//      is undefined on it and the status the API sent is silently dropped.
+//   2. The row carries its OWN `customer_status` — the domain owner's status —
+//      which is a different key from the user endpoint's `user_status`.
+const CAPTURED_DOMAIN_STATUS_RESPONSE = {
+  data: [
+    {
+      domain_name: 'flockcloud.tech',
+      domain_status: 'active',
+      domain_id: 14,
+      is_paid: 0,
+      partner_id: 1,
+      mx_verified: 1,
+      created_at: '2019-02-11T07:07:59',
+      updated_at: '2026-10-08T11:02:06',
+      customer_id: 1288131,
+      customer_email: 'anuj@titan.email',
+      customer_status: 'active',
+      enable_unblock: false,
+      cus_enable_unblock: false,
+      total_accounts: 1,
+      active_accounts: 1,
+      deleted_accounts: 0,
+      suspended_accounts: 0,
+      domain_orders: ['flockcloud.tech'],
+      customer_suspension_used_domain: null,
+    },
+  ],
+};
+
+describe('extractAdUserStatus — captured response and array envelopes', () => {
+  it('returns an empty string for the captured domain response, which has no user_status', () => {
+    // The domain row's customer_status is the domain owner's status, not the
+    // email entity's user_status, so this endpoint must never look like a user
+    // hit. Asserted explicitly because the captured body has an active-looking
+    // status sitting right there that could be mistaken for one.
+    assert.equal(rgLib.extractAdUserStatus(CAPTURED_DOMAIN_STATUS_RESPONSE), '');
+    assert.equal(rgLib.extractAdUserStatus(CAPTURED_DOMAIN_STATUS_RESPONSE.data[0].user_status), '');
+    assert.equal(rgLib.extractAdUserStatus({ data: [CAPTURED_DOMAIN_STATUS_RESPONSE.data[0]] }), '');
+  });
+
+  it('reads user_status and userStatus from the first element of a data array', () => {
+    assert.equal(rgLib.extractAdUserStatus({ data: [{ user_status: 'Active' }] }), 'Active');
+    assert.equal(rgLib.extractAdUserStatus({ data: [{ userStatus: 'Suspended' }] }), 'Suspended');
+    // Only the first row counts — the endpoint returns exactly one row today,
+    // and a later row must not be mistaken for the record we asked about.
+    assert.equal(rgLib.extractAdUserStatus({ data: [{ other: 1 }, { user_status: 'Active' }] }), '');
+  });
+
+  it('returns an empty string without throwing when the first data element is not an object', () => {
+    for (const bad of ['Active', 42, null, undefined, true]) {
+      assert.doesNotThrow(() => rgLib.extractAdUserStatus({ data: [bad] }), String(bad));
+      assert.equal(rgLib.extractAdUserStatus({ data: [bad] }), '', String(bad));
+    }
+  });
+
+  it('returns an empty string without throwing for an empty data array', () => {
+    assert.doesNotThrow(() => rgLib.extractAdUserStatus({ data: [] }));
+    assert.equal(rgLib.extractAdUserStatus({ data: [] }), '');
+    assert.equal(rgLib.extractAdUserStatus({ data: [], result: { user_status: 'Active' } }), 'Active');
+  });
+
+  it('still reads a plain-object data envelope', () => {
+    assert.equal(rgLib.extractAdUserStatus({ data: { user_status: 'Active' } }), 'Active');
+    assert.equal(rgLib.extractAdUserStatus({ data: { userStatus: 'Active' } }), 'Active');
+    assert.equal(rgLib.extractAdUserStatus({ data: 'Active', result: 7 }), '');
+  });
+
+  it('prefers top-level, then a data array row, then result', () => {
+    const nested = {
+      user_status: 'top-snake',
+      userStatus: 'top-camel',
+      data: [{ user_status: 'data-snake', userStatus: 'data-camel' }],
+      result: { user_status: 'result-snake', userStatus: 'result-camel' },
+    };
+    assert.equal(rgLib.extractAdUserStatus(nested), 'top-snake');
+    assert.equal(rgLib.extractAdUserStatus({ ...nested, user_status: undefined }), 'top-camel');
+    assert.equal(
+      rgLib.extractAdUserStatus({ data: nested.data, result: nested.result }),
+      'data-snake'
+    );
+    assert.equal(rgLib.extractAdUserStatus({ result: nested.result }), 'result-snake');
+  });
+
+  it('returns an empty string without throwing for hostile top-level inputs', () => {
+    for (const bad of [null, undefined, 'a string', 42, [], {}, { data: 7 }, NaN, true]) {
+      assert.doesNotThrow(() => rgLib.extractAdUserStatus(bad), String(bad));
+      assert.equal(rgLib.extractAdUserStatus(bad), '', String(bad));
+    }
+  });
+});
+
+describe('extractAdDomainStatus — captured response and array envelopes', () => {
+  it('reads domain_status out of the captured response whose data is an array', () => {
+    // The production regression: the row was always there, `json.data.domain_status`
+    // just never addressed it because data holds a row list.
+    assert.equal(rgLib.extractAdDomainStatus(CAPTURED_DOMAIN_STATUS_RESPONSE), 'active');
+    assert.equal(rgLib.extractAdDomainStatus({ data: [CAPTURED_DOMAIN_STATUS_RESPONSE.data[0]] }), 'active');
+  });
+
+  it('reads domain_status and domainStatus from the first element of a data array', () => {
+    assert.equal(rgLib.extractAdDomainStatus({ data: [{ domain_status: 'Active' }] }), 'Active');
+    assert.equal(rgLib.extractAdDomainStatus({ data: [{ domainStatus: 'Suspended' }] }), 'Suspended');
+    assert.equal(rgLib.extractAdDomainStatus({ data: [{ other: 1 }, { domain_status: 'Active' }] }), '');
+  });
+
+  it('returns an empty string without throwing when the first data element is not an object', () => {
+    for (const bad of ['active', 42, null, undefined, true]) {
+      assert.doesNotThrow(() => rgLib.extractAdDomainStatus({ data: [bad] }), String(bad));
+      assert.equal(rgLib.extractAdDomainStatus({ data: [bad] }), '', String(bad));
+    }
+  });
+
+  it('returns an empty string without throwing for an empty data array', () => {
+    assert.doesNotThrow(() => rgLib.extractAdDomainStatus({ data: [] }));
+    assert.equal(rgLib.extractAdDomainStatus({ data: [] }), '');
+    assert.equal(rgLib.extractAdDomainStatus({ data: [], result: { domain_status: 'Active' } }), 'Active');
+  });
+
+  it('still reads a plain-object data envelope', () => {
+    assert.equal(rgLib.extractAdDomainStatus({ data: { domain_status: 'Active' } }), 'Active');
+    assert.equal(rgLib.extractAdDomainStatus({ data: { domainStatus: 'Active' } }), 'Active');
+    assert.equal(rgLib.extractAdDomainStatus({ data: 'Active', result: 7 }), '');
+  });
+
+  it('prefers top-level, then a data array row, then result', () => {
+    const nested = {
+      domain_status: 'top-snake',
+      domainStatus: 'top-camel',
+      data: [{ domain_status: 'data-snake', domainStatus: 'data-camel' }],
+      result: { domain_status: 'result-snake', domainStatus: 'result-camel' },
+    };
+    assert.equal(rgLib.extractAdDomainStatus(nested), 'top-snake');
+    assert.equal(rgLib.extractAdDomainStatus({ ...nested, domain_status: undefined }), 'top-camel');
+    assert.equal(
+      rgLib.extractAdDomainStatus({ data: nested.data, result: nested.result }),
+      'data-snake'
+    );
+    assert.equal(rgLib.extractAdDomainStatus({ result: nested.result }), 'result-snake');
+  });
+
+  it('returns an empty string without throwing for hostile top-level inputs', () => {
+    for (const bad of [null, undefined, 'a string', 42, [], {}, { data: 7 }, NaN, true]) {
+      assert.doesNotThrow(() => rgLib.extractAdDomainStatus(bad), String(bad));
+      assert.equal(rgLib.extractAdDomainStatus(bad), '', String(bad));
+    }
+  });
+});
+
+// ── extractAdCustomerStatus ───────────────────────────────────────────
+describe('extractAdCustomerStatus', () => {
+  it('reads customer_status out of the captured domain response', () => {
+    // Same body as above: the domain owner's status lives on the domain row,
+    // which is the only place the endpoint ever reports it.
+    assert.equal(rgLib.extractAdCustomerStatus(CAPTURED_DOMAIN_STATUS_RESPONSE), 'active');
+    assert.equal(rgLib.extractAdCustomerStatus({ data: [CAPTURED_DOMAIN_STATUS_RESPONSE.data[0]] }), 'active');
+  });
+
+  it('reads the top-level customer_status and customerStatus keys', () => {
+    assert.equal(rgLib.extractAdCustomerStatus({ customer_status: 'Active' }), 'Active');
+    assert.equal(rgLib.extractAdCustomerStatus({ customerStatus: 'Suspended' }), 'Suspended');
+    assert.equal(rgLib.extractAdCustomerStatus({ customer_status: 'active', customerStatus: 'Suspended' }), 'active');
+  });
+
+  it('reads customer_status and customerStatus from the first element of a data array', () => {
+    assert.equal(rgLib.extractAdCustomerStatus({ data: [{ customer_status: 'Active' }] }), 'Active');
+    assert.equal(rgLib.extractAdCustomerStatus({ data: [{ customerStatus: 'Suspended' }] }), 'Suspended');
+    assert.equal(rgLib.extractAdCustomerStatus({ data: [{ other: 1 }, { customer_status: 'Active' }] }), '');
+  });
+
+  it('still reads a plain-object data envelope and a result envelope', () => {
+    assert.equal(rgLib.extractAdCustomerStatus({ data: { customer_status: 'Active' } }), 'Active');
+    assert.equal(rgLib.extractAdCustomerStatus({ data: { customerStatus: 'Active' } }), 'Active');
+    assert.equal(rgLib.extractAdCustomerStatus({ result: { customer_status: 'Suspended' } }), 'Suspended');
+    assert.equal(rgLib.extractAdCustomerStatus({ result: { customerStatus: 'Suspended' } }), 'Suspended');
+  });
+
+  it('prefers top-level, then a data array row, then result', () => {
+    const nested = {
+      customer_status: 'top-snake',
+      customerStatus: 'top-camel',
+      data: [{ customer_status: 'data-snake', customerStatus: 'data-camel' }],
+      result: { customer_status: 'result-snake', customerStatus: 'result-camel' },
+    };
+    assert.equal(rgLib.extractAdCustomerStatus(nested), 'top-snake');
+    assert.equal(rgLib.extractAdCustomerStatus({ ...nested, customer_status: undefined }), 'top-camel');
+    assert.equal(
+      rgLib.extractAdCustomerStatus({ data: nested.data, result: nested.result }),
+      'data-snake'
+    );
+    assert.equal(rgLib.extractAdCustomerStatus({ result: nested.result }), 'result-snake');
+  });
+
+  it('returns an empty string without throwing when the first data element is not an object', () => {
+    for (const bad of ['active', 42, null, undefined, true]) {
+      assert.doesNotThrow(() => rgLib.extractAdCustomerStatus({ data: [bad] }), String(bad));
+      assert.equal(rgLib.extractAdCustomerStatus({ data: [bad] }), '', String(bad));
+    }
+  });
+
+  it('returns an empty string without throwing for an empty data array', () => {
+    assert.doesNotThrow(() => rgLib.extractAdCustomerStatus({ data: [] }));
+    assert.equal(rgLib.extractAdCustomerStatus({ data: [] }), '');
+  });
+
+  it('ignores non-string values at every level and returns an empty string', () => {
+    for (const bad of [42, null, undefined, true, { nested: 'Active' }, ['Active'], '']) {
+      assert.equal(rgLib.extractAdCustomerStatus({ customer_status: bad }), '', String(bad));
+      assert.equal(rgLib.extractAdCustomerStatus({ customerStatus: bad }), '', String(bad));
+      assert.equal(rgLib.extractAdCustomerStatus({ data: [{ customer_status: bad }] }), '', String(bad));
+      assert.equal(rgLib.extractAdCustomerStatus({ data: [{ customerStatus: bad }] }), '', String(bad));
+      assert.equal(rgLib.extractAdCustomerStatus({ result: { customer_status: bad } }), '', String(bad));
+      assert.equal(rgLib.extractAdCustomerStatus({ result: { customerStatus: bad } }), '', String(bad));
+    }
+    // A non-object container hides the nested keys entirely.
+    assert.equal(rgLib.extractAdCustomerStatus({ data: 'Active', result: 7 }), '');
+  });
+
+  it('does not confuse the domain and user keys for its own', () => {
+    assert.equal(rgLib.extractAdCustomerStatus({ domain_status: 'active', user_status: 'Active' }), '');
+    assert.equal(rgLib.extractAdCustomerStatus({ data: [{ domain_status: 'active', user_status: 'Active' }] }), '');
+  });
+
+  it('returns an empty string without throwing for hostile top-level inputs', () => {
+    for (const bad of [null, undefined, 'a string', 42, [], {}, { data: 7 }, NaN, true]) {
+      assert.doesNotThrow(() => rgLib.extractAdCustomerStatus(bad), String(bad));
+      assert.equal(rgLib.extractAdCustomerStatus(bad), '', String(bad));
+    }
+    const throwing = { get customer_status() { throw new Error('boom'); } };
+    assert.doesNotThrow(() => rgLib.extractAdCustomerStatus(throwing));
+    assert.equal(rgLib.extractAdCustomerStatus(throwing), '');
+  });
+
+  it('trims the value it returns and treats whitespace-only as absent', () => {
+    assert.equal(rgLib.extractAdCustomerStatus({ customer_status: '  Active  ' }), 'Active');
+    assert.equal(rgLib.extractAdCustomerStatus({ data: [{ customerStatus: '\tSuspended\n' }] }), 'Suspended');
+    assert.equal(rgLib.extractAdCustomerStatus({ customer_status: '   ' }), '');
+    assert.equal(rgLib.extractAdCustomerStatus({ data: [] , result: { customer_status: '\n\t' } }), '');
+  });
+});
+
+describe('captured domain response through both extractors', () => {
+  it('reads domain_status and customer_status from the same payload and settles the verdict', () => {
+    const payload = CAPTURED_DOMAIN_STATUS_RESPONSE;
+    const domainStatus = rgLib.extractAdDomainStatus(payload);
+    const customerStatus = rgLib.extractAdCustomerStatus(payload);
+    assert.equal(domainStatus, 'active');
+    assert.equal(customerStatus, 'active');
+    // Both sides present is the only way resolveDomainOutcome confirms — this
+    // is the row that used to read '' and leave the domain unknown.
+    assert.equal(rgLib.resolveDomainOutcome({ domainStatus, customerStatus }), 'confirmed');
+  });
+
+  it('still fails the pair when only the domain row says suspended', () => {
+    const payload = { data: [{ domain_status: 'suspended', customer_status: 'active' }] };
+    assert.equal(rgLib.resolveDomainOutcome({
+      domainStatus: rgLib.extractAdDomainStatus(payload),
+      customerStatus: rgLib.extractAdCustomerStatus(payload),
+    }), 'failed');
+  });
+});
+
 // ── resolveDomainOutcome ──────────────────────────────────────────────
 describe('resolveDomainOutcome', () => {
   it('covers every row of the customer × domain decision table', () => {
@@ -1143,91 +1408,187 @@ describe('resolveDomainOutcome', () => {
   });
 });
 
-// ── captureRawAdPayload ───────────────────────────────────────────────
-describe('captureRawAdPayload', () => {
-  it('returns a plain payload object unchanged', () => {
-    const payload = { user_status: 'Active', data: { userStatus: 'Suspended' }, rows: [1, 2, 3] };
-    const captured = rgLib.captureRawAdPayload(payload);
-    // Same reference: the diagnostic panel shows the body the API actually sent,
-    // so a lossy copy here would defeat the point.
-    assert.equal(captured, payload);
-    assert.deepEqual(captured, { user_status: 'Active', data: { userStatus: 'Suspended' }, rows: [1, 2, 3] });
-    // …and what comes back is safe to hand to JSON.stringify.
-    assert.doesNotThrow(() => JSON.stringify(captured));
+// ── parseAdStatusBody ──────────────────────────────────────────────────
+// The 401 body below is the reason this function exists at all.
+//
+// Provenance: captured with curl against the live AbuseDesk status endpoint
+// (GET /api/v1/domains/status/?domain=flockcloud.tech) while the browser
+// session was stale. The gunicorn reverse proxy stamped the response with
+// `HTTP/1.1 401`, `Server: gunicorn`, `Expired: 1` and
+// `Location: https://abusedesk.riva.co/login.html` — yet the body that came
+// back with it was a complete, valid, fully populated status document:
+//
+//     HTTP/1.1 401
+//     Server: gunicorn
+//     Access-Control-Allow-Origin: https://abusedesk.ops.titan.email
+//     Expired: 1
+//     Location: https://abusedesk.riva.co/login.html
+//
+//     {"data": [{"domain_name": "flockcloud.tech", "domain_status": "active", ...
+//                "customer_status": "active", ...}]}
+//
+// The application behind the proxy ran to completion and answered with the
+// real data; only the status line lied. So `response.ok` is meaningless on
+// this endpoint and every check that did `if (!r.ok) throw` threw away the
+// one usable answer it had. These tests pin the corrected rule: judge the
+// response by the BODY.
+const CAPTURED_401_BODY =
+  '{"data": [{"domain_name": "flockcloud.tech", "domain_status": "active", ' +
+  '"domain_id": 14, "is_paid": 0, "partner_id": 1, "mx_verified": 1, ' +
+  '"created_at": "2019-02-11T07:07:59", "updated_at": "2026-10-08T11:02:06", ' +
+  '"customer_id": 1288131, "customer_email": "anuj@titan.email", ' +
+  '"customer_status": "active", "enable_unblock": false, "cus_enable_unblock": false, ' +
+  '"total_accounts": 1, "active_accounts": 1, "deleted_accounts": 0, ' +
+  '"suspended_accounts": 0, "domain_orders": ["flockcloud.tech"], ' +
+  '"customer_suspension_used_domain": null}]}';
+
+describe('parseAdStatusBody', () => {
+  // Shared shape assertion: a usable result has a payload and no error, an
+  // unusable one has neither a payload nor a silent (empty) explanation.
+  const assertUnusable = (result, label) => {
+    assert.equal(result.json, null, label);
+    assert.equal(typeof result.error, 'string', label);
+    assert.ok(result.error.length > 0, `${label}: error must not be empty`);
+    assert.ok(result.error.length <= 200, `${label}: error must stay under 200 chars`);
+  };
+
+  it('reads the real 401-with-valid-body response as usable and extracts both statuses from it', () => {
+    // The captured body is the same document as the object fixture above, so
+    // this fixture and that one can never silently drift apart.
+    assert.deepEqual(JSON.parse(CAPTURED_401_BODY), CAPTURED_DOMAIN_STATUS_RESPONSE);
+
+    const result = rgLib.parseAdStatusBody(CAPTURED_401_BODY);
+    assert.notEqual(result.json, null);
+    assert.equal(result.error, '');
+    // The whole point: a 401 whose body is populated yields the real answer.
+    assert.equal(rgLib.extractAdDomainStatus(result.json), 'active');
+    assert.equal(rgLib.extractAdCustomerStatus(result.json), 'active');
+    assert.equal(
+      rgLib.resolveDomainOutcome({
+        domainStatus: rgLib.extractAdDomainStatus(result.json),
+        customerStatus: rgLib.extractAdCustomerStatus(result.json),
+      }),
+      'confirmed'
+    );
   });
 
-  it('returns an array unchanged', () => {
-    const rows = [{ user_status: 'Active' }, { domain_status: 'Suspended' }];
-    const captured = rgLib.captureRawAdPayload(rows);
-    assert.equal(captured, rows);
-    assert.deepEqual(captured, rows);
-    // An empty array is a payload too, not an absent one.
-    const empty = [];
-    assert.equal(rgLib.captureRawAdPayload(empty), empty);
+  it('accepts a JSON object and returns that same parsed payload', () => {
+    const result = rgLib.parseAdStatusBody('{"domain_status":"active","customer_status":"active"}');
+    assert.equal(result.error, '');
+    assert.deepEqual(result.json, { domain_status: 'active', customer_status: 'active' });
+    // Identity matters to the caller: it hands this object straight to the
+    // extractors, so a re-stringify or a lossy copy here would be a regression.
+    const again = rgLib.parseAdStatusBody('{"data":{"user_status":"Active"}}');
+    assert.equal(again.error, '');
+    assert.deepEqual(again.json, { data: { user_status: 'Active' } });
+    assert.notEqual(again.json, null);
+    assert.equal(rgLib.extractAdUserStatus(again.json), 'Active');
+    // An empty object and an object with no status keys are still usable
+    // payloads — "no status key" is a verdict for the extractors, not for us.
+    assert.deepEqual(rgLib.parseAdStatusBody('{}').json, {});
+    assert.equal(rgLib.parseAdStatusBody('{}').error, '');
   });
 
-  it('returns an empty string for null and undefined', () => {
-    assert.equal(rgLib.captureRawAdPayload(null), '');
-    assert.equal(rgLib.captureRawAdPayload(undefined), '');
-    assert.equal(rgLib.captureRawAdPayload(), '');
+  it('accepts a JSON array as usable', () => {
+    // /api/v1/domains/status/ wraps its row list in an array, so an array body
+    // is the endpoint's normal shape and must not be mistaken for a primitive.
+    const result = rgLib.parseAdStatusBody('[{"domain_status":"active"}]');
+    assert.equal(result.error, '');
+    assert.ok(Array.isArray(result.json));
+    assert.equal(result.json.length, 1);
+    assert.equal(rgLib.extractAdDomainStatus({ data: result.json }), 'active');
+
+    const empty = rgLib.parseAdStatusBody('[]');
+    assert.equal(empty.error, '');
+    assert.deepEqual(empty.json, []);
+
+    const rows = [{ domain_status: 'active' }];
+    assert.deepEqual(rgLib.parseAdStatusBody(JSON.stringify(rows)).json, rows);
   });
 
-  it('stringifies string, number and boolean primitives', () => {
-    assert.equal(rgLib.captureRawAdPayload('oops'), 'oops');
-    assert.equal(rgLib.captureRawAdPayload(''), '');
-    assert.equal(rgLib.captureRawAdPayload(42), '42');
-    assert.equal(rgLib.captureRawAdPayload(0), '0');
-    assert.equal(rgLib.captureRawAdPayload(NaN), 'NaN');
-    assert.equal(rgLib.captureRawAdPayload(true), 'true');
-    assert.equal(rgLib.captureRawAdPayload(false), 'false');
-    // A non-JSON body (an HTML gateway error page, say) still shows up instead
-    // of vanishing the way a missing status key does.
-    assert.equal(rgLib.captureRawAdPayload('<html>502</html>'), '<html>502</html>');
-  });
-
-  it('does not throw for a circular payload', () => {
-    const cyclic = { user_status: 'Active' };
-    cyclic.self = cyclic;
-    assert.doesNotThrow(() => rgLib.captureRawAdPayload(cyclic));
-    assert.notEqual(rgLib.captureRawAdPayload(cyclic), undefined);
-  });
-
-  it('returns an empty string for an object whose property getter throws', () => {
-    const hostile = {};
-    Object.defineProperty(hostile, 'user_status', {
-      enumerable: true,
-      get() { throw new Error('boom'); },
-    });
-    assert.doesNotThrow(() => rgLib.captureRawAdPayload(hostile));
-    assert.equal(rgLib.captureRawAdPayload(hostile), '');
-
-    // A throwing toJSON and a throwing Proxy are the same hazard, one layer over.
-    const withToJson = { toJSON() { throw new Error('nope'); } };
-    assert.doesNotThrow(() => rgLib.captureRawAdPayload(withToJson));
-    assert.equal(rgLib.captureRawAdPayload(withToJson), '');
-
-    const proxy = new Proxy({}, { get() { throw new Error('nope'); } });
-    assert.doesNotThrow(() => rgLib.captureRawAdPayload(proxy));
-    assert.equal(rgLib.captureRawAdPayload(proxy), '');
-  });
-
-  it('stringifies a function without throwing', () => {
-    const probe = function adStatusProbe() { return 'Active'; };
-    assert.doesNotThrow(() => rgLib.captureRawAdPayload(probe));
-    assert.equal(rgLib.captureRawAdPayload(probe), String(probe));
-    assert.equal(typeof rgLib.captureRawAdPayload(probe), 'string');
-  });
-
-  it('never returns undefined for hostile inputs', () => {
-    const cyclic = { user_status: 'Active' };
-    cyclic.self = cyclic;
-    const throwingGetter = {};
-    Object.defineProperty(throwingGetter, 'user_status', { get() { throw new Error('boom'); } });
-    const hostile = [null, undefined, {}, [], () => {}, cyclic, throwingGetter, 'text', 42, true, NaN];
-    for (const input of hostile) {
-      const captured = rgLib.captureRawAdPayload(input);
-      assert.notEqual(captured, undefined, String(input));
-      assert.doesNotThrow(() => JSON.stringify(captured), String(input));
+  it('rejects empty and whitespace-only bodies', () => {
+    for (const blank of ['', '   ', '\n\t ', '\t', '\r\n', '  \n\t\r  ']) {
+      assertUnusable(rgLib.parseAdStatusBody(blank), JSON.stringify(blank));
     }
+  });
+
+  it('rejects a body that is not JSON at all', () => {
+    assertUnusable(rgLib.parseAdStatusBody('not json at all'), 'not json at all');
+    assertUnusable(rgLib.parseAdStatusBody('{"data": '), 'truncated object');
+    assertUnusable(rgLib.parseAdStatusBody("{'data': 'active'}"), 'single quotes');
+  });
+
+  it('rejects an HTML login page body', () => {
+    // What a genuinely unauthenticated response looks like once the proxy
+    // stops passing the real document through: not JSON, hence unusable.
+    assertUnusable(
+      rgLib.parseAdStatusBody('<html><body>Please log in</body></html>'),
+      'login page'
+    );
+  });
+
+  it('rejects the JSON literal null', () => {
+    const result = rgLib.parseAdStatusBody('null');
+    assertUnusable(result, 'null literal');
+    assert.equal(result.json, null);
+  });
+
+  it('rejects JSON primitives that parse but carry no payload', () => {
+    for (const primitive of ['42', '"str"', 'true', 'false', '0', '"hello"', '3.14']) {
+      assertUnusable(rgLib.parseAdStatusBody(primitive), primitive);
+    }
+  });
+
+  it('rejects non-string inputs without throwing', () => {
+    for (const bad of [null, undefined, 42, {}, [], true, false, NaN, () => {}, Symbol('x')]) {
+      let result;
+      assert.doesNotThrow(() => { result = rgLib.parseAdStatusBody(bad); }, String(bad));
+      assertUnusable(result, String(bad));
+    }
+    // No argument at all is the same case as undefined.
+    assertUnusable(rgLib.parseAdStatusBody(), 'no argument');
+  });
+
+  it('describes a non-string input with a non-empty string error that never echoes the value', () => {
+    for (const bad of [null, undefined, 42, {}, [], true]) {
+      const { error } = rgLib.parseAdStatusBody(bad);
+      assert.equal(typeof error, 'string');
+      assert.ok(error.length > 0);
+      assert.ok(error.length <= 200);
+    }
+  });
+
+  it('never throws for inputs whose toString or valueOf misbehaves', () => {
+    const hostile = {
+      toString() { throw new Error('boom'); },
+      valueOf() { throw new Error('boom'); },
+    };
+    assert.doesNotThrow(() => rgLib.parseAdStatusBody(hostile));
+    assertUnusable(rgLib.parseAdStatusBody(hostile), 'throwing toString/valueOf');
+
+    // A getter that throws is the same hazard one layer down.
+    const throwingGetter = {};
+    Object.defineProperty(throwingGetter, 'data', { get() { throw new Error('boom'); } });
+    assertUnusable(rgLib.parseAdStatusBody(throwingGetter), 'throwing getter');
+
+    const cyclic = { self: null };
+    cyclic.self = cyclic;
+    assertUnusable(rgLib.parseAdStatusBody(cyclic), 'cyclic object');
+  });
+
+  it('caps the error length instead of echoing a huge unparseable body', () => {
+    const garbage = 'x'.repeat(10000);
+    const result = rgLib.parseAdStatusBody(garbage);
+    assertUnusable(result, '10k garbage');
+    assert.ok(result.error.length <= 200);
+    // Truncated, not re-sent: at most ~120 characters of the body may appear.
+    assert.ok(!result.error.includes(garbage));
+    assert.ok(!result.error.includes('x'.repeat(200)));
+
+    // A long HTML page is the same shape of problem.
+    const page = '<html><body>' + 'Please log in. '.repeat(2000) + '</body></html>';
+    const html = rgLib.parseAdStatusBody(page);
+    assertUnusable(html, 'long html page');
+    assert.ok(html.error.length <= 200);
   });
 });

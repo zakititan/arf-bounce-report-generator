@@ -1,4 +1,4 @@
-import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList, createUnsuspendReasonKey, createPerAccountUnsuspendReasonKey, persistUnsuspendReason, isSafeJiraUrl, isSafeGoogleSheetsUrl, isSafeAppsScriptUrl, createPendingMap, capInlineImages, isValidJiraCreatePayload, discoverDoneTransitionId, buildBulkSummary, findStaleStorageKeys, buildAbuseDeskUrl, extractJiraIssueKey, extractAdUserStatus, extractAdDomainStatus, resolveVerifiedOutcome, resolveDomainOutcome, buildAdStatusUrl, captureRawAdPayload, extractAdCustomerStatus, parseAdStatusBody } from './rg-lib.js';
+import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList, createUnsuspendReasonKey, createPerAccountUnsuspendReasonKey, persistUnsuspendReason, isSafeJiraUrl, isSafeGoogleSheetsUrl, isSafeAppsScriptUrl, createPendingMap, capInlineImages, isValidJiraCreatePayload, discoverDoneTransitionId, buildBulkSummary, findStaleStorageKeys, buildAbuseDeskUrl, extractJiraIssueKey, extractAdUserStatus, extractAdDomainStatus, resolveVerifiedOutcome, resolveDomainOutcome, buildAdStatusUrl, extractAdCustomerStatus, parseAdStatusBody } from './rg-lib.js';
 import { fetchWithTimeout } from './timeout.js';
 
 const EXPIRY_MS = 10 * 60 * 1000;
@@ -227,7 +227,7 @@ function fetchAdStatusReading(kind, account, region) {
       const parsed = parseAdStatusBody(text);
       if (!parsed.json) {
         const err = new Error('AD ' + kind + ' status unreadable (HTTP ' + status + '): ' + parsed.error);
-        err.body = text || ''; // kept for the diagnostic panel only
+        err.body = text || ''; // raw response kept on the error for debugging
         throw err;
       }
       // A domain payload carries BOTH domain_status and customer_status, so one
@@ -392,40 +392,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === 'partner-panel-lookup') {
     handlePartnerPanelLookup(message.data, sendResponse);
-    return true;
-  }
-
-  if (message.action === 'ad-status-raw') {
-    // TEMPORARY diagnostic action for the Status Check panel: returns the raw
-    // endpoint payload and the exact URL alongside the extracted statuses, so a
-    // real response can be inspected. Safe to delete with the panel.
-    const account = message.data && message.data.account;
-    if (!areValidAccountList(account)) { sendResponse({ success: false, error: 'Invalid account or email domain' }); return true; }
-    const region = typeof message.data.region === 'string' ? message.data.region : '';
-    const domainEntity = account.indexOf('@') === -1;
-    const kind = domainEntity ? 'domain' : 'user';
-    const url = buildAdStatusUrl(kind, account, region);
-
-    fetchAdStatusReading(kind, account, region)
-      .then(reading => sendResponse({
-        success: true,
-        customerStatus: reading.customerStatus,
-        domainStatus: reading.domainStatus,
-        outcome: reading.outcome,
-        customerUrl: reading.url,
-        domainUrl: domainEntity ? reading.url : '',
-        customerRaw: captureRawAdPayload(reading.json),
-        domainRaw: domainEntity ? captureRawAdPayload(reading.json) : '',
-        error: '',
-      }))
-      .catch(e => sendResponse({
-        success: false,
-        error: e.message,
-        customerUrl: url,
-        domainUrl: domainEntity ? url : '',
-        customerRaw: captureRawAdPayload(e.body || ''),
-        domainRaw: '',
-      }));
     return true;
   }
 

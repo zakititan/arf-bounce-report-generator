@@ -45,7 +45,7 @@ const _btnTimers = new WeakMap();
 // pastes can't all observe a stale length and blow past MAX_SCREENSHOTS.
 const _screenshotInFlight = {};
 // prefix (used in element ids/state) → tab data-tab / panel id suffix
-const TAB_DATA_TAB = { arf: 'arf', bounce: 'bounce', ipspike: 'ip-spike', smtpsuspend: 'smtp-suspension', direct: 'direct', statuscheck: 'statuscheck' };
+const TAB_DATA_TAB = { arf: 'arf', bounce: 'bounce', ipspike: 'ip-spike', smtpsuspend: 'smtp-suspension', direct: 'direct' };
 // Fields counted by updateReqCounter (required-field chips)
 const REQ_SELECTOR = '[aria-required="true"]';
 
@@ -88,9 +88,6 @@ const state = {
     region: 'na',
     whois: null,
     lookupInFlight: false,
-  },
-  statuscheck: {
-    region: 'na',
   },
 };
 let lastActivePanel = null; // tracks which panel the user last interacted with (for Ctrl/Cmd+Enter)
@@ -863,7 +860,6 @@ function initEventDelegation() {
     else if (panel.id === 'panel-ip-spike') lastActivePanel = 'ipspike';
     else if (panel.id === 'panel-smtp-suspension') lastActivePanel = 'smtpsuspend';
     else if (panel.id === 'panel-direct') lastActivePanel = 'direct';
-    else if (panel.id === 'panel-statuscheck') lastActivePanel = 'statuscheck';
   });
 
   shell.addEventListener('click', (e) => {
@@ -884,10 +880,6 @@ function initEventDelegation() {
         else if (panel === 'ipspike') clearIPspike();
         else if (panel === 'smtpsuspend') clearSMTPSuspend();
         else if (panel === 'direct') clearDirect();
-        else if (panel === 'statuscheck') clearStatusCheck();
-        break;
-      case 'status-check':
-        runStatusCheck(target);
         break;
       case 'lookup':
         if (panel) lookupDomainImmediate(panel);
@@ -955,7 +947,7 @@ function initEventDelegation() {
 
 // ── Live validation-error clearing ────────────────────────────────────
 function initLiveErrorClear() {
-  ['arf', 'bounce', 'ipspike', 'smtpsuspend', 'direct', 'statuscheck'].forEach(prefix => {
+  ['arf', 'bounce', 'ipspike', 'smtpsuspend', 'direct'].forEach(prefix => {
     const panel = document.getElementById('panel-' + TAB_DATA_TAB[prefix]);
     if (!panel) return;
     ['input', 'change'].forEach(evt => panel.addEventListener(evt, (e) => {
@@ -1992,7 +1984,7 @@ function updateReqCounter(prefix) {
 }
 
 function initDraftPersistence() {
-  ['arf', 'bounce', 'ipspike', 'smtpsuspend', 'direct', 'statuscheck'].forEach(prefix => {
+  ['arf', 'bounce', 'ipspike', 'smtpsuspend', 'direct'].forEach(prefix => {
     const panel = document.getElementById('panel-' + TAB_DATA_TAB[prefix]);
     if (!panel) return;
     ['input', 'change', 'click'].forEach(evt => panel.addEventListener(evt, () => {
@@ -2132,121 +2124,6 @@ function unsuspendAccount(prefix, btn) {
   showToast(msg, 'info');
   beginUnsuspendTracking(accounts.length, prefix, accounts, requestId);
 }
-
-// ── Status Check panel (TEMPORARY diagnostic — remove after API check) ──
-function formatStatusRaw(value) {
-  if (value == null || value === '') return '(empty)';
-  if (typeof value === 'string') {
-    try { return JSON.stringify(JSON.parse(value), null, 2); } catch { return value; }
-  }
-  try { return JSON.stringify(value, null, 2); } catch { return String(value); }
-}
-
-function setStatusCheckUrl(el, url) {
-  if (!el) return;
-  if (url) {
-    el.href = url;
-    el.textContent = url;
-    el.hidden = false;
-  } else {
-    el.removeAttribute('href');
-    el.textContent = '';
-    el.hidden = true;
-  }
-}
-
-function renderStatusCheck(res) {
-  const panel = document.getElementById('statuscheck-result');
-  const verdictEl = document.getElementById('statuscheck-verdict');
-  if (verdictEl) {
-    const label = res.outcome === 'confirmed' ? 'Active'
-      : res.outcome === 'failed' ? 'Suspended' : 'Unknown';
-    verdictEl.textContent = label;
-    verdictEl.className = 'statuscheck-verdict ' + (res.outcome === 'confirmed' ? 'ok' : res.outcome === 'failed' ? 'bad' : 'unknown');
-  }
-  const setText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
-  setText('statuscheck-customer', res.customerStatus || '(not returned)');
-  setText('statuscheck-domain', res.domainStatus || '(not returned)');
-  setText('statuscheck-error', res.error || '(none)');
-  setText('statuscheck-customer-raw', formatStatusRaw(res.customerRaw));
-  setText('statuscheck-domain-raw', formatStatusRaw(res.domainRaw));
-  setStatusCheckUrl(document.getElementById('statuscheck-customer-url'), res.customerUrl);
-  setStatusCheckUrl(document.getElementById('statuscheck-domain-url'), res.domainUrl);
-  if (panel) panel.hidden = false;
-}
-
-function clearStatusCheck() {
-  const panel = document.getElementById('statuscheck-result');
-  if (panel) panel.hidden = true;
-  state.statuscheck.region = 'na';
-  const chip = document.getElementById('statuscheck-region-chip');
-  if (chip) chip.hidden = true;
-  try { localStorage.removeItem(draftKey('statuscheck')); } catch {}
-}
-
-async function runStatusCheck(btn) {
-  const account = document.getElementById('statuscheck-account')?.value.trim() || '';
-  if (!validateAccountIdentifier(account)) {
-    showToast('Please enter a valid email address or domain.', 'warning');
-    return;
-  }
-  setBtnPending(btn, 'Checking…', 30000);
-  try {
-    const domain = sanitiseDomainInput(account);
-    if (domain) await detectRegion('statuscheck', domain);
-    const region = state.statuscheck.region === 'eu' ? 'eu-central-1' : 'us-east-1';
-
-    const res = await new Promise((resolve) => {
-      const requestId = createRequestId('statuscheck');
-      const listener = (e) => {
-        if (e.source !== window || !isAllowedWebAppOrigin(e.origin) ||
-            !validateExtensionResult(e.data) ||
-            (e.data.type !== 'REPORT_GENERATOR_STATUS_CHECK_RESULT' && e.data.type !== 'REPORT_GENERATOR_ERROR') ||
-            !matchesRequest(requestId, e.data.requestId)) return;
-        window.removeEventListener('message', listener);
-        clearTimeout(timeout);
-        if (e.data.type === 'REPORT_GENERATOR_ERROR') {
-          resolve({ error: describeExtensionError(e.data.code) });
-          return;
-        }
-        resolve(e.data);
-      };
-      window.addEventListener('message', listener);
-      const timeout = setTimeout(() => {
-        window.removeEventListener('message', listener);
-        resolve({ error: 'Extension timed out — is it installed?' });
-      }, 20000);
-      window.postMessage({ type: 'REPORT_GENERATOR_STATUS_CHECK', panel: 'statuscheck', account, region, requestId }, '*');
-    });
-
-    renderStatusCheck(res);
-    if (res.error) showToast('Status check returned an error — see the panel', 'warning', { durationMs: 5000 });
-    else showToast('Status check complete', 'success');
-  } finally {
-    resetBtn(btn);
-  }
-}
-
-// Status Check panel account field → sanitise + region chip on blur.
-(function initStatusCheckInput() {
-  const accountInput = document.getElementById('statuscheck-account');
-  if (!accountInput) return;
-  const sanitise = () => {
-    const raw = accountInput.value;
-    const sanitised = sanitiseAccountInput(raw);
-    if (sanitised !== raw) accountInput.value = sanitised;
-  };
-  accountInput.addEventListener('paste', (e) => {
-    e.preventDefault();
-    accountInput.value = (e.clipboardData || window.clipboardData).getData('text');
-    sanitise();
-  });
-  accountInput.addEventListener('input', sanitise);
-  accountInput.addEventListener('blur', () => {
-    const domain = sanitiseDomainInput(accountInput.value.trim() || '');
-    if (domain) detectRegion('statuscheck', domain);
-  });
-})();
 
 // ── Direct Unsuspend panel (no report — account + JIRA link only) ──────
 function validateDirectInputs() {

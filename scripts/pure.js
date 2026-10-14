@@ -132,16 +132,6 @@ export function validateExtensionResult(message) {
       (!message.outcome || typeof message.outcome === 'string') &&
       (!message.error || typeof message.error === 'string');
   }
-  if (message.type === 'REPORT_GENERATOR_STATUS_CHECK_RESULT') {
-    const isSafe = (key) => !message[key] ||
-      typeof message[key] === 'string' || typeof message[key] === 'object';
-    return typeof message.requestId === 'string' &&
-      typeof message.success === 'boolean' &&
-      isSafe('customerStatus') && isSafe('domainStatus') &&
-      isSafe('customerUrl') && isSafe('domainUrl') &&
-      isSafe('customerRaw') && isSafe('domainRaw') &&
-      isSafe('outcome') && isSafe('error');
-  }
   return false;
 }
 
