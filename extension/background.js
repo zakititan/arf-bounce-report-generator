@@ -1,4 +1,4 @@
-import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList, createUnsuspendReasonKey, createPerAccountUnsuspendReasonKey, persistUnsuspendReason, isSafeJiraUrl, isSafeGoogleSheetsUrl, isSafeAppsScriptUrl, createPendingMap, capInlineImages, isValidJiraCreatePayload, discoverDoneTransitionId, buildBulkSummary, findStaleStorageKeys, buildAbuseDeskUrl, extractJiraIssueKey, extractAdUserStatus, extractAdDomainStatus, resolveVerifiedOutcome, resolveDomainOutcome, buildAdStatusUrl, captureRawAdPayload, extractAdCustomerStatus } from './rg-lib.js';
+import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList, createUnsuspendReasonKey, createPerAccountUnsuspendReasonKey, persistUnsuspendReason, isSafeJiraUrl, isSafeGoogleSheetsUrl, isSafeAppsScriptUrl, createPendingMap, capInlineImages, isValidJiraCreatePayload, discoverDoneTransitionId, buildBulkSummary, findStaleStorageKeys, buildAbuseDeskUrl, extractJiraIssueKey, extractAdUserStatus, extractAdDomainStatus, resolveVerifiedOutcome, resolveDomainOutcome, buildAdStatusUrl, captureRawAdPayload, extractAdCustomerStatus, parseAdStatusBody } from './rg-lib.js';
 import { fetchWithTimeout } from './timeout.js';
 
 const EXPIRY_MS = 10 * 60 * 1000;
@@ -198,6 +198,53 @@ function forwardUnsuspendOutcome(data) {
   });
 }
 
+// Fetches one AbuseDesk status endpoint and turns it into a verdict.
+//
+// The HTTP status code is deliberately ignored here. These endpoints sit behind
+// a gunicorn proxy that stamps 401 on any response whose browser session looks
+// stale (headers `Expired: 1`, `Location: .../login.html`), yet the application
+// behind the proxy still runs to completion and returns the COMPLETE status
+// document in the body:
+//
+//   HTTP/1.1 401
+//   {"data": [{"domain_name": "flockcloud.tech", "domain_status": "active",
+//              "customer_status": "active", ...}]}
+//
+// Guarding on `response.ok` therefore discarded the only reliable reading and
+// reported a 401 failure on every single check, including perfectly healthy
+// accounts. Do not reintroduce that guard.
+//
+// A genuine authentication failure is still caught, by the body: it arrives as
+// an HTML login page or some payload with no status key in it, which
+// parseAdStatusBody rejects and which the extractors read as '' — both of which
+// resolve to 'unknown' and hand off to the badge fallback rather than inventing
+// a verdict.
+function fetchAdStatusReading(kind, account, region) {
+  const url = buildAdStatusUrl(kind, account, region);
+  return fetchWithTimeout(url, { credentials: 'include' })
+    .then(r => r.text().then(text => ({ status: r.status, text })))
+    .then(({ status, text }) => {
+      const parsed = parseAdStatusBody(text);
+      if (!parsed.json) {
+        const err = new Error('AD ' + kind + ' status unreadable (HTTP ' + status + '): ' + parsed.error);
+        err.body = text || ''; // kept for the diagnostic panel only
+        throw err;
+      }
+      // A domain payload carries BOTH domain_status and customer_status, so one
+      // call answers both. (Asking the user endpoint with a domain returns 401.)
+      // An email needs the user endpoint, which carries user_status.
+      const isDomain = kind === 'domain';
+      const customerStatus = isDomain
+        ? extractAdCustomerStatus(parsed.json)
+        : extractAdUserStatus(parsed.json);
+      const domainStatus = isDomain ? extractAdDomainStatus(parsed.json) : '';
+      const outcome = isDomain
+        ? resolveDomainOutcome({ customerStatus, domainStatus })
+        : resolveVerifiedOutcome({ badgeStatus: '', apiStatus: customerStatus });
+      return { url, status, json: parsed.json, customerStatus, domainStatus, outcome };
+    });
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'store-report') {
     const reportData = {
@@ -350,8 +397,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === 'ad-status-raw') {
     // TEMPORARY diagnostic action for the Status Check panel: returns the raw
-    // endpoint payloads and the exact URLs alongside the extracted statuses,
-    // so the real response shape can be confirmed. Safe to delete with the panel.
+    // endpoint payload and the exact URL alongside the extracted statuses, so a
+    // real response can be inspected. Safe to delete with the panel.
     const account = message.data && message.data.account;
     if (!areValidAccountList(account)) { sendResponse({ success: false, error: 'Invalid account or email domain' }); return true; }
     const region = typeof message.data.region === 'string' ? message.data.region : '';
@@ -359,36 +406,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const kind = domainEntity ? 'domain' : 'user';
     const url = buildAdStatusUrl(kind, account, region);
 
-    fetchWithTimeout(url, { credentials: 'include' })
-      .then(r => {
-        if (!r.ok) throw new Error('AD ' + kind + ' status responded ' + r.status);
-        return r.json();
-      })
-      .then(json => {
-        const customerStatus = domainEntity
-          ? extractAdCustomerStatus(json)
-          : extractAdUserStatus(json);
-        const domainStatus = domainEntity ? extractAdDomainStatus(json) : '';
-        const outcome = domainEntity
-          ? resolveDomainOutcome({ customerStatus, domainStatus })
-          : resolveVerifiedOutcome({ badgeStatus: '', apiStatus: customerStatus });
-        sendResponse({
-          success: true,
-          customerStatus,
-          domainStatus,
-          outcome,
-          customerUrl: url,
-          domainUrl: domainEntity ? url : '',
-          customerRaw: captureRawAdPayload(json),
-          domainRaw: domainEntity ? captureRawAdPayload(json) : '',
-          error: '',
-        });
-      })
+    fetchAdStatusReading(kind, account, region)
+      .then(reading => sendResponse({
+        success: true,
+        customerStatus: reading.customerStatus,
+        domainStatus: reading.domainStatus,
+        outcome: reading.outcome,
+        customerUrl: reading.url,
+        domainUrl: domainEntity ? reading.url : '',
+        customerRaw: captureRawAdPayload(reading.json),
+        domainRaw: domainEntity ? captureRawAdPayload(reading.json) : '',
+        error: '',
+      }))
       .catch(e => sendResponse({
         success: false,
         error: e.message,
         customerUrl: url,
         domainUrl: domainEntity ? url : '',
+        customerRaw: captureRawAdPayload(e.body || ''),
+        domainRaw: '',
       }));
     return true;
   }
@@ -396,33 +432,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'ad-status') {
     // Primary verification path: read status straight from the Abuse Desk
     // status APIs (host permission granted) instead of scraping the DOM badge.
-    // The badge remains the fallback in the content script, so a partial or
-    // failed read here just reports 'unconfirmed' and lets that take over.
+    // The badge remains the fallback in the content script, so an unreadable
+    // response here just reports 'unknown' and lets the badge take over.
     const account = message.data && message.data.account;
     if (!areValidAccountList(account)) { sendResponse({ success: false, error: 'Invalid account or email domain' }); return true; }
     const region = typeof message.data.region === 'string' ? message.data.region : '';
-    const domainEntity = account.indexOf('@') === -1;
+    const kind = account.indexOf('@') === -1 ? 'domain' : 'user';
 
-    // A domain payload carries BOTH domain_status and customer_status, so one
-    // call answers both. (Asking the user endpoint with a domain returns 401.)
-    // An email needs the user endpoint, which carries user_status.
-    const kind = domainEntity ? 'domain' : 'user';
-    const url = buildAdStatusUrl(kind, account, region);
-    fetchWithTimeout(url, { credentials: 'include' })
-      .then(r => {
-        if (!r.ok) throw new Error('AD ' + kind + ' status responded ' + r.status);
-        return r.json();
-      })
-      .then(json => {
-        const customerStatus = domainEntity
-          ? extractAdCustomerStatus(json)
-          : extractAdUserStatus(json);
-        const domainStatus = domainEntity ? extractAdDomainStatus(json) : '';
-        const outcome = domainEntity
-          ? resolveDomainOutcome({ customerStatus, domainStatus })
-          : resolveVerifiedOutcome({ badgeStatus: '', apiStatus: customerStatus });
-        sendResponse({ success: true, customerStatus, domainStatus, outcome });
-      })
+    fetchAdStatusReading(kind, account, region)
+      .then(reading => sendResponse({
+        success: true,
+        customerStatus: reading.customerStatus,
+        domainStatus: reading.domainStatus,
+        outcome: reading.outcome,
+      }))
       .catch(e => sendResponse({ success: false, error: e.message }));
     return true;
   }

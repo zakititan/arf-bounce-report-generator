@@ -471,6 +471,83 @@ export function buildBulkSummary(accounts) {
   return out.join(', ');
 }
 
+// Hard ceiling on every error string this module returns, so a failure reason
+// can always be shown in the panel or written to a log without further work.
+const AD_STATUS_ERROR_MAX_CHARS = 200;
+const AD_STATUS_BODY_EXCERPT_CHARS = 120;
+
+// Failure result with the length cap applied, so no caller can ever be handed a
+// multi-megabyte "reason" by an over-long branch further down.
+function unusableAdStatusBody(message) {
+  return {
+    json: null,
+    error: message.length > AD_STATUS_ERROR_MAX_CHARS ? message.slice(0, AD_STATUS_ERROR_MAX_CHARS) : message,
+  };
+}
+
+// Decides whether an AbuseDesk status response body is USABLE, from the body
+// alone. The HTTP status code is deliberately ignored. Do not "fix" this back
+// into an `if (!response.ok) throw` guard — that guard IS the bug.
+//
+// These endpoints sit behind a gunicorn reverse proxy that stamps 401 on any
+// response where the browser session looks stale (`Expired: 1`,
+// `Location: https://abusedesk.riva.co/login.html`), while the application
+// behind the proxy still runs to completion and returns the full, valid status
+// document. Captured live from the domain endpoint:
+//
+//   HTTP/1.1 401
+//   Server: gunicorn
+//   Expired: 1
+//   Location: https://abusedesk.riva.co/login.html
+//   {"data": [{"domain_name": "flockcloud.tech", "domain_status": "active",
+//              ..., "customer_status": "active", ...}]}
+//
+// So `response.ok === false` while the body carries the real answer, and the
+// old `if (!r.ok) throw` discarded it — every check reported a 401 failure and
+// no status was ever extracted. `response.ok` is therefore meaningless here
+// and carries no information this function should use.
+//
+// A genuine authentication failure is caught by the body instead, and it looks
+// nothing like a populated document: it fails to parse (an HTML login page), or
+// it parses to null/a primitive, or the extractors below find no status key in
+// it. All of those return `json: null` plus a non-empty error.
+//
+// Objects and arrays both count as usable — /api/v1/domains/status/ returns its
+// rows as an array — and the parsed payload is returned as-is, since the
+// extractors read it by reference. This never throws for any input: the body is
+// untrusted data off the network, and a parser that throws turns a readable
+// failure into a broken check.
+export function parseAdStatusBody(text) {
+  if (typeof text !== 'string') {
+    // typeof alone, never String(text): a hostile or throwing toString/valueOf
+    // must not be able to escape from a diagnostic path.
+    return unusableAdStatusBody('AbuseDesk status body must be a string, got ' + typeof text + '.');
+  }
+  if (text.trim() === '') {
+    return unusableAdStatusBody('AbuseDesk status body was empty.');
+  }
+
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch (_) {
+    // The excerpt is truncated because this string is surfaced to users and
+    // logs; a large error or login page must never ride along in full.
+    const excerpt = text.length > AD_STATUS_BODY_EXCERPT_CHARS
+      ? text.slice(0, AD_STATUS_BODY_EXCERPT_CHARS) + '...'
+      : text;
+    return unusableAdStatusBody('AbuseDesk status body is not JSON: ' + excerpt);
+  }
+
+  if (json === null) {
+    return unusableAdStatusBody('AbuseDesk status body parsed to JSON null, not an object or array.');
+  }
+  if (typeof json !== 'object') {
+    return unusableAdStatusBody('AbuseDesk status body parsed to a JSON ' + typeof json + ', not an object or array.');
+  }
+  return { json, error: '' };
+}
+
 // Reads a status off an already-parsed AbuseDesk payload. Only non-blank
 // strings count. Where the status sits inside that payload is decided by
 // readAdStatusFromPayload below, which unwraps the data/result envelopes.
