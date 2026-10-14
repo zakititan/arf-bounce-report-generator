@@ -410,6 +410,7 @@
           window.postMessage({
             type: 'REPORT_GENERATOR_STATUS_CHECK_RESULT',
             requestId: checkData.requestId,
+            success: payload !== null,
             customerStatus: payload ? payload.customerStatus : '',
             domainStatus: payload ? payload.domainStatus : '',
             customerUrl: payload ? payload.customerUrl : '',

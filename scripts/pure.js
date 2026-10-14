@@ -136,6 +136,7 @@ export function validateExtensionResult(message) {
     const isSafe = (key) => !message[key] ||
       typeof message[key] === 'string' || typeof message[key] === 'object';
     return typeof message.requestId === 'string' &&
+      typeof message.success === 'boolean' &&
       isSafe('customerStatus') && isSafe('domainStatus') &&
       isSafe('customerUrl') && isSafe('domainUrl') &&
       isSafe('customerRaw') && isSafe('domainRaw') &&
