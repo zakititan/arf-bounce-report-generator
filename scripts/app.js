@@ -15,7 +15,7 @@
 
 import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx,
          fetchLaravelCheck, fetchXmlrpcCheck, fetchWordPressCheck } from './api.js';
-import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, matchesRequest,   consumePendingRequest, registerPendingRequest, screenshotAcceptCount, isAcceptableScreenshotSize, MAX_SCREENSHOT_BYTES, createUnsuspendRequestId, createRequestId, createRequestContextKey, isAllowedWebAppOrigin, validateExtensionResult, validateUnsuspendOutcome, validateAccountIdentifier, parseAccountList, isSafeJiraUrl } from './pure.js';
+import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, matchesRequest,   consumePendingRequest, registerPendingRequest, screenshotAcceptCount, isAcceptableScreenshotSize, MAX_SCREENSHOT_BYTES, createUnsuspendRequestId, createRequestId, createRequestContextKey, isAllowedWebAppOrigin, validateExtensionResult, validateUnsuspendOutcome, validateAccountIdentifier, parseAccountList, isSafeJiraUrl, selectRecheckAccounts, shouldShowRecheckButton } from './pure.js';
 import { buildUnsuspendAccounts, cleanSheetReason, getSheetReportType, getDirectSheetReportType, parseJiraSummaryAccounts, truncateSheetText } from './report-actions.js';
 import {
   showToast, showToastLink, initThemeToggle,
@@ -355,7 +355,26 @@ window.addEventListener('message', (e) => {
 // ── Unsuspension confirmation (verdicts relayed from Abuse Desk tabs) ──
 let _unsuspendConfirm = null;
 const UNSUSPEND_HARD_TIMEOUT_MS = 90_000;
-const _lastFailedAccounts = {};
+// Per-panel snapshot of the last run's accounts + verdicts, so Recheck can
+// re-query whatever did not confirm.
+const _lastRunVerdicts = {};
+
+function setRecheckButtonState(prefix, results, disabled) {
+  const btn = document.getElementById(prefix + '-recheck-status');
+  if (!btn) return;
+  if (disabled) {
+    btn.disabled = true;
+    if (!btn.dataset.label) btn.dataset.label = btn.textContent;
+    btn.textContent = 'Checking…';
+    return;
+  }
+  btn.disabled = false;
+  if (btn.dataset.label) {
+    btn.textContent = btn.dataset.label;
+    delete btn.dataset.label;
+  }
+  btn.hidden = !shouldShowRecheckButton(results);
+}
 
 function finishUnsuspendTracking() {
   const session = _unsuspendConfirm;
@@ -367,6 +386,16 @@ function finishUnsuspendTracking() {
   // the run completes — verdicts ignored by design, failures only warn.
   if (session.panel === 'direct') markDirectJiraDone(session.accounts);
   const r = completeUnsuspendResults(session.accounts, session.results);
+  // Recheck is a POST-RUN action, so its snapshot can only be taken here, once
+  // the run's final verdicts — including accounts that never answered — are
+  // known. This has to happen before every early return below.
+  //
+  // When this was missing, _lastRunVerdicts stayed undefined forever:
+  // recheckStatus() bails on `if (!snapshot) return`, so its own write-back was
+  // unreachable dead code, and the Recheck button could never appear for anyone
+  // — on any panel, for any failed run.
+  _lastRunVerdicts[session.panel] = { accounts: session.accounts, results: r };
+  setRecheckButtonState(session.panel, r, false);
   // Legacy extensions never send verdicts; current runs mark those accounts
   // unverified so they remain visible and retryable.
   if (r.length === 0) {
@@ -379,16 +408,9 @@ function finishUnsuspendTracking() {
   const unk = r.filter(x => x.outcome !== 'confirmed' && x.outcome !== 'failed');
   const total = session.expected;
   if (bad.length === 0 && unk.length === 0 && ok.length > 0) {
-    _lastFailedAccounts[session.panel] = [];
-    const retryBtn = document.getElementById(session.panel + '-retry-unsuspend');
-    if (retryBtn) retryBtn.hidden = true;
     showToast('Unsuspension verified in Abuse Desk \u2713 (' + ok.length + '/' + total + ')', 'success', { durationMs: 7000 });
     return;
   }
-  const failed = [...bad, ...unk].map(x => x.account).filter(Boolean);
-  _lastFailedAccounts[session.panel] = failed;
-  const retryBtn = document.getElementById(session.panel + '-retry-unsuspend');
-  if (retryBtn) retryBtn.hidden = false;
   const parts = [];
   if (ok.length)  parts.push(ok.length + ' verified');
   if (bad.length) parts.push(bad.length + ' failed: ' + bad.map(x => x.account || '?').join(', '));
@@ -404,9 +426,7 @@ function beginUnsuspendTracking(expected, panel, accounts, requestId) {
   _activeUnsuspendRequestId = requestId;
   _unsuspendConfirm = { expected, panel, accounts, requestId, deadline, results: [], timer: setTimeout(finishUnsuspendTracking, UNSUSPEND_HARD_TIMEOUT_MS) };
   console.log('[Report→Unsuspend][' + requestId + '] tracking ' + expected + ' account(s)');
-  _lastFailedAccounts[panel] = [];
-  const retryBtn = document.getElementById(panel + '-retry-unsuspend');
-  if (retryBtn) retryBtn.hidden = true;
+  setRecheckButtonState(panel, [], false);
   renderUnsuspendVerdicts(panel, accounts, [], false);
 }
 
@@ -415,6 +435,12 @@ _cancelUnsuspendTracking = function (prefix) {
     clearTimeout(_unsuspendConfirm.timer);
     _activeUnsuspendRequestId = null;
     _unsuspendConfirm = null;
+    // An abandoned run has nothing to recheck. Leaving the previous run's
+    // snapshot behind would strand it: beginUnsuspendTracking already hid the
+    // button, so the stale targets could never be refreshed or cleared from the
+    // UI.
+    delete _lastRunVerdicts[prefix];
+    setRecheckButtonState(prefix, [], false);
     hideUnsuspendSection(prefix);
   }
 };
@@ -432,13 +458,81 @@ window.addEventListener('message', (e) => {
   if (shouldFinishUnsuspendTracking({ resultCount: _unsuspendConfirm.results.length, expected: _unsuspendConfirm.expected, now: Date.now(), deadline: _unsuspendConfirm.deadline })) finishUnsuspendTracking();
 });
 
-// ── Delegated click handler for retry-unsuspend buttons ──
+// ── Delegated click handler for Recheck buttons ──
 document.addEventListener('click', (e) => {
-  const btn = e.target.closest('.retry-unsuspend-btn');
-  if (!btn || btn.hidden) return;
-  const prefix = btn.id.replace('-retry-unsuspend', '');
-  retryUnsuspend(prefix);
+  const btn = e.target.closest('.recheck-status-btn');
+  if (!btn || btn.hidden || btn.disabled) return;
+  recheckStatus(btn.id.replace('-recheck-status', ''));
 });
+
+// Asks the extension for one account's current state. Resolves to the
+// outcome string, or '' when the extension could not answer.
+function requestRecheck(account, region) {
+  return new Promise((resolve) => {
+    const requestId = createRequestId('recheck');
+    const listener = (e) => {
+      if (e.source !== window || !isAllowedWebAppOrigin(e.origin) ||
+          !validateExtensionResult(e.data) ||
+          (e.data.type !== 'REPORT_GENERATOR_RECHECK_RESULT' && e.data.type !== 'REPORT_GENERATOR_ERROR') ||
+          !matchesRequest(requestId, e.data.requestId)) return;
+      window.removeEventListener('message', listener);
+      clearTimeout(timeout);
+      if (e.data.type === 'REPORT_GENERATOR_ERROR') {
+        resolve({ outcome: '', error: describeExtensionError(e.data.code) });
+        return;
+      }
+      resolve({ outcome: e.data.outcome || '', error: e.data.error || '' });
+    };
+    window.addEventListener('message', listener);
+    const timeout = setTimeout(() => {
+      window.removeEventListener('message', listener);
+      resolve({ outcome: '', error: 'Extension timed out — is it installed?' });
+    }, 15000);
+    window.postMessage({ type: 'REPORT_GENERATOR_RECHECK', panel: '', account, region, requestId }, '*');
+  });
+}
+
+// Re-queries only the accounts the last run could not confirm. Never
+// re-performs the unsuspension, so no JIRA comment or Abuse Desk automation
+// is repeated — this only refreshes what the status APIs say now.
+async function recheckStatus(prefix) {
+  const snapshot = _lastRunVerdicts[prefix];
+  if (!snapshot) return;
+  const targets = selectRecheckAccounts(snapshot.accounts, snapshot.results);
+  if (targets.length === 0) {
+    setRecheckButtonState(prefix, snapshot.results, false);
+    return;
+  }
+  setRecheckButtonState(prefix, snapshot.results, true);
+
+  const region = (state[prefix] || state.arf).region === 'eu' ? 'eu-central-1' : 'us-east-1';
+  const byAccount = new Map(snapshot.results.map(r => [String(r.account || '').trim(), r]));
+  const refreshed = snapshot.results.slice();
+  let verified = 0;
+  let stillOpen = 0;
+
+  for (const account of targets) {
+    const res = await requestRecheck(account, region);
+    const outcome = res.outcome || 'unknown';
+    const existing = byAccount.get(account);
+    const next = { ...(existing || {}), account, outcome };
+    const idx = refreshed.findIndex(r => String(r.account || '').trim() === account);
+    if (idx === -1) refreshed.push(next); else refreshed[idx] = next;
+    if (outcome === 'confirmed') verified++; else stillOpen++;
+  }
+
+  _lastRunVerdicts[prefix] = { accounts: snapshot.accounts, results: refreshed };
+  renderUnsuspendVerdicts(prefix, snapshot.accounts, refreshed, true);
+  setRecheckButtonState(prefix, refreshed, false);
+
+  if (stillOpen === 0) {
+    showToast('Recheck complete ✓ — all accounts now verified', 'success', { durationMs: 6000 });
+  } else if (verified > 0) {
+    showToast('Recheck: ' + verified + ' now verified, ' + stillOpen + ' still not verified', 'warning', { durationMs: 7000 });
+  } else {
+    showToast('Recheck: still not verified — check Abuse Desk manually', 'warning', { durationMs: 7000 });
+  }
+}
 
 // ── Clear all panels at once (single confirm, reuses each panel's clear path)
 function clearAllPanels() {
@@ -1608,6 +1702,8 @@ function clearPanel(prefix, fieldIds, clearFieldErrorIds, { clearScreenshots, af
   if (unsRow) unsRow.hidden = true;
   const verdicts = document.getElementById(prefix + '-unsuspend-verdicts');
   if (verdicts) verdicts.innerHTML = '';
+  delete _lastRunVerdicts[prefix];
+  setRecheckButtonState(prefix, [], false);
 
   const banner = document.getElementById(prefix + '-validation-banner');
   if (banner) banner.classList.remove('visible');
@@ -2045,52 +2141,6 @@ function unsuspendAccount(prefix, btn) {
   beginUnsuspendTracking(accounts.length, prefix, accounts, requestId);
 }
 
-function retryUnsuspend(prefix) {
-  const accounts = _lastFailedAccounts[prefix];
-  if (!accounts || accounts.length === 0) return;
-
-  const zdLink = prefix === 'direct'
-    ? (document.getElementById('direct-jira-link')?.value.trim() || '')
-    : (document.getElementById(prefix + '-zd-link')?.value.trim() || '');
-  const region = (state[prefix] || state.arf).region === 'eu' ? 'eu-central-1' : 'us-east-1';
-
-  let reason;
-  if (prefix === 'ipspike') {
-    reason = 'Password Changed';
-  } else {
-    reason = zdLink || 'no jira created';
-  }
-
-  const outputSection = document.getElementById(prefix + '-output-section');
-  const outputArea = outputSection?.querySelector('.output-area');
-  const reportText = (outputArea?.dataset.copyText) || document.getElementById(prefix + '-output-text')?.textContent || '';
-  const reportHtml = outputArea ? Array.from(outputArea.childNodes)
-    .filter(el => !el.classList?.contains('copy-btn-wrap'))
-    .map(el => el.outerHTML).join('') : '';
-
-  _lastUnsuspendPanel = prefix;
-  const requestId = createUnsuspendRequestId();
-  const reportId = _reportContextIds[prefix] || createUnsuspendRequestId();
-  window.postMessage({
-    type: 'REPORT_GENERATOR_UNSUSPEND_NO_JIRA',
-    accounts: accounts,
-    account: accounts[0],
-    region: region,
-    reason: reason,
-    text: reportText,
-    html: reportHtml,
-    panel: prefix,
-    zdLink: zdLink,
-    requestId: requestId,
-    reportId: reportId,
-  }, '*');
-
-  beginUnsuspendTracking(accounts.length, prefix, accounts, requestId);
-
-  const msg = 'Retrying unsuspension for ' + accounts.length + ' account' + (accounts.length > 1 ? 's' : '') + '...';
-  showToast(msg, 'info');
-}
-
 // ── Direct Unsuspend panel (no report — account + JIRA link only) ──────
 function validateDirectInputs() {
   const accounts = parseAccountList(document.getElementById('direct-account')?.value.trim() || '');
@@ -2309,6 +2359,8 @@ function clearDirect(opts) {
   if (unsRow) unsRow.hidden = true;
   const verdicts = document.getElementById('direct-unsuspend-verdicts');
   if (verdicts) verdicts.innerHTML = '';
+  delete _lastRunVerdicts.direct;
+  setRecheckButtonState('direct', [], false);
   state.direct.region = 'na';
   const chip = document.getElementById('direct-region-chip');
   if (chip) chip.hidden = true;

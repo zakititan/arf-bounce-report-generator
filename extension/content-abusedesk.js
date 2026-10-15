@@ -132,16 +132,46 @@
   //          └─ span.bu-badge.bu-badge-active → "active"   (lowercase)
   function readUserStatus() { return readBadgeStatus('user status'); }
 
-  // Plan B: the AD page renders the badge from this API — ask the service
-  // worker (which has host permission) to fetch it directly.
+  // The DOM badge stays authoritative, but it renders progressively — a first
+  // non-empty read can be a stale pre-save value. Require it to settle on the
+  // same value twice before trusting it.
+  var BADGE_SETTLE_TIMEOUT_MS = 10000;
+  var BADGE_SETTLE_GAP_MS = 800;
+  // A settled Suspended gets a short grace window before we call it a failure,
+  // so an eventually-consistent re-render can't produce a false negative.
+  var SUSPENDED_GRACE_TIMEOUT_MS = 5000;
+
+  function stableBadgeReadNow(timeoutMs) {
+    var h = adHelpers();
+    var read = h && typeof h.stableBadgeRead === 'function' ? h.stableBadgeRead : null;
+    if (!read) return Promise.resolve(readUserStatus());
+    return read(readUserStatus, { timeoutMs: timeoutMs, gapMs: BADGE_SETTLE_GAP_MS, consecutive: 2 })
+      .then(function (value) { return value || ''; }, function () { return ''; });
+  }
+
+  // Primary verification: ask the worker for status from the Abuse Desk APIs.
+  // The badge is only the fallback, so anything short of a positive API
+  // confirmation resolves 'unconfirmed' and the caller loads the badge path.
+  // region rides along because both endpoints are region-scoped.
   function fetchStatusViaApi(account) {
     return new Promise(function (resolve) {
+      var region = '';
+      try { region = new URLSearchParams(window.location.search).get('region') || ''; } catch (e) { region = ''; }
+      function fail(error) {
+        resolve({ ok: false, outcome: '', error: error });
+      }
       try {
-        chrome.runtime.sendMessage({ action: 'ad-user-status', data: { account: account } }, function (resp) {
-          if (chrome.runtime.lastError) { void chrome.runtime.lastError; resolve(''); return; }
-          resolve(resp && resp.success ? (resp.status || '') : '');
+        chrome.runtime.sendMessage({ action: 'ad-status', data: { account: account, region: region } }, function (resp) {
+          if (chrome.runtime.lastError) { void chrome.runtime.lastError; fail(chrome.runtime.lastError.message); return; }
+          if (!resp || resp.success !== true) { fail((resp && resp.error) || 'No response'); return; }
+          resolve({
+            ok: true,
+            customerStatus: resp.customerStatus || '',
+            domainStatus: resp.domainStatus || '',
+            outcome: resp.outcome || ''
+          });
         });
-      } catch (e) { resolve(''); }
+      } catch (e) { fail(e.message); }
     });
   }
 
@@ -208,25 +238,27 @@
     });
   }
 
-  // Reload the page and read the USER STATUS badge — the only trustworthy
-  // signal that the unsuspension actually took effect. Email-only: domain
-  // entities never reach here (they report unverified right after Save).
-  function isDomainEntity(account) {
-    return account && account.indexOf('@') === -1;
-  }
-
+  // Reload the page and read the USER STATUS badge. This is the FALLBACK path:
+  // the status APIs are tried first and only reach here when they could not
+  // confirm, which is also why the reload is required — the badge does not
+  // live-update.
   async function verifyByReload(account, attempt) {
-    var status = await waitFor(readUserStatus, 10000);
-    if (!status) status = await fetchStatusViaApi(account);
-    var outcome;
+    var badge = await stableBadgeReadNow(BADGE_SETTLE_TIMEOUT_MS);
 
-    if (status === 'Active') {
+    if (badge === 'Suspended') {
+      log('Badge settled on Suspended for ' + account + ' — re-polling ' + SUSPENDED_GRACE_TIMEOUT_MS + 'ms before failing');
+      var grace = await stableBadgeReadNow(SUSPENDED_GRACE_TIMEOUT_MS);
+      badge = (grace && grace !== 'Suspended') ? grace : 'Suspended';
+    }
+
+    var outcome;
+    if (badge === 'Active') {
       outcome = 'confirmed';
       showToast('\u2705 Unsuspension verified for ' + account + ' — user status: Active');
-    } else if (status === 'Suspended') {
+    } else if (badge === 'Suspended') {
       outcome = 'failed';
       showToast('\u274C Unsuspension failed for ' + account + ' — user status still Suspended');
-    } else if (!status && (!attempt || attempt < 2)) {
+    } else if (!attempt || attempt < 2) {
       log('Could not read status for ' + account + ' on attempt ' + (attempt || 1) + ' — retrying');
       setVerifyEntry(account, 2, function () {
         showToast('Retrying verification for ' + account + '…');
@@ -238,8 +270,26 @@
       showToast('\u26A0\uFE0F Could not read user status for ' + account + ' — please check manually');
     }
 
-    log('Verification for ' + account + ': ' + outcome + (status ? ' (customer:' + status + ')' : ''));
+    log('Badge verification for ' + account + ': ' + outcome + (badge ? ' (badge:' + badge + ')' : ''));
     reportDone({ outcome: outcome, account: account });
+  }
+
+  // Status-API verification (primary). Returns 'confirmed' only on a positive
+  // reading; every other case — including an API that still reports Suspended
+  // because the backend has not propagated yet — yields 'unconfirmed' so the
+  // caller falls back to the badge, which is authoritative after a reload.
+  async function verifyViaApi(account) {
+    var res = await fetchStatusViaApi(account);
+    if (res.outcome === 'confirmed') {
+      var detail = res.domainStatus
+        ? 'customer: Active, domain: Active'
+        : 'user status: Active';
+      showToast('\u2705 Unsuspension verified for ' + account + ' — ' + detail);
+      log('API verification for ' + account + ': confirmed (customer:' + (res.customerStatus || '?') + ' domain:' + (res.domainStatus || '-') + ')');
+      return 'confirmed';
+    }
+    log('API verification for ' + account + ' could not confirm (' + (res.customerStatus || 'no customer status') + ' / ' + (res.domainStatus || 'no domain status') + (res.error ? ', ' + res.error : '') + ') — falling back to badge');
+    return 'unconfirmed';
   }
 
   async function run() {
@@ -257,16 +307,6 @@
       var vTs = vEntry && typeof vEntry.ts === 'number' ? vEntry.ts : null;
       var vAttempt = vEntry && typeof vEntry.attempt === 'number' ? vEntry.attempt : 1;
       if (typeof vTs === 'number' && (Date.now() - vTs) <= 90000) {
-        // Stale markers from pre-removal runs: domains are no longer
-        // verified — consume the marker and report unverified instead.
-        var hDomMode = adHelpers();
-        var domainMode = (hDomMode && hDomMode.isDomainEntity) ? hDomMode.isDomainEntity(account) : isDomainEntity(account);
-        if (domainMode) {
-          consumeVerifyEntry(account, function () {});
-          log('Skipping stale verification marker for domain ' + account);
-          reportDone({ outcome: 'unverified', account: account, cause: 'domain verification skipped — check manually' });
-          return;
-        }
         if (vAttempt >= 2) consumeVerifyEntry(account, function () {});
         log('Verification mode for ' + account + ' (attempt ' + vAttempt + ')');
         await sleep(500); // let the results table finish rendering
@@ -356,20 +396,18 @@
         return;
       }
 
-      // Verification (USER STATUS badge) is email-only. Domain entities
-      // report unverified right after a clean Save — no reload, no fresh
-      // tab. Check domain status manually in Abuse Desk.
-      var hDom = adHelpers();
-      var domainCase = (hDom && hDom.isDomainEntity) ? hDom.isDomainEntity(account) : isDomainEntity(account);
-      if (domainCase) {
-        showToast('\u2705 Save accepted for ' + account + ' — domain status is not auto-checked, please verify manually');
-        log('Skipping verification for domain ' + account + ' (email-only check)');
-        reportDone({ outcome: 'unverified', account: account, cause: 'domain verification skipped — check manually' });
+      // Verification is API-first for both entity types: the status APIs are
+      // read first and need no reload, so a confirmation short-circuits the
+      // page load. Anything less than a positive reading falls back to the
+      // badge, which is authoritative only after a reload.
+      var apiOutcome = await verifyViaApi(account);
+      if (apiOutcome === 'confirmed') {
+        reportDone({ outcome: 'confirmed', account: account });
         return;
       }
       setVerifyEntry(account, 1, function () {
-        showToast('Save accepted — reloading to verify user status…');
-        log('Reloading to verify USER STATUS for ' + account);
+        showToast('Save accepted — reloading to verify status on the page…');
+        log('Reloading to verify status badge for ' + account);
         setTimeout(function () { location.reload(); }, 800);
       });
     });

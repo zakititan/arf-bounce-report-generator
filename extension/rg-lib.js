@@ -17,6 +17,19 @@ export function buildAbuseDeskUrl(account, region, requestId) {
     (requestId ? '&rgRequestId=' + encodeURIComponent(requestId) : '');
 }
 
+// AbuseDesk status API URL for either entity type. `kind` is coerced rather
+// than validated: anything that is not 'domain' falls back to the user
+// endpoint so a mislabelled lookup still returns a usable reading instead of
+// throwing. Accounts are validated upstream, so a non-string here is a
+// programming error, while an empty one is left for the caller to reject.
+export function buildAdStatusUrl(kind, account, region) {
+  if (typeof account !== 'string') throw new TypeError('account must be a string');
+  const scope = kind === 'domain' ? 'domains/status/?domain=' : 'users/status/?email=';
+  const effectiveRegion = typeof region === 'string' && region ? region : 'us-east-1';
+  return 'https://api-abusedesk.ops.titan.email/api/v1/' + scope + encodeURIComponent(account) +
+    '&region=' + encodeURIComponent(effectiveRegion);
+}
+
 export function createPerAccountUnsuspendReasonKey(requestId, account) {
   return createUnsuspendReasonKey(requestId) + ':' + String(account == null ? '' : account).trim().toLowerCase();
 }
@@ -148,6 +161,9 @@ export function validateWebAppMessage(message) {
   if (message.type === 'REPORT_GENERATOR_JIRA_DONE') {
     return hasRequestId && hasStrings(['panel', 'jiraUrl', 'accounts']);
   }
+  if (message.type === 'REPORT_GENERATOR_RECHECK') {
+    return hasRequestId && hasStrings(['panel', 'account', 'region']);
+  }
   return false;
 }
 
@@ -181,6 +197,11 @@ export function validateExtensionResult(message) {
     return (!message.issueKey || typeof message.issueKey === 'string') &&
       (!message.done || typeof message.done === 'boolean') &&
       (!message.commented || typeof message.commented === 'boolean') &&
+      (!message.error || typeof message.error === 'string');
+  }
+  if (message.type === 'REPORT_GENERATOR_RECHECK_RESULT') {
+    return (!message.account || typeof message.account === 'string') &&
+      (!message.outcome || typeof message.outcome === 'string') &&
       (!message.error || typeof message.error === 'string');
   }
   if (message.type === 'PARTNER_PANEL_RESULT') {
@@ -436,4 +457,182 @@ export function buildBulkSummary(accounts) {
     }
   }
   return out.join(', ');
+}
+
+// Hard ceiling on every error string this module returns, so a failure reason
+// can always be shown in the panel or written to a log without further work.
+const AD_STATUS_ERROR_MAX_CHARS = 200;
+const AD_STATUS_BODY_EXCERPT_CHARS = 120;
+
+// Failure result with the length cap applied, so no caller can ever be handed a
+// multi-megabyte "reason" by an over-long branch further down.
+function unusableAdStatusBody(message) {
+  return {
+    json: null,
+    error: message.length > AD_STATUS_ERROR_MAX_CHARS ? message.slice(0, AD_STATUS_ERROR_MAX_CHARS) : message,
+  };
+}
+
+// Decides whether an AbuseDesk status response body is USABLE, from the body
+// alone. The HTTP status code is deliberately ignored. Do not "fix" this back
+// into an `if (!response.ok) throw` guard — that guard IS the bug.
+//
+// These endpoints sit behind a gunicorn reverse proxy that stamps 401 on any
+// response where the browser session looks stale (`Expired: 1`,
+// `Location: https://abusedesk.riva.co/login.html`), while the application
+// behind the proxy still runs to completion and returns the full, valid status
+// document. Captured live from the domain endpoint:
+//
+//   HTTP/1.1 401
+//   Server: gunicorn
+//   Expired: 1
+//   Location: https://abusedesk.riva.co/login.html
+//   {"data": [{"domain_name": "flockcloud.tech", "domain_status": "active",
+//              ..., "customer_status": "active", ...}]}
+//
+// So `response.ok === false` while the body carries the real answer, and the
+// old `if (!r.ok) throw` discarded it — every check reported a 401 failure and
+// no status was ever extracted. `response.ok` is therefore meaningless here
+// and carries no information this function should use.
+//
+// A genuine authentication failure is caught by the body instead, and it looks
+// nothing like a populated document: it fails to parse (an HTML login page), or
+// it parses to null/a primitive, or the extractors below find no status key in
+// it. All of those return `json: null` plus a non-empty error.
+//
+// Objects and arrays both count as usable — /api/v1/domains/status/ returns its
+// rows as an array — and the parsed payload is returned as-is, since the
+// extractors read it by reference. This never throws for any input: the body is
+// untrusted data off the network, and a parser that throws turns a readable
+// failure into a broken check.
+export function parseAdStatusBody(text) {
+  if (typeof text !== 'string') {
+    // typeof alone, never String(text): a hostile or throwing toString/valueOf
+    // must not be able to escape from a diagnostic path.
+    return unusableAdStatusBody('AbuseDesk status body must be a string, got ' + typeof text + '.');
+  }
+  if (text.trim() === '') {
+    return unusableAdStatusBody('AbuseDesk status body was empty.');
+  }
+
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch (_) {
+    // The excerpt is truncated because this string is surfaced to users and
+    // logs; a large error or login page must never ride along in full.
+    const excerpt = text.length > AD_STATUS_BODY_EXCERPT_CHARS
+      ? text.slice(0, AD_STATUS_BODY_EXCERPT_CHARS) + '...'
+      : text;
+    return unusableAdStatusBody('AbuseDesk status body is not JSON: ' + excerpt);
+  }
+
+  if (json === null) {
+    return unusableAdStatusBody('AbuseDesk status body parsed to JSON null, not an object or array.');
+  }
+  if (typeof json !== 'object') {
+    return unusableAdStatusBody('AbuseDesk status body parsed to a JSON ' + typeof json + ', not an object or array.');
+  }
+  return { json, error: '' };
+}
+
+// Reads a status off an already-parsed AbuseDesk payload. Only non-blank
+// strings count. Where the status sits inside that payload is decided by
+// readAdStatusFromPayload below, which unwraps the data/result envelopes.
+function readStatusString(holder, key) {
+  if (!holder || typeof holder !== 'object') return '';
+  const value = holder[key];
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+// Shared candidate walk for the three AbuseDesk status extractors below.
+//
+// The endpoints do not agree on how they wrap the record, and the difference is
+// not cosmetic: the user endpoint returns `data` as a single object, while
+// /api/v1/domains/status/ returns `data` as an ARRAY of rows. Reading
+// `json.data.domain_status` on an array is always undefined, which is why every
+// domain status used to extract as '' even though the API had sent it. So when
+// `data` is an array we address its first element — the endpoint returns a
+// single row for the one domain asked about, and a later row is a different
+// record, not a better answer.
+//
+// Precedence, highest first: top-level snake, top-level camel, data snake,
+// data camel, result snake, result camel. Top level still wins over anything
+// nested, and the whole walk is guarded so a hostile shape (or a throwing
+// getter) degrades to '' instead of breaking the caller.
+function readAdStatusFromPayload(json, snakeKey, camelKey) {
+  try {
+    if (!json || typeof json !== 'object') return '';
+    const data = json.data;
+    const dataFirst = Array.isArray(data) ? data[0] : data;
+    const result = json.result;
+    const candidates = [
+      [json, snakeKey],
+      [json, camelKey],
+      [dataFirst, snakeKey],
+      [dataFirst, camelKey],
+      [result, snakeKey],
+      [result, camelKey],
+    ];
+    for (const [holder, key] of candidates) {
+      const value = readStatusString(holder, key);
+      if (value) return value;
+    }
+    return '';
+  } catch (_) {
+    return '';
+  }
+}
+
+// Email-entity status from the user endpoint's `user_status`.
+export function extractAdUserStatus(json) {
+  return readAdStatusFromPayload(json, 'user_status', 'userStatus');
+}
+
+// Domain status from the domain endpoint's `domain_status`.
+export function extractAdDomainStatus(json) {
+  return readAdStatusFromPayload(json, 'domain_status', 'domainStatus');
+}
+
+// Owner status for the domain. This is NOT the same key as the user
+// endpoint's `user_status`: the domain row carries its own `customer_status`
+// describing the domain owner's customer entity, and that row is the only place
+// the domain endpoint ever reports it.
+export function extractAdCustomerStatus(json) {
+  return readAdStatusFromPayload(json, 'customer_status', 'customerStatus');
+}
+
+// Single status signal → 'active' | 'suspended' | 'neither'. Reuses
+// matchesActiveStatus so 'inactive' (and friends) never count as active here.
+function classifyStatusSignal(value) {
+  if (matchesActiveStatus(value)) return 'active';
+  return typeof value === 'string' && value.trim().toLowerCase().indexOf('suspend') !== -1
+    ? 'suspended'
+    : 'neither';
+}
+
+// Cross-checks the AbuseDesk DOM badge against the status API string. An
+// active badge wins outright; a suspended badge is only overturned by an
+// explicitly active API reading; anything else is unknown.
+export function resolveVerifiedOutcome(input = {}) {
+  if (!input || typeof input !== 'object') return 'unknown';
+  const badge = classifyStatusSignal(input.badgeStatus);
+  const api = classifyStatusSignal(input.apiStatus);
+  if (badge === 'active') return 'confirmed';
+  if (badge === 'suspended') return api === 'active' ? 'confirmed' : 'failed';
+  if (api === 'active') return 'confirmed';
+  if (api === 'suspended') return 'failed';
+  return 'unknown';
+}
+
+// A domain is only healthy when BOTH the customer record and the domain
+// record read Active, so any explicit suspension on either side is a
+// definitive failure — it outranks the unknown an unreadable counterpart would
+// otherwise produce. Anything short of both-active is unknown, never a guess.
+export function resolveDomainOutcome(input = {}) {
+  if (!input || typeof input !== 'object') return 'unknown';
+  const customer = classifyStatusSignal(input.customerStatus);
+  const domain = classifyStatusSignal(input.domainStatus);
+  if (customer === 'suspended' || domain === 'suspended') return 'failed';
+  return customer === 'active' && domain === 'active' ? 'confirmed' : 'unknown';
 }

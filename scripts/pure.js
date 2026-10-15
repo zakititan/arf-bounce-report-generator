@@ -127,6 +127,11 @@ export function validateExtensionResult(message) {
       (!message.commented || typeof message.commented === 'boolean') &&
       (!message.error || typeof message.error === 'string');
   }
+  if (message.type === 'REPORT_GENERATOR_RECHECK_RESULT') {
+    return (!message.account || typeof message.account === 'string') &&
+      (!message.outcome || typeof message.outcome === 'string') &&
+      (!message.error || typeof message.error === 'string');
+  }
   return false;
 }
 
@@ -170,6 +175,33 @@ export function completeUnsuspendResults(accounts, results) {
 
 export function matchesUnsuspendRequest(activeRequestId, responseRequestId) {
   return !activeRequestId || responseRequestId === activeRequestId;
+}
+
+// Recheck re-queries only what the last run could not confirm, so anything
+// that did not report (or reported blank) is unknown rather than confirmed.
+export function selectRecheckAccounts(accounts, results) {
+  if (!Array.isArray(accounts) || !Array.isArray(results)) return [];
+  const confirmed = new Set();
+  for (const result of results) {
+    if (!result || typeof result.account !== 'string') continue;
+    const account = result.account.trim();
+    if (account && result.outcome === 'confirmed') confirmed.add(account);
+  }
+  const selected = [];
+  const seen = new Set();
+  for (const account of accounts) {
+    if (typeof account !== 'string') continue;
+    const trimmed = account.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    if (!confirmed.has(trimmed)) selected.push(trimmed);
+  }
+  return selected;
+}
+
+export function shouldShowRecheckButton(results) {
+  if (!Array.isArray(results) || results.length === 0) return false;
+  return results.some(result => !result || result.outcome !== 'confirmed');
 }
 
 // Legacy result messages had no ID. They remain usable only before a new

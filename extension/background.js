@@ -1,4 +1,4 @@
-import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList, createUnsuspendReasonKey, createPerAccountUnsuspendReasonKey, persistUnsuspendReason, isSafeJiraUrl, isSafeGoogleSheetsUrl, isSafeAppsScriptUrl, createPendingMap, capInlineImages, isValidJiraCreatePayload, discoverDoneTransitionId, buildBulkSummary, findStaleStorageKeys, buildAbuseDeskUrl, extractJiraIssueKey } from './rg-lib.js';
+import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList, createUnsuspendReasonKey, createPerAccountUnsuspendReasonKey, persistUnsuspendReason, isSafeJiraUrl, isSafeGoogleSheetsUrl, isSafeAppsScriptUrl, createPendingMap, capInlineImages, isValidJiraCreatePayload, discoverDoneTransitionId, buildBulkSummary, findStaleStorageKeys, buildAbuseDeskUrl, extractJiraIssueKey, extractAdUserStatus, extractAdDomainStatus, resolveVerifiedOutcome, resolveDomainOutcome, buildAdStatusUrl, extractAdCustomerStatus, parseAdStatusBody } from './rg-lib.js';
 import { fetchWithTimeout } from './timeout.js';
 
 const EXPIRY_MS = 10 * 60 * 1000;
@@ -198,6 +198,53 @@ function forwardUnsuspendOutcome(data) {
   });
 }
 
+// Fetches one AbuseDesk status endpoint and turns it into a verdict.
+//
+// The HTTP status code is deliberately ignored here. These endpoints sit behind
+// a gunicorn proxy that stamps 401 on any response whose browser session looks
+// stale (headers `Expired: 1`, `Location: .../login.html`), yet the application
+// behind the proxy still runs to completion and returns the COMPLETE status
+// document in the body:
+//
+//   HTTP/1.1 401
+//   {"data": [{"domain_name": "flockcloud.tech", "domain_status": "active",
+//              "customer_status": "active", ...}]}
+//
+// Guarding on `response.ok` therefore discarded the only reliable reading and
+// reported a 401 failure on every single check, including perfectly healthy
+// accounts. Do not reintroduce that guard.
+//
+// A genuine authentication failure is still caught, by the body: it arrives as
+// an HTML login page or some payload with no status key in it, which
+// parseAdStatusBody rejects and which the extractors read as '' — both of which
+// resolve to 'unknown' and hand off to the badge fallback rather than inventing
+// a verdict.
+function fetchAdStatusReading(kind, account, region) {
+  const url = buildAdStatusUrl(kind, account, region);
+  return fetchWithTimeout(url, { credentials: 'include' })
+    .then(r => r.text().then(text => ({ status: r.status, text })))
+    .then(({ status, text }) => {
+      const parsed = parseAdStatusBody(text);
+      if (!parsed.json) {
+        const err = new Error('AD ' + kind + ' status unreadable (HTTP ' + status + '): ' + parsed.error);
+        err.body = text || ''; // raw response kept on the error for debugging
+        throw err;
+      }
+      // A domain payload carries BOTH domain_status and customer_status, so one
+      // call answers both. (Asking the user endpoint with a domain returns 401.)
+      // An email needs the user endpoint, which carries user_status.
+      const isDomain = kind === 'domain';
+      const customerStatus = isDomain
+        ? extractAdCustomerStatus(parsed.json)
+        : extractAdUserStatus(parsed.json);
+      const domainStatus = isDomain ? extractAdDomainStatus(parsed.json) : '';
+      const outcome = isDomain
+        ? resolveDomainOutcome({ customerStatus, domainStatus })
+        : resolveVerifiedOutcome({ badgeStatus: '', apiStatus: customerStatus });
+      return { url, status, json: parsed.json, customerStatus, domainStatus, outcome };
+    });
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'store-report') {
     const reportData = {
@@ -348,19 +395,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message.action === 'ad-user-status') {
-    // Fallback verification path: the Abuse Desk page renders its status
-    // badge from this API; fetch it directly (host permission granted).
+  if (message.action === 'ad-status') {
+    // Primary verification path: read status straight from the Abuse Desk
+    // status APIs (host permission granted) instead of scraping the DOM badge.
+    // The badge remains the fallback in the content script, so an unreadable
+    // response here just reports 'unknown' and lets the badge take over.
     const account = message.data && message.data.account;
     if (!areValidAccountList(account)) { sendResponse({ success: false, error: 'Invalid account or email domain' }); return true; }
-    fetchWithTimeout('https://api-abusedesk.ops.titan.email/api/v1/users/status/?email=' + encodeURIComponent(account), { credentials: 'include' })
-      .then(r => r.json())
-      .then(json => {
-        const flat = JSON.stringify(json || {});
-        const m = flat.match(/"user_?status"\s*:\s*"([^"]+)"/i);
-        const status = m ? m[1] : '';
-        sendResponse({ success: !!status, status });
-      })
+    const region = typeof message.data.region === 'string' ? message.data.region : '';
+    const kind = account.indexOf('@') === -1 ? 'domain' : 'user';
+
+    fetchAdStatusReading(kind, account, region)
+      .then(reading => sendResponse({
+        success: true,
+        customerStatus: reading.customerStatus,
+        domainStatus: reading.domainStatus,
+        outcome: reading.outcome,
+      }))
       .catch(e => sendResponse({ success: false, error: e.message }));
     return true;
   }

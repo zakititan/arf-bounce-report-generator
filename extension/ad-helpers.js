@@ -84,6 +84,56 @@
     return typeof account === 'string' && account.length > 0 && account.indexOf('@') === -1;
   }
 
+  // The Abuse Desk renders its results table progressively, so the first
+  // non-empty badge read can be a stale pre-save value. This polls until the
+  // same non-empty value shows up `consecutive` times in a row, and resolves
+  // '' if the budget runs out before the badge settles.
+  async function stableBadgeRead(read, options) {
+    if (typeof read !== 'function') return '';
+
+    var opts = options || {};
+    var consecutive = typeof opts.consecutive === 'number' && opts.consecutive > 0
+      ? Math.floor(opts.consecutive)
+      : 2;
+    var gapMs = typeof opts.gapMs === 'number' && opts.gapMs > 0 ? opts.gapMs : 800;
+    var timeoutMs = typeof opts.timeoutMs === 'number' && opts.timeoutMs >= 0 ? opts.timeoutMs : 10000;
+    var now = typeof opts.now === 'function' ? opts.now : function () { return Date.now(); };
+    var sleep = typeof opts.sleep === 'function'
+      ? opts.sleep
+      : function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+
+    // Hard stop so a frozen/injected clock can never spin forever.
+    var maxIterations = Math.max(1, Math.ceil(timeoutMs / gapMs) + 1);
+
+    var start = now();
+    var pending = '';
+    var streak = 0;
+    var iterations = 0;
+
+    while (iterations < maxIterations) {
+      if (now() - start > timeoutMs) break;
+      iterations += 1;
+
+      var raw = read();
+      var value = raw == null ? '' : String(raw);
+
+      if (!value) {
+        pending = '';
+        streak = 0;
+      } else if (value === pending) {
+        streak += 1;
+        if (streak >= consecutive) return value;
+      } else {
+        pending = value;
+        streak = 1;
+      }
+
+      await sleep(gapMs);
+    }
+
+    return '';
+  }
+
   var api = {
     REASON_TTL_MS: REASON_TTL_MS,
     ERROR_POLL_TIMEOUT_MS: ERROR_POLL_TIMEOUT_MS,
@@ -102,6 +152,7 @@
     isVisibleErrorRecord: isVisibleErrorRecord,
     selectPreferredTextarea: selectPreferredTextarea,
     isDomainEntity: isDomainEntity,
+    stableBadgeRead: stableBadgeRead,
   };
 
   if (typeof globalThis !== 'undefined') {

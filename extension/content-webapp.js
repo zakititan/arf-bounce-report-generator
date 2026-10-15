@@ -82,7 +82,8 @@
         data.type === 'REPORT_GENERATOR_LOG_SHEET_RESULT' || data.type === 'PARTNER_PANEL_RESULT' ||
         data.type === 'REPORT_GENERATOR_UNSUSPEND_OUTCOME' ||
         data.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT' ||
-        data.type === 'REPORT_GENERATOR_JIRA_DONE_RESULT') return null;
+        data.type === 'REPORT_GENERATOR_JIRA_DONE_RESULT' ||
+        data.type === 'REPORT_GENERATOR_RECHECK_RESULT') return null;
     if (!storageAvailable) return helperBuildError('STORAGE_UNAVAILABLE', helperExtractRequestId(data));
     var known = data.type === 'REPORT_GENERATOR_JIRA' ||
       data.type === 'REPORT_GENERATOR_UNSUSPEND' ||
@@ -90,6 +91,7 @@
       data.type === 'REPORT_GENERATOR_LOG_SHEET' ||
       data.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION' ||
       data.type === 'REPORT_GENERATOR_JIRA_DONE' ||
+      data.type === 'REPORT_GENERATOR_RECHECK' ||
       data.type === 'REPORT_GENERATOR_PARTNER_PANEL_LOOKUP';
     if (known) {
       return messageValid(data) ? null : helperBuildError('INVALID_MESSAGE', helperExtractRequestId(data));
@@ -181,6 +183,10 @@
     if (data.type === 'REPORT_GENERATOR_JIRA_DONE') {
       return requestId && typeof data.panel === 'string' &&
         typeof data.jiraUrl === 'string' && typeof data.accounts === 'string';
+    }
+    if (data.type === 'REPORT_GENERATOR_RECHECK') {
+      return requestId && typeof data.panel === 'string' &&
+        typeof data.account === 'string' && typeof data.region === 'string';
     }
     return false;
   }
@@ -364,6 +370,33 @@
             return;
           }
           window.postMessage({ type: 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT', requestId: descData.requestId, success: descResponse.success === true, issueKey: descResponse.issueKey || null, description: typeof descResponse.description === 'string' ? descResponse.description : null, summary: typeof descResponse.summary === 'string' ? descResponse.summary : null, error: descResponse.error || null }, replyOrigin);
+        }
+      );
+    }
+
+    if (event.data.type === 'REPORT_GENERATOR_RECHECK') {
+      // Re-verifies one account's current state without re-running the
+      // unsuspension automation — a straight status-API read.
+      var recheckData = event.data;
+      chrome.runtime.sendMessage(
+        { action: 'ad-status', data: { account: recheckData.account, region: recheckData.region } },
+        function (recheckResponse) {
+          var ok = !!(recheckResponse && recheckResponse.success === true && recheckResponse.outcome === 'confirmed');
+          window.postMessage({
+            type: 'REPORT_GENERATOR_RECHECK_RESULT',
+            requestId: recheckData.requestId,
+            // Not optional. validateExtensionResult() applies a shared
+            // `typeof success === 'boolean'` gate to every reply BEFORE it
+            // reaches the RECHECK_RESULT branch, so a payload without this
+            // flag is discarded outright: requestRecheck()'s listener never
+            // resolves, the UI hangs for the full 15s timeout, and the user is
+            // then told to "check Abuse Desk manually" for what was purely a
+            // bridge-formatting fault.
+            success: !!(recheckResponse && recheckResponse.success === true),
+            account: recheckData.account,
+            outcome: ok ? 'confirmed' : (recheckResponse && recheckResponse.outcome) || 'unknown',
+            error: (recheckResponse && recheckResponse.error) || (chrome.runtime.lastError && chrome.runtime.lastError.message) || null,
+          }, replyOrigin);
         }
       );
     }
