@@ -195,22 +195,42 @@ export function classifyDomainCheck(check, data) {
 
   if (check === 'ad') {
     if (d.error) return { state: 'unknown', detail: d.error };
-    if (isSuspendedReading(d)) {
-      const which = d.userStatus && String(d.userStatus).toLowerCase().indexOf('suspend') !== -1
-        ? 'Email suspended'
-        : (d.domainStatus && String(d.domainStatus).toLowerCase().indexOf('suspend') !== -1
-            ? 'Domain suspended'
-            : 'Customer suspended');
-      return { state: 'suspended', detail: which };
-    }
-    const active = ['userStatus', 'domainStatus', 'customerStatus']
-      .some(key => typeof d[key] === 'string' && d[key].trim().toLowerCase() === 'active');
-    if (!active) return { state: 'unknown', detail: 'Abuse Desk did not report a status' };
     const parts = [];
     if (d.userStatus) parts.push('Email ' + d.userStatus);
     if (d.domainStatus) parts.push('Domain ' + d.domainStatus);
     if (d.customerStatus) parts.push('Customer ' + d.customerStatus);
-    return { state: 'active', detail: parts.join(' · ') || 'Active' };
+    const detail = parts.join(' · ') || 'No status returned';
+    // The outcome comes from the extension, which applies Abuse Desk's own
+    // rules (a domain needs the customer AND the domain record active; an
+    // email needs its own status active). Using it keeps this panel's verdict
+    // identical to what the unsuspension flow would decide. The raw readings
+    // are the fallback when no outcome was supplied.
+    const outcome = typeof d.outcome === 'string' ? d.outcome : '';
+    if (outcome === 'confirmed') return { state: 'active', detail };
+    if (outcome === 'failed') return { state: 'suspended', detail };
+    if (isSuspendedReading(d)) return { state: 'suspended', detail };
+    const active = ['userStatus', 'domainStatus', 'customerStatus']
+      .some(key => typeof d[key] === 'string' && d[key].trim().toLowerCase() === 'active');
+    if (!active) return { state: 'unknown', detail: 'Abuse Desk did not report a status' };
+    return { state: 'active', detail };
+  }
+
+  // The individual Abuse Desk readings, shown as their own fields. The badge
+  // carries the classification; the detail carries the raw value the API
+  // returned, which can differ from it (e.g. "inactive" classifies as unknown
+  // but is still worth showing verbatim).
+  if (check === 'ad-domain' || check === 'ad-customer' || check === 'ad-user') {
+    if (d.error) return { state: 'unknown', detail: d.error };
+    const key = check === 'ad-domain' ? 'domainStatus'
+      : check === 'ad-customer' ? 'customerStatus' : 'userStatus';
+    const raw = d[key];
+    if (typeof raw !== 'string' || !raw.trim()) {
+      return { state: 'unknown', detail: 'not returned' };
+    }
+    const norm = raw.trim().toLowerCase();
+    if (norm === 'active') return { state: 'active', detail: raw };
+    if (norm.indexOf('suspend') !== -1) return { state: 'suspended', detail: raw };
+    return { state: 'unknown', detail: raw };
   }
 
   if (d.error) return { state: 'unknown', detail: d.error };

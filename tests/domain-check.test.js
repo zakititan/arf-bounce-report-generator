@@ -132,6 +132,58 @@ describe('classifyDomainCheck', () => {
     assert.equal(classifyDomainCheck('website', { error: 'timeout' }).state, 'unknown');
   });
 
+  // The individual Abuse Desk readings are shown as their own fields.
+  it('classifies the domain status field on its own', () => {
+    assert.equal(classifyDomainCheck('ad-domain', { domainStatus: 'active' }).state, 'active');
+    assert.equal(classifyDomainCheck('ad-domain', { domainStatus: 'suspended' }).state, 'suspended');
+    assert.equal(classifyDomainCheck('ad-domain', { domainStatus: '' }).state, 'unknown');
+  });
+
+  it('classifies the customer status field on its own', () => {
+    assert.equal(classifyDomainCheck('ad-customer', { customerStatus: 'active' }).state, 'active');
+    assert.equal(classifyDomainCheck('ad-customer', { customerStatus: 'suspended' }).state, 'suspended');
+  });
+
+  it('classifies the email status field on its own', () => {
+    assert.equal(classifyDomainCheck('ad-user', { userStatus: 'active' }).state, 'active');
+    assert.equal(classifyDomainCheck('ad-user', { userStatus: 'suspended' }).state, 'suspended');
+  });
+
+  it('shows the raw value for a status it cannot classify', () => {
+    // "inactive" is neither active nor suspended, so the badge says Unknown —
+    // but the value itself is still worth showing verbatim.
+    const r = classifyDomainCheck('ad-domain', { domainStatus: 'inactive' });
+    assert.equal(r.state, 'unknown');
+    assert.equal(r.detail, 'inactive');
+  });
+
+  it('says "not returned" when a reading is missing entirely', () => {
+    const r = classifyDomainCheck('ad-customer', { domainStatus: 'active' });
+    assert.equal(r.state, 'unknown');
+    assert.equal(r.detail, 'not returned');
+  });
+
+  it('reports a failed AD read on every AD field', () => {
+    for (const id of ['ad-domain', 'ad-customer', 'ad-user']) {
+      const r = classifyDomainCheck(id, { error: 'boom' });
+      assert.equal(r.state, 'unknown', id);
+      assert.equal(r.detail, 'boom', id);
+    }
+  });
+
+  it('uses the extension outcome for the overall verdict when present', () => {
+    // The extension applies Abuse Desk's own rules, so its verdict is the
+    // one the unsuspension flow would reach — the panel must agree with it.
+    assert.equal(classifyDomainCheck('ad', { userStatus: 'active', outcome: 'confirmed' }).state, 'active');
+    assert.equal(classifyDomainCheck('ad', { userStatus: 'suspended', outcome: 'failed' }).state, 'suspended');
+  });
+
+  it('falls back to the raw readings when no outcome is supplied', () => {
+    assert.equal(classifyDomainCheck('ad', { domainStatus: 'active', customerStatus: 'active' }).state, 'active');
+    assert.equal(classifyDomainCheck('ad', { domainStatus: 'suspended' }).state, 'suspended');
+    assert.equal(classifyDomainCheck('ad', { domainStatus: '' }).state, 'unknown');
+  });
+
   it('returns a human-readable detail for every state', () => {
     for (const state of ['suspended', 'active', 'warn', 'issue', 'info', 'ok', 'unknown']) {
       const r = classifyDomainCheck('website', { verdict: 'Valid Website' });

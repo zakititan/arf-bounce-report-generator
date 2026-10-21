@@ -1365,7 +1365,6 @@ async function checkWordPressVuln(domain) {
 // flip the suspended verdict. See classifyDomainCheck / summariseDomainChecks
 // in pure.js, which is where that rule is implemented and tested.
 const DOMAINCHECK_ROWS = [
-  { id: 'ad', label: 'Abuse Desk' },
   { id: 'whois', label: 'WHOIS' },
   { id: 'website', label: 'Website' },
   { id: 'mx', label: 'MX Records' },
@@ -1376,6 +1375,25 @@ const DOMAINCHECK_ROWS = [
   { id: 'xmlrpc', label: 'XML-RPC' },
   { id: 'wordpress', label: 'WordPress' },
 ];
+
+// The Abuse Desk readings each get their own field rather than being folded
+// into one combined line, so a suspended customer is visible on its own and
+// not hidden behind a shared "Domain active · Customer active" string.
+//
+// The order puts what the user actually asked about first: an email's own
+// mailbox status leads, a domain's own record leads otherwise.
+function domainCheckAdRows(isEmail) {
+  return isEmail
+    ? [
+        { id: 'ad-user', label: 'Email Status' },
+        { id: 'ad-domain', label: 'Domain Status' },
+        { id: 'ad-customer', label: 'Customer Status' },
+      ]
+    : [
+        { id: 'ad-domain', label: 'Domain Status' },
+        { id: 'ad-customer', label: 'Customer Status' },
+      ];
+}
 
 const DOMAINCHECK_BADGE_TEXT = {
   suspended: 'Suspended', active: 'Active', issue: 'Issue', warn: 'Warning',
@@ -1481,14 +1499,18 @@ async function runDomainCheck(btn) {
     btn.disabled = true;
     btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 0.8s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Checking…';
   }
-  DOMAINCHECK_ROWS.forEach(row => setDomainCheckPending(row.id, row.label));
+  const adRows = domainCheckAdRows(isEmail);
+  const visibleRows = adRows.concat(DOMAINCHECK_ROWS);
+  visibleRows.forEach(row => setDomainCheckPending(row.id, row.label));
 
   const results = {};
-  const settle = (id, payload) => {
-    const row = DOMAINCHECK_ROWS.find(r => r.id === id);
+  const settle = (id, payload, visible = true) => {
     const result = classifyDomainCheck(id, payload);
     results[id] = result;
-    renderDomainCheckRow(id, row ? row.label : id, result);
+    if (visible) {
+      const row = visibleRows.find(r => r.id === id);
+      renderDomainCheckRow(id, row ? row.label : id, result);
+    }
     updateDomainCheckSummary(results);
   };
 
@@ -1511,9 +1533,15 @@ async function runDomainCheck(btn) {
 
   try {
     await Promise.allSettled([
-      // Abuse Desk — the authoritative suspension source.
+      // Abuse Desk — the authoritative suspension source. The overall verdict
+      // is settled under 'ad' (not rendered as its own row: the headline
+      // already states it), and each reading gets its own field.
       regionPromise.then(region => requestDomainStatus(account, region))
-        .then(res => settle('ad', res.success ? res : { error: res.error || 'Could not read Abuse Desk status' })),
+        .then(res => {
+          const payload = res.success ? res : { error: res.error || 'Could not read Abuse Desk status' };
+          settle('ad', payload, false);
+          adRows.forEach(row => settle(row.id, payload, true));
+        }),
 
       fetchWhois(domain).then(data => settle('whois', data))
         .catch(err => settle('whois', { error: err.message || 'WHOIS lookup failed' })),
