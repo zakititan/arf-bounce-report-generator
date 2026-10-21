@@ -55,7 +55,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Region chip** — a small NA/EU pill appears beside each Account field once MX-based region detection runs, making the automation's region decision visible
 - **Form ergonomics** — required-field completion counter (`4/7` chip, turns green when complete) in each generate bar; single-line inputs capped at a readable width; auto-growing "Other assurance" note field; long filenames/error summaries ellipsize instead of overflowing
 - **Session expiry redirect** — any API call returning HTTP 401 redirects the user to `login.html` instead of failing with a cryptic lookup error
-- **Tabbed panel navigation** — all five panels (ARF, Bounce, IP Spike, SMTP Suspension, Direct Unsuspend) are wrapped in a single panel container with a tab bar at the top; only the active panel is visible (with a subtle slide-in transition); selected tab persists across page refreshes via `localStorage`; implements the full ARIA tabs pattern with `tabpanel` roles, roving tabindex, and Arrow/Home/End keyboard navigation
+- **Tabbed panel navigation** - all six panels (ARF, Bounce, IP Spike, SMTP Suspension, Direct Unsuspend, Domain Check) are wrapped in a single panel container with a tab bar at the top; only the active panel is visible (with a subtle slide-in transition); selected tab persists across page refreshes via `localStorage`; implements the full ARIA tabs pattern with `tabpanel` roles, roving tabindex, and Arrow/Home/End keyboard navigation
 - **Tab status dot** — a green dot appears on a panel's tab once a report has been generated for it (and clears when the panel is cleared), so unfinished work is visible at a glance
 - **Ctrl+Enter to generate** — keyboard shortcut for the active panel's generate button (ARF, Bounce, and SMTP Suspension); the shortcut is hinted inline next to the Generate buttons, and paste-to-upload (`hover + Ctrl+V`) is now mentioned on every upload zone
 - **Clickable validation errors** — each item in the validation banner is clickable (plus Enter/Space focusable) and jumps straight to the offending field; field highlights and banner items clear live as the user fixes fields, and the banner hides itself when the list empties
@@ -109,7 +109,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
     - **Typed bridge errors** — invalid payloads, missing storage, and unknown message types get a `REPORT_GENERATOR_ERROR` reply (consumed by the matching pending action with an explanatory toast) instead of hanging until the button safety timeout
     - **Green banner** — extension detected and up to date (`Extension vX.X.X detected.`); auto-dismisses after 3 seconds and stays dismissed for that minimum version
     - **Yellow banner** — extension outdated, with direct download link for the latest version
-    - **Red banner** — extension not installed or is outdated (pre-v4.22), with direct zip install link
+    - **Red banner** - extension not installed or is outdated (pre-v4.23), with direct zip install link
     - Dismiss persists per `MIN_VERSION` in `localStorage`; reappears when min version is bumped
 
 ### Log to Sheet (Google Sheets Integration)
@@ -145,7 +145,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 
 ### IP Spike & SMTP Suspension Panels
 - **Dedicated panels** — IP Spike and SMTP Suspension panels displayed alongside ARF and Bounce; responsive layout: 1 column (<900px), 2 columns (900–1399px), 3 columns (1400–1799px), 4 columns (≥1800px)
-- **Panel order** — ARF → Bounce → IP Spike → SMTP Suspension → Direct Unsuspend
+- **Panel order** - ARF → Bounce → IP Spike → SMTP Suspension → Direct Unsuspend → Domain Check
 - **Account field** — enter the account email/domain; domain lookup auto-fills from the account input (same as ARF/Bounce)
 - **Domain Lookup** — same WHOIS/Website/DKIM widget as ARF and Bounce panels
 - **Partner Panel link** — "Check on Partner Panel" link opens `admin.titan.email` for manual lookups
@@ -191,6 +191,16 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Log from JIRA** — "Log to Sheet" fetches the issue description via the extension (`GET /rest/api/2/issue/{key}?fields=description`, session-cookie auth, key parsed from the pasted link — browse path or `selectedIssue` param), strips report markers, truncates to 45k chars (Sheets cell limit), and logs one row per account with the selected suspension type (BOUNCE/ARF) in the Unsuspension Type column
 - **Draft persistence** — inputs survive refresh like the other panels; included in Clear-all
 
+### Domain Check Panel
+- **Read-only diagnostics** — a sixth tab, one field in (domain *or* email) and one report out. Nothing is unsuspended, no JIRA is filed, and no state is changed: the panel has no Create JIRA, Unsuspend, or Log to Sheet control, and a wiring test asserts those controls stay out of the markup
+- **Ten checks, all independent** — Abuse Desk status, WHOIS, Website, MX, SPF, DMARC, DKIM, Laravel `.env`, XML-RPC, and WordPress. Each renders its own row as soon as it resolves, so one slow or failing check never blocks the others (`Promise.allSettled`)
+- **Abuse Desk is the only authority on suspension** — the other checks report their own findings and feed an "issues found" count, but they never flip the suspended verdict. A parked website is a fact about the site, not proof the domain is suspended. An unreadable Abuse Desk response reports *unknown*, never *active*
+- **The status APIs need the extension** — they are only reachable from the extension (host permission + session cookie), so that one row goes over a new `REPORT_GENERATOR_DOMAIN_STATUS` bridge; the other nine are ordinary web-app API calls. Without the extension installed, that row reads "unknown" and the rest still work
+- **Region is detected first** — MX-based region detection (NA/EU) runs before the Abuse Desk call, because the status API requires `&region=`
+- **One call per entity** — a domain reads `domain_status` + `customer_status` from `/domains/status`; an email reads `user_status` from `/users/status`, which also carries the domain's own status, so a single request answers both
+- **New `/api/mail-records` endpoint** — MX records, SPF, and DMARC in one cached, rate-limited call (Google DNS-over-HTTPS, as the DKIM check already does). SPF lives on the apex domain, DMARC on `_dmarc.<domain>`
+- **Detail text is inserted as text, never as HTML**, so a hostile API string cannot inject markup into the report
+
 ### Mailboards Integration
 - **Check on Mailboards** — a "Check on Mailboards" link sits below the Account field in both ARF and Bounce panels, linking to [mailboards.ops.titan.email](https://mailboards.ops.titan.email)
 - **Smart parameter selection** — if the Account field contains an email address (`@` present), the URL uses `?email=`; otherwise it uses `?domain=`; falls back to bare `?env=prod` when the Account field is empty
@@ -216,7 +226,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 - **Custom event architecture** — region detection dispatches a `regionchange` event on the account input to re-trigger link updaters without causing infinite loops
 
 ### Testing
-- **640 unit tests across 24 files** — covers `sanitiseDomain` (39 edge cases), `checkRateLimit`/`classifyFetchError`/token helpers, website-check helpers, `withMiddleware` CORS/rate-limit middleware, `safeEqual` (10 cases), `createCache` (8 cases including TTL expiry and pruning), `getClientIp` (6 cases), `rateLimitInMemory` (6 cases), pure functions `escapeHtml`/`parseCsvRow`/`sanitiseDomainInput`/`sanitiseAccountInput`/`describeReason`/`parseAgeToDays` plus pending-request TTL eviction, screenshot cap arithmetic, and typed extension-error validation, website-check-helpers (10 cases), RDAP response parsing (12 cases), DKIM lookup and config (18 cases), API fetch wrappers (15 cases), MX region detection (11 cases), extension `rg-lib` (~100 assertions), background timeout/unsuspend flows, auth redirects, extension-package verification, bridge messaging, Abuse Desk helpers, and Partner Panel helpers
+- **731 unit tests across 27 files** - covers `sanitiseDomain` (39 edge cases), `checkRateLimit`/`classifyFetchError`/token helpers, website-check helpers, `withMiddleware` CORS/rate-limit middleware, `safeEqual` (10 cases), `createCache` (8 cases including TTL expiry and pruning), `getClientIp` (6 cases), `rateLimitInMemory` (6 cases), pure functions `escapeHtml`/`parseCsvRow`/`sanitiseDomainInput`/`sanitiseAccountInput`/`describeReason`/`parseAgeToDays` plus pending-request TTL eviction, screenshot cap arithmetic, and typed extension-error validation, website-check-helpers (10 cases), RDAP response parsing (12 cases), DKIM lookup and config (18 cases), API fetch wrappers (15 cases), MX region detection (11 cases), extension `rg-lib` (~100 assertions), background timeout/unsuspend flows, auth redirects, extension-package verification, bridge messaging, Abuse Desk helpers, and Partner Panel helpers
 - **rg-lib.test.js** — unit tests for the extension's shared logic module: `analyzeHistory` (suspension/password-change matching incl. "Unsuspended" exclusion and case-insensitivity), `buildJiraIssueBody` (project/type/priority IDs, per-panel labels, conditional Zendesk field), `extractImagesRegex` (base64 extraction, alt-derived filenames, fallbacks), `buildFallbackJiraUrl` (param correctness + 2000-char description truncation), `isReasonFresh` (90s TTL boundary conditions), plus `capInlineImages` (count/per-image/total caps), `matchesActiveStatus` (word-boundary, rejects `inactive`), `createPendingMap` (request-keyed async slots), `discoverDoneTransitionId` (Done-over-Closed preference), `isValidJiraCreatePayload`, `buildBulkSummary` (dedupe), per-account reason keys, Apps Script URL allowlisting, storage janitor (`findStaleStorageKeys`), the fallback-HTML size gate, JIRA issue-key extraction (`extractJiraIssueKey`) and description message validation
 - **Config integrity checks** — all keyword/pattern arrays are verified at test time for empty strings and lowercase consistency
 - **Pure function extraction** — `escapeHtml`, `parseCsvRow`, `sanitiseDomainInput`, `sanitiseAccountInput` extracted to `scripts/pure.js` for testability; `app.js` re-exports from there; the extension equivalent lives in `extension/rg-lib.js`
@@ -272,7 +282,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ## Project Structure
 
 ```
-├── index.html                      # Main app UI (ARF, Bounce, IP Spike, SMTP Suspension, and Direct Unsuspend panels)
+├── index.html                      # Main app UI (ARF, Bounce, IP Spike, SMTP Suspension, Direct Unsuspend, and Domain Check panels)
 ├── login.html                      # Password login page
 ├── favicon.svg                     # App favicon
 ├── middleware.js                   # Vercel Edge middleware (auth gate + HMAC cookie verification)
@@ -285,6 +295,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 │   ├── whois.js                    # WHOIS lookup serverless function (RDAP-first with WhoisJSON fallback, cached 15 min)
 │   ├── website-check.js            # Website reachability & classification (SPA detection, parked/placeholder detection, redirect analysis; cached 15 min)
 │   ├── dkim-check.js               # DNS DKIM selector check (cached 15 min, early termination)
+│   ├── mail-records.js             # Mail infrastructure check — MX records, SPF (apex), DMARC (_dmarc) via DNS-over-HTTPS (cached 15 min)
 │   ├── laravel-check.js            # Laravel .env exposure check — probes for exposed SMTP credentials (cached 15 min)
 │   ├── xmlrpc-check.js             # XML-RPC SMTP vulnerability check — probes /xmlrpc.php for accessible endpoints (cached 15 min)
 │   ├── wordpress-check.js          # WordPress detection — probes for wp-content, wp-login.php, WP REST API (cached 15 min)
@@ -301,7 +312,7 @@ A lightweight, zero-dependency internal tool for generating structured ARF (Abus
 ├── styles/
 │   └── main.css                    # All styles (light/dark theme tokens, layout, stepper, skeleton shimmer, toast types, extension modal, responsive)
 ├── extension/                      # Chrome extension (Manifest V3) for JIRA integration, Abuse Desk automation, and Google Sheets logging
-  │   ├── manifest.json               # Extension config: v4.22, permissions, ES-module service worker, content scripts for webapp, JIRA, Abuse Desk, and Partner Panel
+  │   ├── manifest.json               # Extension config: v4.23, permissions, ES-module service worker, content scripts for webapp, JIRA, Abuse Desk, and Partner Panel
  │   ├── rg-lib.js                   # Shared pure logic (ESM): history analysis, JIRA body builder, image extraction + caps, fallback URL builder, reason-TTL check, per-account reason keys, transition discovery, pending-map, storage janitor — imported by the service worker and unit-tested
  │   ├── background.js               # Module service worker: create-jira with payload validation (+optional markDone with discovered transition), log-to-sheet with verified response and URL allowlist, keyed partner-panel-lookup (closes its tab, analyzes raw events), open-abusedesk-tabs, startup storage janitor
  │   ├── webapp-helpers.js           # Classic-script pure helpers for the webapp bridge: origin rules, reply routing, message validation, error replies, outbound-type guard, PONG throttle

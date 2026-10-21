@@ -416,6 +416,43 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === 'ad-domain-status') {
+    // Read-only lookup for the domain-check panel: reports what Abuse Desk
+    // says about ONE domain or one email. Nothing is unsuspended here, no
+    // JIRA issue is filed and no automation runs — the request only ever
+    // reaches the Abuse Desk status API.
+    const account = message.data && message.data.account;
+    if (!areValidAccountList(account)) { sendResponse({ success: false, error: 'Invalid account or email domain' }); return true; }
+    const region = typeof message.data.region === 'string' ? message.data.region : '';
+    const isDomain = account.indexOf('@') === -1;
+    const kind = isDomain ? 'domain' : 'user';
+
+    // The read itself is shared with the primary verification path:
+    // buildAdStatusUrl() for the entity kind, fetchWithTimeout(),
+    // parseAdStatusBody() (the body is judged, never response.ok) and the
+    // extractors, plus the established outcome rules — resolveDomainOutcome()
+    // for a domain (customer AND domain both active), resolveVerifiedOutcome()
+    // for an email (its own status active).
+    fetchAdStatusReading(kind, account, region)
+      .then(reading => {
+        // The USER endpoint returns user_status, domain_status AND
+        // customer_status in one payload, so an email input can report its
+        // domain's status from this same call instead of a second round trip.
+        // fetchAdStatusReading maps the entity's own reading onto
+        // customerStatus (for a user kind that IS the user_status reading),
+        // so the three readings are recovered here from the raw payload.
+        const userStatus = isDomain ? '' : extractAdUserStatus(reading.json);
+        const domainStatus = isDomain ? reading.domainStatus : extractAdDomainStatus(reading.json);
+        const customerStatus = isDomain ? reading.customerStatus : extractAdCustomerStatus(reading.json);
+        const outcome = isDomain
+          ? resolveDomainOutcome({ customerStatus, domainStatus })
+          : resolveVerifiedOutcome({ badgeStatus: '', apiStatus: userStatus });
+        sendResponse({ success: true, customerStatus, domainStatus, userStatus, outcome });
+      })
+      .catch(e => sendResponse({ success: false, error: (e && e.message) || 'Failed reading Abuse Desk status' }));
+    return true;
+  }
+
   if (message.action === 'ad-tab-done') {
     const tid = sender && sender.tab && sender.tab.id;
     const d = message.data || {};

@@ -15,6 +15,11 @@ export const TIMEOUT_WHOIS_MS   = 10_000; // WhoisJSON is occasionally slow
 export const TIMEOUT_WEBSITE_MS =  8_000; // website-check (two-URL fallback)
 export const TIMEOUT_DKIM_MS    =  5_000; // parallel DNS queries
 export const TIMEOUT_HEALTH_MS  =  5_000; // health-check probes
+export const TIMEOUT_MAIL_RECORDS_MS = 5_000; // mail-records (3 parallel DNS queries)
+
+// ── DNS ────────────────────────────────────────────────────────────────────────
+// Google DNS-over-HTTPS JSON API: <base>?name=<host>&type=<TYPE>
+export const DNS_RESOLVE_URL = 'https://dns.google/resolve';
 
 // ── DKIM ─────────────────────────────────────────────────────────────────────
 export const DKIM_FAMILIES      = ['titan', 'neo'];

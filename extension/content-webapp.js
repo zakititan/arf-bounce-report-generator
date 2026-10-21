@@ -83,7 +83,8 @@
         data.type === 'REPORT_GENERATOR_UNSUSPEND_OUTCOME' ||
         data.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION_RESULT' ||
         data.type === 'REPORT_GENERATOR_JIRA_DONE_RESULT' ||
-        data.type === 'REPORT_GENERATOR_RECHECK_RESULT') return null;
+        data.type === 'REPORT_GENERATOR_RECHECK_RESULT' ||
+        data.type === 'REPORT_GENERATOR_DOMAIN_STATUS_RESULT') return null;
     if (!storageAvailable) return helperBuildError('STORAGE_UNAVAILABLE', helperExtractRequestId(data));
     var known = data.type === 'REPORT_GENERATOR_JIRA' ||
       data.type === 'REPORT_GENERATOR_UNSUSPEND' ||
@@ -92,6 +93,7 @@
       data.type === 'REPORT_GENERATOR_JIRA_DESCRIPTION' ||
       data.type === 'REPORT_GENERATOR_JIRA_DONE' ||
       data.type === 'REPORT_GENERATOR_RECHECK' ||
+      data.type === 'REPORT_GENERATOR_DOMAIN_STATUS' ||
       data.type === 'REPORT_GENERATOR_PARTNER_PANEL_LOOKUP';
     if (known) {
       return messageValid(data) ? null : helperBuildError('INVALID_MESSAGE', helperExtractRequestId(data));
@@ -185,6 +187,12 @@
         typeof data.jiraUrl === 'string' && typeof data.accounts === 'string';
     }
     if (data.type === 'REPORT_GENERATOR_RECHECK') {
+      return requestId && typeof data.panel === 'string' &&
+        typeof data.account === 'string' && typeof data.region === 'string';
+    }
+    // Read-only suspension-status lookup for the domain-check panel: one
+    // domain OR one email. Mirrors the branch in webapp-helpers.js.
+    if (data.type === 'REPORT_GENERATOR_DOMAIN_STATUS') {
       return requestId && typeof data.panel === 'string' &&
         typeof data.account === 'string' && typeof data.region === 'string';
     }
@@ -396,6 +404,41 @@
             account: recheckData.account,
             outcome: ok ? 'confirmed' : (recheckResponse && recheckResponse.outcome) || 'unknown',
             error: (recheckResponse && recheckResponse.error) || (chrome.runtime.lastError && chrome.runtime.lastError.message) || null,
+          }, replyOrigin);
+        }
+      );
+    }
+
+    if (event.data.type === 'REPORT_GENERATOR_DOMAIN_STATUS') {
+      // Read-only suspension-status lookup for the domain-check panel: asks
+      // the Abuse Desk status API about ONE domain or email and reports what
+      // it says. Nothing is unsuspended, no JIRA issue is filed and no
+      // automation runs behind it.
+      var domainStatusData = event.data;
+      chrome.runtime.sendMessage(
+        { action: 'ad-domain-status', data: { account: domainStatusData.account, region: domainStatusData.region } },
+        function (domainStatusResponse) {
+          // Read (and therefore acknowledge) lastError inside the callback —
+          // Chrome only exposes it there, and leaving it unread logs an
+          // "Unchecked runtime.lastError" warning.
+          var lastError = (chrome.runtime.lastError && chrome.runtime.lastError.message) || null;
+          var reply = (domainStatusResponse && typeof domainStatusResponse === 'object') ? domainStatusResponse : {};
+          var ok = reply.success === true;
+          window.postMessage({
+            type: 'REPORT_GENERATOR_DOMAIN_STATUS_RESULT',
+            requestId: domainStatusData.requestId,
+            // Not optional. validateExtensionResult() applies a shared
+            // `typeof success === 'boolean'` gate to every reply BEFORE it
+            // reaches this type's branch, so a payload without this flag is
+            // discarded outright: the panel's listener never resolves and the
+            // user waits out the full timeout for a purely bridge-level fault.
+            success: ok,
+            account: domainStatusData.account,
+            domainStatus: typeof reply.domainStatus === 'string' ? reply.domainStatus : '',
+            customerStatus: typeof reply.customerStatus === 'string' ? reply.customerStatus : '',
+            userStatus: typeof reply.userStatus === 'string' ? reply.userStatus : '',
+            outcome: typeof reply.outcome === 'string' ? reply.outcome : 'unknown',
+            error: (typeof reply.error === 'string' && reply.error) ? reply.error : lastError,
           }, replyOrigin);
         }
       );

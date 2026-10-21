@@ -14,8 +14,8 @@
  */
 
 import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx,
-         fetchLaravelCheck, fetchXmlrpcCheck, fetchWordPressCheck } from './api.js';
-import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, matchesRequest,   consumePendingRequest, registerPendingRequest, screenshotAcceptCount, isAcceptableScreenshotSize, MAX_SCREENSHOT_BYTES, createUnsuspendRequestId, createRequestId, createRequestContextKey, isAllowedWebAppOrigin, validateExtensionResult, validateUnsuspendOutcome, validateAccountIdentifier, parseAccountList, isSafeJiraUrl, selectRecheckAccounts, shouldShowRecheckButton } from './pure.js';
+         fetchLaravelCheck, fetchXmlrpcCheck, fetchWordPressCheck, fetchMailRecords } from './api.js';
+import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, matchesRequest,   consumePendingRequest, registerPendingRequest, screenshotAcceptCount, isAcceptableScreenshotSize, MAX_SCREENSHOT_BYTES, createUnsuspendRequestId, createRequestId, createRequestContextKey, isAllowedWebAppOrigin, validateExtensionResult, validateUnsuspendOutcome, validateAccountIdentifier, parseAccountList, isSafeJiraUrl, selectRecheckAccounts, shouldShowRecheckButton, classifyDomainCheck, summariseDomainChecks } from './pure.js';
 import { buildUnsuspendAccounts, cleanSheetReason, getSheetReportType, getDirectSheetReportType, parseJiraSummaryAccounts, truncateSheetText } from './report-actions.js';
 import {
   showToast, showToastLink, initThemeToggle,
@@ -45,7 +45,7 @@ const _btnTimers = new WeakMap();
 // pastes can't all observe a stale length and blow past MAX_SCREENSHOTS.
 const _screenshotInFlight = {};
 // prefix (used in element ids/state) → tab data-tab / panel id suffix
-const TAB_DATA_TAB = { arf: 'arf', bounce: 'bounce', ipspike: 'ip-spike', smtpsuspend: 'smtp-suspension', direct: 'direct' };
+const TAB_DATA_TAB = { arf: 'arf', bounce: 'bounce', ipspike: 'ip-spike', smtpsuspend: 'smtp-suspension', direct: 'direct', domaincheck: 'domain-check' };
 // Fields counted by updateReqCounter (required-field chips)
 const REQ_SELECTOR = '[aria-required="true"]';
 
@@ -87,6 +87,10 @@ const state = {
   direct: {
     region: 'na',
     whois: null,
+    lookupInFlight: false,
+  },
+  domaincheck: {
+    region: 'na',
     lookupInFlight: false,
   },
 };
@@ -164,6 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initTabs();
   initKeyboardShortcuts();
   initDomainInputs();
+  initDomainCheckInput();
   initEventDelegation();
   initLiveErrorClear();
   initDragDrop();
@@ -536,13 +541,14 @@ async function recheckStatus(prefix) {
 
 // ── Clear all panels at once (single confirm, reuses each panel's clear path)
 function clearAllPanels() {
-  if (!confirm('Clear ALL panels (ARF, Bounce, IP Spike, SMTP Suspension, Direct Unsuspend)? All form data, screenshots, reports, and results will be erased. This cannot be undone.')) return;
+  if (!confirm('Clear ALL panels (ARF, Bounce, IP Spike, SMTP Suspension, Direct Unsuspend, Domain Check)? All form data, screenshots, reports, and results will be erased. This cannot be undone.')) return;
   const skip = { skipConfirm: true };
   clearARF(skip);
   clearBounce(skip);
   clearIPspike(skip);
   clearSMTPSuspend(skip);
   clearDirect(skip);
+  clearDomainCheck(skip);
   showToast('All panels cleared.', 'info');
 }
 
@@ -896,6 +902,10 @@ function initEventDelegation() {
         else if (panel === 'ipspike') clearIPspike();
         else if (panel === 'smtpsuspend') clearSMTPSuspend();
         else if (panel === 'direct') clearDirect();
+        else if (panel === 'domain-check') clearDomainCheck();
+        break;
+      case 'domain-check':
+        runDomainCheck(target);
         break;
       case 'lookup':
         if (panel) lookupDomainImmediate(panel);
@@ -1342,6 +1352,238 @@ async function checkWordPressVuln(domain) {
     if (el) el.innerHTML = '<span class="vuln-badge unknown">Check failed</span>';
     setValueFade(el);
   }
+}
+
+// ── Domain Check panel (read-only diagnostics) ─────────────────────────
+//
+// One field in, one report out. Every check runs independently and renders
+// its own row as soon as it resolves, so one slow or failing check never
+// blocks the others.
+//
+// Abuse Desk is the ONLY authority on suspension (the user's decision). The
+// other checks report their own findings and feed the issue count; they never
+// flip the suspended verdict. See classifyDomainCheck / summariseDomainChecks
+// in pure.js, which is where that rule is implemented and tested.
+const DOMAINCHECK_ROWS = [
+  { id: 'ad', label: 'Abuse Desk' },
+  { id: 'whois', label: 'WHOIS' },
+  { id: 'website', label: 'Website' },
+  { id: 'mx', label: 'MX Records' },
+  { id: 'spf', label: 'SPF' },
+  { id: 'dmarc', label: 'DMARC' },
+  { id: 'dkim', label: 'DKIM' },
+  { id: 'laravel', label: 'Laravel .env' },
+  { id: 'xmlrpc', label: 'XML-RPC' },
+  { id: 'wordpress', label: 'WordPress' },
+];
+
+const DOMAINCHECK_BADGE_TEXT = {
+  suspended: 'Suspended', active: 'Active', issue: 'Issue', warn: 'Warning',
+  info: 'Info', ok: 'OK', unknown: 'Unknown',
+};
+
+// Asks the extension for one account's Abuse Desk status. The status APIs are
+// only reachable from the extension (host permission + session cookie), so
+// this goes over the same bridge the unsuspension flow uses.
+function requestDomainStatus(account, region) {
+  return new Promise((resolve) => {
+    const requestId = createRequestId('domainstatus');
+    const listener = (e) => {
+      if (e.source !== window || !isAllowedWebAppOrigin(e.origin) ||
+          !validateExtensionResult(e.data) ||
+          e.data.type !== 'REPORT_GENERATOR_DOMAIN_STATUS_RESULT' ||
+          !matchesRequest(requestId, e.data.requestId)) return;
+      window.removeEventListener('message', listener);
+      clearTimeout(timeout);
+      resolve(e.data);
+    };
+    window.addEventListener('message', listener);
+    const timeout = setTimeout(() => {
+      window.removeEventListener('message', listener);
+      resolve({ success: false, error: 'Extension did not respond — is it installed?' });
+    }, 15000);
+    window.postMessage({
+      type: 'REPORT_GENERATOR_DOMAIN_STATUS',
+      panel: 'domain-check',
+      account, region, requestId,
+    }, '*');
+  });
+}
+
+// Renders one check row. Detail text is inserted as TEXT, never as HTML, so a
+// hostile API string cannot inject markup into the report.
+function renderDomainCheckRow(id, label, result) {
+  const rows = document.getElementById('domaincheck-rows');
+  if (!rows) return;
+  let row = document.getElementById('domaincheck-row-' + id);
+  if (!row) {
+    row = document.createElement('div');
+    row.className = 'domaincheck-row';
+    row.id = 'domaincheck-row-' + id;
+    const labelEl = document.createElement('span');
+    labelEl.className = 'domaincheck-row-label';
+    labelEl.textContent = label;
+    const badgeEl = document.createElement('span');
+    badgeEl.className = 'domaincheck-row-badge';
+    const detailEl = document.createElement('span');
+    detailEl.className = 'domaincheck-row-detail';
+    row.append(labelEl, badgeEl, detailEl);
+    rows.appendChild(row);
+  }
+  const badge = row.querySelector('.domaincheck-row-badge');
+  const detail = row.querySelector('.domaincheck-row-detail');
+  if (badge) {
+    badge.className = 'domaincheck-row-badge ' + result.state;
+    badge.textContent = DOMAINCHECK_BADGE_TEXT[result.state] || 'Unknown';
+  }
+  if (detail) detail.textContent = result.detail || '';
+}
+
+function setDomainCheckPending(id, label) {
+  renderDomainCheckRow(id, label, { state: 'unknown', detail: 'Checking…' });
+}
+
+function updateDomainCheckSummary(results) {
+  const summary = summariseDomainChecks(results);
+  const headlineEl = document.getElementById('domaincheck-headline');
+  if (headlineEl) {
+    headlineEl.textContent = summary.headline;
+    headlineEl.className = 'domaincheck-headline ' +
+      (summary.suspended === true ? 'suspended' : summary.suspended === false ? 'active' : 'unknown');
+  }
+  return summary;
+}
+
+async function runDomainCheck(btn) {
+  const input = document.getElementById('domaincheck-account');
+  const raw = (input?.value || '').trim();
+  if (!raw) {
+    showToast('Please enter a domain or email address.', 'warning');
+    return;
+  }
+  const account = sanitiseAccountInput(raw);
+  if (!validateAccountIdentifier(account)) {
+    showToast('Please enter a valid email address or domain.', 'warning');
+    return;
+  }
+
+  // A domain check needs a domain; an email contributes its own domain part.
+  const isEmail = account.indexOf('@') !== -1;
+  const domain = isEmail ? account.slice(account.indexOf('@') + 1) : account;
+
+  const report = document.getElementById('domaincheck-report');
+  const rows = document.getElementById('domaincheck-rows');
+  if (rows) rows.innerHTML = '';
+  if (report) report.hidden = false;
+
+  state.domaincheck.lookupInFlight = true;
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 0.8s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Checking…';
+  }
+  DOMAINCHECK_ROWS.forEach(row => setDomainCheckPending(row.id, row.label));
+
+  const results = {};
+  const settle = (id, payload) => {
+    const row = DOMAINCHECK_ROWS.find(r => r.id === id);
+    const result = classifyDomainCheck(id, payload);
+    results[id] = result;
+    renderDomainCheckRow(id, row ? row.label : id, result);
+    updateDomainCheckSummary(results);
+  };
+
+  // The region is required by the status APIs, so the Abuse Desk check waits
+  // for it; every other check runs immediately.
+  const regionPromise = lookupMx(domain).then(r => {
+    state.domaincheck.region = r.region;
+    setRegionChip('domaincheck');
+    return r.region;
+  }).catch(() => {
+    state.domaincheck.region = 'na';
+    setRegionChip('domaincheck');
+    return 'us-east-1';
+  });
+
+  try {
+    await Promise.allSettled([
+      // Abuse Desk — the authoritative suspension source.
+      regionPromise.then(region => requestDomainStatus(account, region))
+        .then(res => settle('ad', res.success ? res : { error: res.error || 'Could not read Abuse Desk status' })),
+
+      fetchWhois(domain).then(data => settle('whois', data))
+        .catch(err => settle('whois', { error: err.message || 'WHOIS lookup failed' })),
+
+      fetchWebsiteCheck(domain).then(data => settle('website', data))
+        .catch(err => settle('website', { error: err.message || 'Website check failed' })),
+
+      fetchMailRecords(domain).then(data => {
+        settle('mx', data);
+        settle('spf', data);
+        settle('dmarc', data);
+      }).catch(err => {
+        const msg = { error: err.message || 'Mail records lookup failed' };
+        settle('mx', msg);
+        settle('spf', msg);
+        settle('dmarc', msg);
+      }),
+
+      fetchDkimCheck(domain).then(data => settle('dkim', data))
+        .catch(err => settle('dkim', { error: err.message || 'DKIM check failed' })),
+
+      fetchLaravelCheck(domain).then(data => settle('laravel', data))
+        .catch(err => settle('laravel', { error: err.message || 'Laravel check failed' })),
+
+      fetchXmlrpcCheck(domain).then(data => settle('xmlrpc', data))
+        .catch(err => settle('xmlrpc', { error: err.message || 'XML-RPC check failed' })),
+
+      fetchWordPressCheck(domain).then(data => settle('wordpress', data))
+        .catch(err => settle('wordpress', { error: err.message || 'WordPress check failed' })),
+    ]);
+  } finally {
+    state.domaincheck.lookupInFlight = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Run checks';
+    }
+    updateDomainCheckSummary(results);
+  }
+}
+
+function clearDomainCheck(opts) {
+  if (!(opts && opts.skipConfirm) && !confirm('Clear Domain Check input and results? This cannot be undone.')) return;
+  const input = document.getElementById('domaincheck-account');
+  if (input) input.value = '';
+  const report = document.getElementById('domaincheck-report');
+  if (report) report.hidden = true;
+  const rows = document.getElementById('domaincheck-rows');
+  if (rows) rows.innerHTML = '';
+  state.domaincheck.region = 'na';
+  const chip = document.getElementById('domaincheck-region-chip');
+  if (chip) chip.hidden = true;
+  try { localStorage.removeItem(draftKey('domaincheck')); } catch {}
+}
+
+// Domain Check input: sanitise on paste and on input, matching the other
+// panels' account fields. No lookup is triggered — the panel runs its checks
+// only when the user presses "Run checks".
+function initDomainCheckInput() {
+  const input = document.getElementById('domaincheck-account');
+  if (!input) return;
+  input.addEventListener('paste', (e) => {
+    e.preventDefault();
+    const pasted = (e.clipboardData || window.clipboardData).getData('text');
+    input.value = sanitiseAccountInput(pasted);
+  });
+  input.addEventListener('input', () => {
+    const raw = input.value;
+    const sanitised = sanitiseAccountInput(raw);
+    if (sanitised === raw) return;
+    const pos = input.selectionStart ?? raw.length;
+    const diff = raw.length - sanitised.length;
+    input.value = sanitised;
+    const newPos = Math.max(0, Math.min(pos - diff, sanitised.length));
+    try { input.setSelectionRange(newPos, newPos); } catch {}
+  });
 }
 
 // ── Screenshots (capped at MAX_SCREENSHOTS) ───────────────────────────
@@ -2000,7 +2242,7 @@ function updateReqCounter(prefix) {
 }
 
 function initDraftPersistence() {
-  ['arf', 'bounce', 'ipspike', 'smtpsuspend', 'direct'].forEach(prefix => {
+  ['arf', 'bounce', 'ipspike', 'smtpsuspend', 'direct', 'domaincheck'].forEach(prefix => {
     const panel = document.getElementById('panel-' + TAB_DATA_TAB[prefix]);
     if (!panel) return;
     ['input', 'change', 'click'].forEach(evt => panel.addEventListener(evt, () => {

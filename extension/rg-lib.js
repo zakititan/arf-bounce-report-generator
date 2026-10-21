@@ -164,7 +164,21 @@ export function validateWebAppMessage(message) {
   if (message.type === 'REPORT_GENERATOR_RECHECK') {
     return hasRequestId && hasStrings(['panel', 'account', 'region']);
   }
+  // Read-only suspension-status lookup for the domain-check panel: one
+  // domain OR one email. Nothing is unsuspended behind this message.
+  if (message.type === 'REPORT_GENERATOR_DOMAIN_STATUS') {
+    return hasRequestId && hasStrings(['panel', 'account', 'region']);
+  }
   return false;
+}
+
+// A field that must be a string when it is present. Absent (undefined), null
+// and strings are all acceptable; any other type (number, boolean, object) is
+// a malformed payload and is rejected outright — the loose
+// `!value || typeof value === 'string'` shape used elsewhere would let `0`
+// and `false` through.
+function isOptionalString(value) {
+  return value === undefined || value === null || typeof value === 'string';
 }
 
 export function validateExtensionResult(message) {
@@ -203,6 +217,18 @@ export function validateExtensionResult(message) {
     return (!message.account || typeof message.account === 'string') &&
       (!message.outcome || typeof message.outcome === 'string') &&
       (!message.error || typeof message.error === 'string');
+  }
+  // Domain/email suspension status. `success` is already enforced by the
+  // shared boolean gate above, and `requestId` by the request-id gate above
+  // that — both run BEFORE this branch, so a payload missing either is
+  // rejected without ever reaching here.
+  if (message.type === 'REPORT_GENERATOR_DOMAIN_STATUS_RESULT') {
+    return isOptionalString(message.account) &&
+      isOptionalString(message.domainStatus) &&
+      isOptionalString(message.customerStatus) &&
+      isOptionalString(message.userStatus) &&
+      isOptionalString(message.outcome) &&
+      isOptionalString(message.error);
   }
   if (message.type === 'PARTNER_PANEL_RESULT') {
     return Boolean(message.data) && typeof message.data === 'object' &&
