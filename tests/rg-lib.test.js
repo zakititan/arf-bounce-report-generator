@@ -184,6 +184,95 @@ describe('web app message security helpers', () => {
   });
 });
 
+// ── domain status bridge messages ───────────────────────────────────────
+// The domain-check panel asks the extension what Abuse Desk says about ONE
+// domain or email. The exchange is read-only: nothing is unsuspended, no JIRA
+// issue is filed and no automation runs behind it.
+//
+//   web app → REPORT_GENERATOR_DOMAIN_STATUS
+//   extension → REPORT_GENERATOR_DOMAIN_STATUS_RESULT
+describe('domain status bridge messages', () => {
+  const domainRequest = {
+    type: 'REPORT_GENERATOR_DOMAIN_STATUS',
+    panel: 'domaincheck',
+    account: 'flockcloud.tech',
+    region: 'us-east-1',
+    requestId: 'domstat_123',
+  };
+
+  it('accepts a well-formed domain status request', () => {
+    assert.equal(rgLib.validateWebAppMessage(domainRequest), true);
+  });
+
+  it('accepts an email account as well as a domain', () => {
+    assert.equal(rgLib.validateWebAppMessage({ ...domainRequest, account: 'user@example.com' }), true);
+  });
+
+  it('rejects a domain status request with a missing or malformed requestId', () => {
+    const { requestId, ...withoutRequestId } = domainRequest;
+    assert.equal(rgLib.validateWebAppMessage(withoutRequestId), false);
+    assert.equal(rgLib.validateWebAppMessage({ ...domainRequest, requestId: '' }), false);
+    assert.equal(rgLib.validateWebAppMessage({ ...domainRequest, requestId: 'bad id' }), false);
+    assert.equal(rgLib.validateWebAppMessage({ ...domainRequest, requestId: 42 }), false);
+  });
+
+  it('rejects a domain status request whose panel, account or region is not a string', () => {
+    assert.equal(rgLib.validateWebAppMessage({ ...domainRequest, panel: 1 }), false);
+    assert.equal(rgLib.validateWebAppMessage({ ...domainRequest, account: null }), false);
+    assert.equal(rgLib.validateWebAppMessage({ ...domainRequest, account: 42 }), false);
+    assert.equal(rgLib.validateWebAppMessage({ ...domainRequest, region: undefined }), false);
+    assert.equal(rgLib.validateWebAppMessage({ ...domainRequest, region: false }), false);
+  });
+
+  const domainResult = {
+    type: 'REPORT_GENERATOR_DOMAIN_STATUS_RESULT',
+    requestId: 'domstat_123',
+    success: true,
+    account: 'flockcloud.tech',
+    domainStatus: 'active',
+    customerStatus: 'active',
+    userStatus: '',
+    outcome: 'confirmed',
+    error: null,
+  };
+
+  it('accepts a well-formed domain status result', () => {
+    assert.equal(rgLib.validateExtensionResult(domainResult), true);
+  });
+
+  it('accepts a failed domain status result carrying an error string', () => {
+    assert.equal(rgLib.validateExtensionResult({
+      ...domainResult,
+      success: false,
+      domainStatus: '',
+      customerStatus: '',
+      outcome: 'unknown',
+      error: 'AbuseDesk status unreadable (HTTP 401)',
+    }), true);
+  });
+
+  it('rejects a domain status result with no success flag', () => {
+    // The shipped defect, twice over: validateExtensionResult() gates EVERY
+    // result payload on a boolean `success` BEFORE the type-specific branch,
+    // so a payload without it is discarded outright and the panel hangs until
+    // its timeout. Pin it explicitly for this type.
+    const { success, ...withoutSuccess } = domainResult;
+    assert.equal(rgLib.validateExtensionResult(withoutSuccess), false);
+  });
+
+  it('rejects a non-boolean success flag', () => {
+    assert.equal(rgLib.validateExtensionResult({ ...domainResult, success: 'yes' }), false);
+  });
+
+  it('rejects a domain status result whose statuses are not strings', () => {
+    assert.equal(rgLib.validateExtensionResult({ ...domainResult, domainStatus: 1 }), false);
+    assert.equal(rgLib.validateExtensionResult({ ...domainResult, customerStatus: 42 }), false);
+    assert.equal(rgLib.validateExtensionResult({ ...domainResult, userStatus: true }), false);
+    assert.equal(rgLib.validateExtensionResult({ ...domainResult, outcome: {} }), false);
+    assert.equal(rgLib.validateExtensionResult({ ...domainResult, error: 7 }), false);
+  });
+});
+
 // ── analyzeHistory ────────────────────────────────────────────────────
 describe('analyzeHistory', () => {
   it('finds the newest suspension date (events are newest-first)', () => {
@@ -1590,5 +1679,39 @@ describe('parseAdStatusBody', () => {
     const html = rgLib.parseAdStatusBody(page);
     assertUnusable(html, 'long html page');
     assert.ok(html.error.length <= 200);
+  });
+});
+
+// -- isEmptyAdStatusPayload ---------------------------------------------------
+//
+// The AbuseDesk status API answers a request for a domain it does not know �
+// or for a WRONG REGION � with a perfectly valid but EMPTY body:
+//
+//   {"data": []}
+//
+// That parses fine, so nothing in the read path treats it as an error, and
+// the extractors simply find no status key and return ''. The result is a
+// bare "Unknown" in the UI with no clue why. Detecting the empty result
+// lets the panel say what actually happened.
+
+describe('isEmptyAdStatusPayload', () => {
+  it('is true for an empty data array', () => {
+    assert.equal(rgLib.isEmptyAdStatusPayload({ data: [] }), true);
+  });
+
+  it('is false when the data array has a row', () => {
+    assert.equal(rgLib.isEmptyAdStatusPayload({ data: [{ domain_status: 'active' }] }), false);
+  });
+
+  it('is false when there is no data array at all', () => {
+    assert.equal(rgLib.isEmptyAdStatusPayload({}), false);
+    assert.equal(rgLib.isEmptyAdStatusPayload({ data: null }), false);
+    assert.equal(rgLib.isEmptyAdStatusPayload({ domain_status: 'active' }), false);
+  });
+
+  it('is false for a non-object payload', () => {
+    assert.equal(rgLib.isEmptyAdStatusPayload(null), false);
+    assert.equal(rgLib.isEmptyAdStatusPayload(undefined), false);
+    assert.equal(rgLib.isEmptyAdStatusPayload('data'), false);
   });
 });

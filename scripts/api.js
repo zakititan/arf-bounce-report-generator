@@ -122,3 +122,12 @@ export async function fetchXmlrpcCheck(domain) {
 export async function fetchWordPressCheck(domain) {
   return apiFetch('/api/wordpress-check?domain=' + encodeURIComponent(domain));
 }
+
+/**
+ * Fetch a domain's mail infrastructure: MX records, SPF and DMARC.
+ * Returns { mx: string[], spf: string|null, dmarc: string|null,
+ *           spf_present: boolean, dmarc_present: boolean }
+ */
+export async function fetchMailRecords(domain) {
+  return apiFetch('/api/mail-records?domain=' + encodeURIComponent(domain));
+}

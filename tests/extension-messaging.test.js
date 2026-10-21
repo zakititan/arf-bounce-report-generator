@@ -323,6 +323,48 @@ describe('isValidWebAppMessage', () => {
   });
 });
 
+// ── domain status bridge ───────────────────────────────────────────────
+// The domain-check panel asks the extension for one domain's / email's Abuse
+// Desk suspension status. Read-only: no unsuspension, no JIRA, no automation.
+describe('domain status bridge messages', () => {
+  const domainRequest = {
+    type: 'REPORT_GENERATOR_DOMAIN_STATUS',
+    panel: 'domaincheck',
+    account: 'flockcloud.tech',
+    region: 'us-east-1',
+    requestId: 'domstat_123',
+  };
+
+  it('accepts a well-formed domain status request', () => {
+    assert.equal(isValidWebAppMessage(domainRequest), true);
+    assert.equal(isValidWebAppMessage({ ...domainRequest, account: 'user@example.com' }), true);
+  });
+
+  it('rejects malformed domain status requests', () => {
+    const { requestId, ...withoutRequestId } = domainRequest;
+    assert.equal(isValidWebAppMessage(withoutRequestId), false);
+    assert.equal(isValidWebAppMessage({ ...domainRequest, requestId: 'bad id' }), false);
+    assert.equal(isValidWebAppMessage({ ...domainRequest, account: 42 }), false);
+    assert.equal(isValidWebAppMessage({ ...domainRequest, region: null }), false);
+    assert.equal(isValidWebAppMessage({ ...domainRequest, panel: undefined }), false);
+  });
+
+  it('flags the domain status result as an outbound type so echoes are ignored', () => {
+    assert.equal(isOutboundReportGeneratorType('REPORT_GENERATOR_DOMAIN_STATUS_RESULT'), true);
+  });
+
+  it('recognises the domain status request as a known type', () => {
+    assert.equal(isKnownReportGeneratorType('REPORT_GENERATOR_DOMAIN_STATUS'), true);
+  });
+
+  it('never answers its own domain status result — no echo-storm error reply', () => {
+    assert.equal(
+      decideEarlyErrorReply({ type: 'REPORT_GENERATOR_DOMAIN_STATUS_RESULT', requestId: 'domstat_123', success: true }, true),
+      null
+    );
+  });
+});
+
 // ── buildErrorReply ─────────────────────────────────────────────────────
 describe('buildErrorReply', () => {
   it('builds a typed REPORT_GENERATOR_ERROR payload echoing requestId', () => {

@@ -132,6 +132,14 @@ export function validateExtensionResult(message) {
       (!message.outcome || typeof message.outcome === 'string') &&
       (!message.error || typeof message.error === 'string');
   }
+  if (message.type === 'REPORT_GENERATOR_DOMAIN_STATUS_RESULT') {
+    return (!message.account || typeof message.account === 'string') &&
+      (!message.domainStatus || typeof message.domainStatus === 'string') &&
+      (!message.customerStatus || typeof message.customerStatus === 'string') &&
+      (!message.userStatus || typeof message.userStatus === 'string') &&
+      (!message.outcome || typeof message.outcome === 'string') &&
+      (!message.error || typeof message.error === 'string');
+  }
   return false;
 }
 
@@ -143,6 +151,180 @@ function isHttpsUrl(value, hostname, pathPattern) {
   } catch (_) {
     return false;
   }
+}
+
+// ── Domain Check panel ────────────────────────────────────────────────────────
+//
+// Abuse Desk is the ONLY authority on whether a domain or email is suspended.
+// The other checks each report their own finding and feed an "issues found"
+// count, but they never flip the suspended verdict: a parked website is a fact
+// about the site, not proof that the domain is suspended.
+
+// True when any of the Abuse Desk status readings says "suspended".
+// The app tracks a region as the internal token 'na' or 'eu', but the
+// AbuseDesk status API needs the real region name. Passing the token
+// straight through makes the API answer with a valid but EMPTY body
+// ({"data": []}), which surfaces as a bare "Unknown" with no explanation —
+// so the conversion happens in one tested place.
+export function adRegionParam(region) {
+  return typeof region === 'string' && region.trim().toLowerCase() === 'eu'
+    ? 'eu-central-1'
+    : 'us-east-1';
+}
+
+export function isSuspendedReading(reading) {
+  if (!reading || typeof reading !== 'object') return false;
+  return ['domainStatus', 'customerStatus', 'userStatus'].some(key => {
+    const value = reading[key];
+    return typeof value === 'string' && value.trim().toLowerCase().indexOf('suspend') !== -1;
+  });
+}
+
+// Turns one check's raw payload into a state + a human-readable detail line.
+//
+// States:
+//   suspended — Abuse Desk says it is suspended (the only case that suspends)
+//   active    — Abuse Desk says it is active
+//   issue     — a genuine exposure (Laravel .env, open xmlrpc.php)
+//   warn      — noteworthy but not an exposure (no website, no MX/SPF/DMARC)
+//   info      — informational only (WordPress detected)
+//   ok        — fine
+//   unknown   — the check could not be read
+export function classifyDomainCheck(check, data) {
+  const d = (data && typeof data === 'object') ? data : {};
+
+  if (check === 'ad') {
+    if (d.error) return { state: 'unknown', detail: d.error };
+    const parts = [];
+    if (d.userStatus) parts.push('Email ' + d.userStatus);
+    if (d.domainStatus) parts.push('Domain ' + d.domainStatus);
+    if (d.customerStatus) parts.push('Customer ' + d.customerStatus);
+    const detail = parts.join(' · ') || 'No status returned';
+    // The outcome comes from the extension, which applies Abuse Desk's own
+    // rules (a domain needs the customer AND the domain record active; an
+    // email needs its own status active). Using it keeps this panel's verdict
+    // identical to what the unsuspension flow would decide. The raw readings
+    // are the fallback when no outcome was supplied.
+    const outcome = typeof d.outcome === 'string' ? d.outcome : '';
+    if (outcome === 'confirmed') return { state: 'active', detail };
+    if (outcome === 'failed') return { state: 'suspended', detail };
+    if (isSuspendedReading(d)) return { state: 'suspended', detail };
+    const active = ['userStatus', 'domainStatus', 'customerStatus']
+      .some(key => typeof d[key] === 'string' && d[key].trim().toLowerCase() === 'active');
+    if (!active) return { state: 'unknown', detail: 'Abuse Desk did not report a status' };
+    return { state: 'active', detail };
+  }
+
+  // The individual Abuse Desk readings, shown as their own fields. The badge
+  // carries the classification; the detail carries the raw value the API
+  // returned, which can differ from it (e.g. "inactive" classifies as unknown
+  // but is still worth showing verbatim).
+  if (check === 'ad-domain' || check === 'ad-customer' || check === 'ad-user') {
+    if (d.error) return { state: 'unknown', detail: d.error };
+    const key = check === 'ad-domain' ? 'domainStatus'
+      : check === 'ad-customer' ? 'customerStatus' : 'userStatus';
+    const raw = d[key];
+    if (typeof raw !== 'string' || !raw.trim()) {
+      return { state: 'unknown', detail: 'not returned' };
+    }
+    const norm = raw.trim().toLowerCase();
+    if (norm === 'active') return { state: 'active', detail: raw };
+    if (norm.indexOf('suspend') !== -1) return { state: 'suspended', detail: raw };
+    return { state: 'unknown', detail: raw };
+  }
+
+  if (d.error) return { state: 'unknown', detail: d.error };
+
+  if (check === 'website') {
+    const verdict = d.verdict || '';
+    if (verdict === 'Valid Website') return { state: 'ok', detail: verdict };
+    if (!verdict) return { state: 'unknown', detail: 'No verdict returned' };
+    return { state: 'warn', detail: verdict + (d.reason ? ' — ' + d.reason : '') };
+  }
+
+  if (check === 'mx') {
+    const hosts = Array.isArray(d.mx) ? d.mx : [];
+    if (!hosts.length) return { state: 'warn', detail: 'No MX records' };
+    return { state: 'ok', detail: hosts.join(', ') };
+  }
+
+  if (check === 'spf') {
+    if (!d.spf_present) return { state: 'warn', detail: 'No SPF record' };
+    return { state: 'ok', detail: d.spf || 'SPF present' };
+  }
+
+  if (check === 'dmarc') {
+    if (!d.dmarc_present) return { state: 'warn', detail: 'No DMARC record' };
+    return { state: 'ok', detail: d.dmarc || 'DMARC present' };
+  }
+
+  if (check === 'dkim') {
+    if (d.status === 'Set') {
+      const sel = Array.isArray(d.selectors_found) ? d.selectors_found : [];
+      return { state: 'ok', detail: sel.length ? 'Set — ' + sel.join(', ') : 'Set' };
+    }
+    if (d.status === 'Not Set') return { state: 'warn', detail: 'Not Set' };
+    return { state: 'unknown', detail: 'No DKIM status returned' };
+  }
+
+  if (check === 'laravel') {
+    if (d.vulnerable) return { state: 'issue', detail: d.reason || '.env exposed' };
+    return { state: 'ok', detail: 'No exposed .env' };
+  }
+
+  if (check === 'xmlrpc') {
+    if (d.vulnerable) return { state: 'issue', detail: d.reason || 'xmlrpc.php accessible' };
+    return { state: 'ok', detail: 'Not accessible' };
+  }
+
+  if (check === 'wordpress') {
+    if (d.detected) return { state: 'info', detail: d.reason || 'WordPress detected' };
+    return { state: 'ok', detail: 'Not detected' };
+  }
+
+  if (check === 'whois') {
+    if (d.creation_date) {
+      return { state: 'ok', detail: d.creation_date + (d.domain_age ? ' — ' + d.domain_age : '') };
+    }
+    return { state: 'unknown', detail: 'No WHOIS data' };
+  }
+
+  return { state: 'unknown', detail: 'Unknown check' };
+}
+
+// Rolls the classified checks into one summary.
+//
+// `suspended` is tri-state on purpose:
+//   true  — Abuse Desk says it is suspended
+//   false — Abuse Desk says it is active
+//   null  — Abuse Desk could not be read, so the state is genuinely unknown
+export function summariseDomainChecks(checks) {
+  const rows = (checks && typeof checks === 'object') ? checks : {};
+  const ad = rows.ad || null;
+
+  let suspended = null;
+  if (ad && ad.state === 'suspended') suspended = true;
+  else if (ad && ad.state === 'active') suspended = false;
+
+  let issues = 0;
+  let warnings = 0;
+  for (const [key, row] of Object.entries(rows)) {
+    if (key === 'ad' || !row) continue;
+    if (row.state === 'issue') issues++;
+    else if (row.state === 'warn') warnings++;
+  }
+
+  let headline;
+  if (suspended === true) headline = 'Suspended';
+  else if (suspended === false) headline = 'Active';
+  else headline = 'Suspension status unknown';
+
+  const extra = [];
+  if (issues) extra.push(issues + (issues === 1 ? ' issue' : ' issues'));
+  if (warnings) extra.push(warnings + (warnings === 1 ? ' warning' : ' warnings'));
+  if (extra.length) headline += ' — ' + extra.join(', ');
+
+  return { suspended, issues, warnings, headline };
 }
 
 export function isSafeJiraUrl(value) {
