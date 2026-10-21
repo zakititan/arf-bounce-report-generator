@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyDomainCheck, summariseDomainChecks, isSuspendedReading } from '../scripts/pure.js';
+import { classifyDomainCheck, summariseDomainChecks, isSuspendedReading, adRegionParam } from '../scripts/pure.js';
 
 // ── Domain Check panel: the verdict logic ─────────────────────────────────────
 //
@@ -11,6 +11,33 @@ import { classifyDomainCheck, summariseDomainChecks, isSuspendedReading } from '
 // site is a fact about the site, not proof that the domain is suspended.
 //
 // These are the pure parts; the DOM rendering lives in scripts/app.js.
+
+describe('adRegionParam', () => {
+  // Regression: the panel used to pass the app's internal region token
+  // ('na'/'eu') straight to the Abuse Desk status API, which needs the real
+  // region name. The API answers a bad region with a perfectly valid but
+  // EMPTY body — {"data": []} — so the read silently produced no status and
+  // the panel showed a bare "Unknown" with nothing to act on.
+  it('maps eu to eu-central-1', () => {
+    assert.equal(adRegionParam('eu'), 'eu-central-1');
+  });
+
+  it('maps na to us-east-1', () => {
+    assert.equal(adRegionParam('na'), 'us-east-1');
+  });
+
+  it('is case-insensitive', () => {
+    assert.equal(adRegionParam('EU'), 'eu-central-1');
+    assert.equal(adRegionParam('Eu'), 'eu-central-1');
+  });
+
+  it('defaults to us-east-1 for anything unrecognised', () => {
+    assert.equal(adRegionParam(''), 'us-east-1');
+    assert.equal(adRegionParam(null), 'us-east-1');
+    assert.equal(adRegionParam(undefined), 'us-east-1');
+    assert.equal(adRegionParam('us-east-1'), 'us-east-1');
+  });
+});
 
 describe('isSuspendedReading', () => {
   it('reads a suspended signal from any status field', () => {

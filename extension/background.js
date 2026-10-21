@@ -1,4 +1,4 @@
-import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList, createUnsuspendReasonKey, createPerAccountUnsuspendReasonKey, persistUnsuspendReason, isSafeJiraUrl, isSafeGoogleSheetsUrl, isSafeAppsScriptUrl, createPendingMap, capInlineImages, isValidJiraCreatePayload, discoverDoneTransitionId, buildBulkSummary, findStaleStorageKeys, buildAbuseDeskUrl, extractJiraIssueKey, extractAdUserStatus, extractAdDomainStatus, resolveVerifiedOutcome, resolveDomainOutcome, buildAdStatusUrl, extractAdCustomerStatus, parseAdStatusBody } from './rg-lib.js';
+import { REASON_TTL_MS, JIRA_DONE_TRANSITION_ID, analyzeHistory, buildJiraIssueBody, extractImagesRegex, isReasonFresh, isSuccessfulResponse, areValidAccountList, normalizeAccountList, createUnsuspendReasonKey, createPerAccountUnsuspendReasonKey, persistUnsuspendReason, isSafeJiraUrl, isSafeGoogleSheetsUrl, isSafeAppsScriptUrl, createPendingMap, capInlineImages, isValidJiraCreatePayload, discoverDoneTransitionId, buildBulkSummary, findStaleStorageKeys, buildAbuseDeskUrl, extractJiraIssueKey, extractAdUserStatus, extractAdDomainStatus, resolveVerifiedOutcome, resolveDomainOutcome, buildAdStatusUrl, extractAdCustomerStatus, parseAdStatusBody, isEmptyAdStatusPayload } from './rg-lib.js';
 import { fetchWithTimeout } from './timeout.js';
 
 const EXPIRY_MS = 10 * 60 * 1000;
@@ -435,6 +435,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // for an email (its own status active).
     fetchAdStatusReading(kind, account, region)
       .then(reading => {
+        // A request for a domain AbuseDesk does not know — or for the wrong
+        // region — comes back as a valid but EMPTY body ({"data": []}). That
+        // parses fine, so the read path treats it as a successful response
+        // and the panel shows a bare "Unknown" with nothing to act on. Name
+        // the cause instead.
+        if (isEmptyAdStatusPayload(reading.json)) {
+          sendResponse({
+            success: false,
+            error: 'No Abuse Desk record for ' + account + ' in region ' + region +
+              '. Check the domain and the region (NA/EU).',
+          });
+          return;
+        }
         // The USER endpoint returns user_status, domain_status AND
         // customer_status in one payload, so an email input can report its
         // domain's status from this same call instead of a second round trip.

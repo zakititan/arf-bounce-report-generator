@@ -87,6 +87,20 @@ describe('Domain Check panel wiring in scripts/app.js', () => {
     assert.match(APP_JS, /regionPromise\.then\(region => requestDomainStatus\(account, region\)\)/);
   });
 
+  it('converts the internal region token to the real region name', () => {
+    // Regression: the panel used to pass lookupMx's 'na'/'eu' straight to the
+    // status API, which answers a bad region with a valid but EMPTY body
+    // ({"data": []}) — so the check silently produced no status and the row
+    // read as a bare "Unknown". The conversion must go through adRegionParam.
+    assert.match(APP_JS, /return adRegionParam\(r\.region\)/);
+    assert.match(APP_JS, /return adRegionParam\('na'\)/);
+    assert.doesNotMatch(
+      APP_JS,
+      /regionPromise\.then\(region => requestDomainStatus\(account, region\)\)[\s\S]{0,200}return r\.region/,
+      'the raw region token must not reach the status request'
+    );
+  });
+
   it('runs every check it advertises', () => {
     for (const fn of ['fetchWhois', 'fetchWebsiteCheck', 'fetchMailRecords', 'fetchDkimCheck',
                       'fetchLaravelCheck', 'fetchXmlrpcCheck', 'fetchWordPressCheck']) {

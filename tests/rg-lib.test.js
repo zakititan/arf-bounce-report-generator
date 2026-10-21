@@ -1681,3 +1681,37 @@ describe('parseAdStatusBody', () => {
     assert.ok(html.error.length <= 200);
   });
 });
+
+// -- isEmptyAdStatusPayload ---------------------------------------------------
+//
+// The AbuseDesk status API answers a request for a domain it does not know —
+// or for a WRONG REGION — with a perfectly valid but EMPTY body:
+//
+//   {"data": []}
+//
+// That parses fine, so nothing in the read path treats it as an error, and
+// the extractors simply find no status key and return ''. The result is a
+// bare "Unknown" in the UI with no clue why. Detecting the empty result
+// lets the panel say what actually happened.
+
+describe('isEmptyAdStatusPayload', () => {
+  it('is true for an empty data array', () => {
+    assert.equal(rgLib.isEmptyAdStatusPayload({ data: [] }), true);
+  });
+
+  it('is false when the data array has a row', () => {
+    assert.equal(rgLib.isEmptyAdStatusPayload({ data: [{ domain_status: 'active' }] }), false);
+  });
+
+  it('is false when there is no data array at all', () => {
+    assert.equal(rgLib.isEmptyAdStatusPayload({}), false);
+    assert.equal(rgLib.isEmptyAdStatusPayload({ data: null }), false);
+    assert.equal(rgLib.isEmptyAdStatusPayload({ domain_status: 'active' }), false);
+  });
+
+  it('is false for a non-object payload', () => {
+    assert.equal(rgLib.isEmptyAdStatusPayload(null), false);
+    assert.equal(rgLib.isEmptyAdStatusPayload(undefined), false);
+    assert.equal(rgLib.isEmptyAdStatusPayload('data'), false);
+  });
+});

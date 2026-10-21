@@ -628,6 +628,22 @@ export function extractAdCustomerStatus(json) {
   return readAdStatusFromPayload(json, 'customer_status', 'customerStatus');
 }
 
+// True when an AbuseDesk status payload parsed cleanly but carried no rows.
+//
+// The status API answers a request for a domain it does not know — or for the
+// wrong REGION — with a perfectly valid but EMPTY body:
+//
+//   {"data": []}
+//
+// That parses fine, so nothing in the read path treats it as an error: the
+// extractors simply find no status key and return ''. The visible result is a
+// bare "Unknown" with nothing to act on. Detecting the empty result lets the
+// caller say what actually happened instead.
+export function isEmptyAdStatusPayload(json) {
+  if (!json || typeof json !== 'object') return false;
+  return Array.isArray(json.data) && json.data.length === 0;
+}
+
 // Single status signal → 'active' | 'suspended' | 'neither'. Reuses
 // matchesActiveStatus so 'inactive' (and friends) never count as active here.
 function classifyStatusSignal(value) {

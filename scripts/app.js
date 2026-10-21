@@ -15,7 +15,7 @@
 
 import { fetchWhois, fetchWebsiteCheck, fetchDkimCheck, lookupMx,
          fetchLaravelCheck, fetchXmlrpcCheck, fetchWordPressCheck, fetchMailRecords } from './api.js';
-import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, matchesRequest,   consumePendingRequest, registerPendingRequest, screenshotAcceptCount, isAcceptableScreenshotSize, MAX_SCREENSHOT_BYTES, createUnsuspendRequestId, createRequestId, createRequestContextKey, isAllowedWebAppOrigin, validateExtensionResult, validateUnsuspendOutcome, validateAccountIdentifier, parseAccountList, isSafeJiraUrl, selectRecheckAccounts, shouldShowRecheckButton, classifyDomainCheck, summariseDomainChecks } from './pure.js';
+import { escapeHtml as _escapeHtml, sanitiseDomainInput as _sanitiseDomainInput, sanitiseAccountInput as _sanitiseAccountInput, parseCsvRow as _parseCsvRow, shouldFinishUnsuspendTracking, completeUnsuspendResults, matchesUnsuspendRequest, matchesRequest,   consumePendingRequest, registerPendingRequest, screenshotAcceptCount, isAcceptableScreenshotSize, MAX_SCREENSHOT_BYTES, createUnsuspendRequestId, createRequestId, createRequestContextKey, isAllowedWebAppOrigin, validateExtensionResult, validateUnsuspendOutcome, validateAccountIdentifier, parseAccountList, isSafeJiraUrl, selectRecheckAccounts, shouldShowRecheckButton, classifyDomainCheck, summariseDomainChecks, adRegionParam } from './pure.js';
 import { buildUnsuspendAccounts, cleanSheetReason, getSheetReportType, getDirectSheetReportType, parseJiraSummaryAccounts, truncateSheetText } from './report-actions.js';
 import {
   showToast, showToastLink, initThemeToggle,
@@ -1494,14 +1494,19 @@ async function runDomainCheck(btn) {
 
   // The region is required by the status APIs, so the Abuse Desk check waits
   // for it; every other check runs immediately.
+  //
+  // lookupMx returns the app's internal token ('na'/'eu'); the API needs the
+  // real region name ('us-east-1'/'eu-central-1'). Passing the token through
+  // makes the API answer with a valid but EMPTY body, which reads as a bare
+  // "Unknown" — so the conversion is explicit here.
   const regionPromise = lookupMx(domain).then(r => {
     state.domaincheck.region = r.region;
     setRegionChip('domaincheck');
-    return r.region;
+    return adRegionParam(r.region);
   }).catch(() => {
     state.domaincheck.region = 'na';
     setRegionChip('domaincheck');
-    return 'us-east-1';
+    return adRegionParam('na');
   });
 
   try {

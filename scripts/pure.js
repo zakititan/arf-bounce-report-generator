@@ -161,6 +161,17 @@ function isHttpsUrl(value, hostname, pathPattern) {
 // about the site, not proof that the domain is suspended.
 
 // True when any of the Abuse Desk status readings says "suspended".
+// The app tracks a region as the internal token 'na' or 'eu', but the
+// AbuseDesk status API needs the real region name. Passing the token
+// straight through makes the API answer with a valid but EMPTY body
+// ({"data": []}), which surfaces as a bare "Unknown" with no explanation —
+// so the conversion happens in one tested place.
+export function adRegionParam(region) {
+  return typeof region === 'string' && region.trim().toLowerCase() === 'eu'
+    ? 'eu-central-1'
+    : 'us-east-1';
+}
+
 export function isSuspendedReading(reading) {
   if (!reading || typeof reading !== 'object') return false;
   return ['domainStatus', 'customerStatus', 'userStatus'].some(key => {
